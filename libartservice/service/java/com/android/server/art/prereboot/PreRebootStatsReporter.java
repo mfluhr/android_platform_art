@@ -17,6 +17,7 @@
 package com.android.server.art.prereboot;
 
 import static com.android.server.art.proto.PreRebootStats.JobRun;
+import static com.android.server.art.proto.PreRebootStats.JobType;
 import static com.android.server.art.proto.PreRebootStats.Status;
 
 import android.annotation.NonNull;
@@ -78,10 +79,14 @@ public class PreRebootStatsReporter {
         mInjector = injector;
     }
 
-    public void recordJobScheduled() {
+    public void recordJobScheduled(boolean isAsync, boolean isOtaUpdate) {
         PreRebootStats.Builder statsBuilder = PreRebootStats.newBuilder();
         statsBuilder.setStatus(Status.STATUS_SCHEDULED)
-                .setJobScheduledTimestampMillis(System.currentTimeMillis());
+                .setJobType(isOtaUpdate ? JobType.JOB_TYPE_OTA : JobType.JOB_TYPE_MAINLINE);
+        // Omit job_scheduled_timestamp_millis to indicate a synchronous job.
+        if (isAsync) {
+            statsBuilder.setJobScheduledTimestampMillis(mInjector.getCurrentTimeMillis());
+        }
         save(statsBuilder);
     }
 
@@ -93,13 +98,16 @@ public class PreRebootStatsReporter {
         }
 
         JobRun.Builder runBuilder =
-                JobRun.newBuilder().setJobStartedTimestampMillis(System.currentTimeMillis());
+                JobRun.newBuilder().setJobStartedTimestampMillis(mInjector.getCurrentTimeMillis());
         statsBuilder.setStatus(Status.STATUS_STARTED)
                 .addJobRuns(runBuilder)
                 .setSkippedPackageCount(0)
                 .setOptimizedPackageCount(0)
                 .setFailedPackageCount(0)
-                .setTotalPackageCount(0);
+                .setTotalPackageCount(0)
+                // Some packages may have artifacts from a previously cancelled job, but we count
+                // from scratch for simplicity.
+                .setPackagesWithArtifactsBeforeRebootCount(0);
         save(statsBuilder);
     }
 
@@ -107,7 +115,8 @@ public class PreRebootStatsReporter {
         private @NonNull PreRebootStats.Builder mStatsBuilder = load();
 
         public void recordProgress(int skippedPackageCount, int optimizedPackageCount,
-                int failedPackageCount, int totalPackageCount) {
+                int failedPackageCount, int totalPackageCount,
+                int packagesWithArtifactsBeforeRebootCount) {
             if (mStatsBuilder.getStatus() == Status.STATUS_UNKNOWN) {
                 // Failed to load, the error is already logged.
                 return;
@@ -116,12 +125,14 @@ public class PreRebootStatsReporter {
             mStatsBuilder.setSkippedPackageCount(skippedPackageCount)
                     .setOptimizedPackageCount(optimizedPackageCount)
                     .setFailedPackageCount(failedPackageCount)
-                    .setTotalPackageCount(totalPackageCount);
+                    .setTotalPackageCount(totalPackageCount)
+                    .setPackagesWithArtifactsBeforeRebootCount(
+                            packagesWithArtifactsBeforeRebootCount);
             save(mStatsBuilder);
         }
     }
 
-    public void recordJobEnded(boolean success) {
+    public void recordJobEnded(boolean success, boolean systemRequirementCheckFailed) {
         PreRebootStats.Builder statsBuilder = load();
         if (statsBuilder.getStatus() == Status.STATUS_UNKNOWN) {
             // Failed to load, the error is already logged.
@@ -133,14 +144,15 @@ public class PreRebootStatsReporter {
         JobRun lastRun = jobRuns.get(jobRuns.size() - 1);
         Utils.check(lastRun.getJobEndedTimestampMillis() == 0);
 
-        JobRun.Builder runBuilder =
-                JobRun.newBuilder(lastRun).setJobEndedTimestampMillis(System.currentTimeMillis());
+        JobRun.Builder runBuilder = JobRun.newBuilder(lastRun).setJobEndedTimestampMillis(
+                mInjector.getCurrentTimeMillis());
 
         Status status;
         if (success) {
             // The job is cancelled if it hasn't done package scanning (total package count is 0),
             // or it's interrupted in the middle of package processing (package counts don't add up
             // to the total).
+            // TODO(b/336239721): Move this logic to the server.
             if (statsBuilder.getTotalPackageCount() > 0
                     && (statsBuilder.getOptimizedPackageCount()
                                + statsBuilder.getFailedPackageCount()
@@ -151,7 +163,11 @@ public class PreRebootStatsReporter {
                 status = Status.STATUS_CANCELLED;
             }
         } else {
-            status = Status.STATUS_FAILED;
+            if (systemRequirementCheckFailed) {
+                status = Status.STATUS_ABORTED_SYSTEM_REQUIREMENTS;
+            } else {
+                status = Status.STATUS_FAILED;
+            }
         }
 
         statsBuilder.setStatus(status).setJobRuns(jobRuns.size() - 1, runBuilder);
@@ -172,7 +188,8 @@ public class PreRebootStatsReporter {
             });
         }
 
-        private void report() {
+        @VisibleForTesting
+        public void report() {
             PreRebootStats.Builder statsBuilder = load();
             delete();
 
@@ -181,21 +198,17 @@ public class PreRebootStatsReporter {
                 return;
             }
 
-            PackageManagerLocal packageManagerLocal = Objects.requireNonNull(
-                    LocalManagerRegistry.getManager(PackageManagerLocal.class));
-            ArtManagerLocal artManagerLocal =
-                    Objects.requireNonNull(LocalManagerRegistry.getManager(ArtManagerLocal.class));
+            ArtManagerLocal artManagerLocal = mInjector.getArtManagerLocal();
 
             // This takes some time (~3ms per package). It probably fine because we are running
             // asynchronously. Consider removing this in the future.
             int packagesWithArtifactsUsableCount;
-            try (var snapshot = packageManagerLocal.withFilteredSnapshot();
-                    var pin = ArtdRefCache.getInstance().new Pin()) {
+            try (var snapshot = mInjector.getPackageManagerLocal().withFilteredSnapshot();
+                    var pin = mInjector.createArtdPin()) {
                 packagesWithArtifactsUsableCount =
                         (int) mPackagesWithArtifacts.stream()
                                 .map(packageName
                                         -> artManagerLocal.getDexoptStatus(snapshot, packageName))
-
                                 .filter(status -> hasUsablePreRebootArtifacts(status))
                                 .count();
             }
@@ -220,12 +233,14 @@ public class PreRebootStatsReporter {
                               - statsBuilder.getJobScheduledTimestampMillis())
                     : -1;
 
-            ArtStatsLog.write(ArtStatsLog.PREREBOOT_DEXOPT_JOB_ENDED,
+            mInjector.writeStats(ArtStatsLog.PREREBOOT_DEXOPT_JOB_ENDED,
                     getStatusForStatsd(statsBuilder.getStatus()),
                     statsBuilder.getOptimizedPackageCount(), statsBuilder.getFailedPackageCount(),
                     statsBuilder.getSkippedPackageCount(), statsBuilder.getTotalPackageCount(),
                     jobDurationMs, jobLatencyMs, mPackagesWithArtifacts.size(),
-                    packagesWithArtifactsUsableCount, jobRuns.size());
+                    packagesWithArtifactsUsableCount, jobRuns.size(),
+                    statsBuilder.getPackagesWithArtifactsBeforeRebootCount(),
+                    getJobTypeForStatsd(statsBuilder.getJobType()));
         }
     }
 
@@ -243,8 +258,24 @@ public class PreRebootStatsReporter {
                 return ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_FAILED;
             case STATUS_CANCELLED:
                 return ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_CANCELLED;
+            case STATUS_ABORTED_SYSTEM_REQUIREMENTS:
+                return ArtStatsLog
+                        .PRE_REBOOT_DEXOPT_JOB_ENDED__STATUS__STATUS_ABORTED_SYSTEM_REQUIREMENTS;
             default:
                 throw new IllegalStateException("Unknown status: " + status.getNumber());
+        }
+    }
+
+    private int getJobTypeForStatsd(@NonNull JobType jobType) {
+        switch (jobType) {
+            case JOB_TYPE_UNKNOWN:
+                return ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_UNKNOWN;
+            case JOB_TYPE_OTA:
+                return ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_OTA;
+            case JOB_TYPE_MAINLINE:
+                return ArtStatsLog.PRE_REBOOT_DEXOPT_JOB_ENDED__JOB_TYPE__JOB_TYPE_MAINLINE;
+            default:
+                throw new IllegalStateException("Unknown job type: " + jobType.getNumber());
         }
     }
 
@@ -299,6 +330,41 @@ public class PreRebootStatsReporter {
         @NonNull
         public String getFilename() {
             return FILENAME;
+        }
+
+        public long getCurrentTimeMillis() {
+            return System.currentTimeMillis();
+        }
+
+        @NonNull
+        public PackageManagerLocal getPackageManagerLocal() {
+            return Objects.requireNonNull(
+                    LocalManagerRegistry.getManager(PackageManagerLocal.class));
+        }
+
+        @NonNull
+        public ArtManagerLocal getArtManagerLocal() {
+            return Objects.requireNonNull(LocalManagerRegistry.getManager(ArtManagerLocal.class));
+        }
+
+        @NonNull
+        public ArtdRefCache.Pin createArtdPin() {
+            return ArtdRefCache.getInstance().new Pin();
+        }
+
+        // Wrap the static void method to make it easier to mock. There is no good way to mock a
+        // method that is both void and static, due to the poor design of Mockito API.
+        public void writeStats(int code, int status, int optimizedPackageCount,
+                int failedPackageCount, int skippedPackageCount, int totalPackageCount,
+                long jobDurationMillis, long jobLatencyMillis,
+                int packagesWithArtifactsAfterRebootCount,
+                int packagesWithArtifactsUsableAfterRebootCount, int jobRunCount,
+                int packagesWithArtifactsBeforeRebootCount, int jobType) {
+            ArtStatsLog.write(code, status, optimizedPackageCount, failedPackageCount,
+                    skippedPackageCount, totalPackageCount, jobDurationMillis, jobLatencyMillis,
+                    packagesWithArtifactsAfterRebootCount,
+                    packagesWithArtifactsUsableAfterRebootCount, jobRunCount,
+                    packagesWithArtifactsBeforeRebootCount, jobType);
         }
     }
 }
