@@ -83,6 +83,11 @@ ART_RUN_TEST_MODULE_NAME_PREFIX = "art-run-test-"
 # Number of shards used to declare ART run-tests in the sharded ART MTS test plan.
 NUM_MTS_ART_RUN_TEST_SHARDS = 1
 
+# Name of the ART MTS test list containing "eng-only" test modules,
+# which require a device-under-test running a `userdebug` or `eng`
+# build.
+ENG_ONLY_TEST_LIST_NAME = "mts-art-tests-list-eng-only"
+
 # Curated list of tests that have a custom `run` script, but that are
 # known to work fine with the default test execution strategy (i.e.
 # when ignoring their `run` script), even if not exactly as they would
@@ -223,8 +228,9 @@ known_failing_tests = frozenset([
 # removing them from this set (in order to promote them to
 # presubmits).
 postsubmit_only_tests = frozenset([
-  "2247-checker-write-barrier-elimination",
-  "2273-checker-unreachable-intrinsics",
+  "458-checker-riscv64-shift-add",
+  "856-clone",
+  "2274-checker-bitwise-gvn",
 ])
 
 known_failing_on_hwasan_tests = frozenset([
@@ -275,8 +281,15 @@ art_gtest_module_names = sorted(art_gtest_user_module_names + art_gtest_eng_only
 art_gtest_postsubmit_only_module_names = [
 ]
 
+# ART gtests not supported in MTS.
+art_gtest_modules_excluded_from_mts = [
+    # TODO(b/347717488): Consider adding this test to ART MTS.
+    "libnativebridge-tests",
+]
+
 # ART gtests supported in MTS that do not need root access to the device.
-art_gtest_mts_user_module_names = copy.copy(art_gtest_user_module_names)
+art_gtest_mts_user_module_names = [t for t in art_gtest_user_module_names
+                                   if t not in art_gtest_modules_excluded_from_mts]
 
 # ART gtests supported in presubmits.
 art_gtest_presubmit_module_names = [t for t in art_gtest_module_names
@@ -804,10 +817,17 @@ class Generator:
       root.appendChild(configuration)
       configuration.setAttribute(
           "description",
-          f"Run mts-art-shard-{self.shard_id()} from a preexisting MTS installation.")
+          f"Run {self.test_plan_name()} from a preexisting MTS installation.")
 
       # Included XML files.
       included_xml_files = ["mts", self.test_list_name()]
+      # Special case for the test plan of shard 03 (ART gtests), where we also
+      # include ART MTS eng-only tests.
+      #
+      # TODO(rpl): Restucture the MTS generation logic to avoid special-casing
+      # at that level of the generator.
+      if self.shard_num == 3:
+        included_xml_files.append(ENG_ONLY_TEST_LIST_NAME)
       for xml_file in included_xml_files:
         include = root.createElement("include")
         include.setAttribute("name", xml_file)

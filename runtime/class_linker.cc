@@ -138,6 +138,7 @@
 #include "nterp_helpers-inl.h"
 #include "nterp_helpers.h"
 #include "oat/image-inl.h"
+#include "oat/jni_stub_hash_map-inl.h"
 #include "oat/oat.h"
 #include "oat/oat_file-inl.h"
 #include "oat/oat_file.h"
@@ -407,6 +408,14 @@ void ClassLinker::ForceClassInitialized(Thread* self, Handle<mirror::Class> klas
   }
   ScopedThreadSuspension sts(self, ThreadState::kSuspended);
   MakeInitializedClassesVisiblyInitialized(self, /*wait=*/true);
+}
+
+const void* ClassLinker::FindBootJniStub(ArtMethod* method) {
+  return FindBootJniStub(JniStubKey(method));
+}
+
+const void* ClassLinker::FindBootJniStub(uint32_t flags, std::string_view shorty) {
+  return FindBootJniStub(JniStubKey(flags, shorty));
 }
 
 const void* ClassLinker::FindBootJniStub(JniStubKey key) {

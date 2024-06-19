@@ -32,13 +32,10 @@ cc_defaults {
         "odr_compilation_log.cc",
         "odr_fs_utils.cc",
         "odr_metrics.cc",
-        "odr_metrics_record.cc",
     ],
     local_include_dirs: ["include"],
     header_libs: ["dexoptanalyzer_headers"],
     generated_sources: [
-        "apex-info-list-tinyxml",
-        "art-apex-cache-info",
         "art-odrefresh-operator-srcs",
     ],
     shared_libs: [
@@ -49,7 +46,6 @@ cc_defaults {
         "libmodules-utils-build",
     ],
     tidy: true,
-    tidy_disabled_srcs: [":art-apex-cache-info"],
     tidy_flags: [
         "-format-style=file",
         "-header-filter=(art/odrefresh/|system/apex/)",
@@ -62,7 +58,15 @@ cc_defaults {
         "art_defaults",
         "odrefresh-defaults",
     ],
-    srcs: ["odrefresh_main.cc"],
+    srcs: [
+        "odr_metrics_record.cc",
+        "odrefresh_main.cc",
+    ],
+    generated_sources: [
+        "apex-info-list-tinyxml",
+        "art-apex-cache-info",
+    ],
+    tidy_disabled_srcs: [":art-apex-cache-info"],
     shared_libs: [
         "libarttools",
         "libbase",
@@ -216,6 +220,10 @@ art_cc_defaults {
         "odr_metrics_test.cc",
         "odr_metrics_record_test.cc",
         "odrefresh_test.cc",
+    ],
+    generated_headers: [
+        "apex-info-list-tinyxml",
+        "art-apex-cache-info",
     ],
     static_libs: [
         "libgmock",

@@ -1965,6 +1965,7 @@ class Riscv64Assembler final : public Assembler {
       kCondBranch21,
 
       // Long branches.
+      kLongCondCBranch,
       kLongCondBranch,
       kLongUncondBranch,
       kLongCall,
@@ -2083,12 +2084,7 @@ class Riscv64Assembler final : public Assembler {
     // Completes branch construction by determining and recording its type.
     void InitializeType(Type initial_type);
     // Helper for the above.
-    void InitShortOrLong(OffsetBits ofs_size, Type short_type, Type long_type, Type longest_type);
-    void InitShortOrLong(OffsetBits ofs_size,
-                         Type compressed_type,
-                         Type short_type,
-                         Type long_type,
-                         Type longest_type);
+    void InitShortOrLong(OffsetBits ofs_size, std::initializer_list<Type> types);
 
     uint32_t old_location_;  // Offset into assembler buffer in bytes.
     uint32_t location_;      // Offset into assembler buffer in bytes.
@@ -2103,12 +2099,12 @@ class Riscv64Assembler final : public Assembler {
     Type type_;      // Current type of the branch.
     Type old_type_;  // Initial type of the branch.
 
+    bool compression_allowed_;
+
     // Id of the next branch bound to the same label in singly-linked zero-terminated list
     // NOTE: encoded the same way as a position in a linked Label (id + sizeof(void*))
     // Label itself is used to hold the 'head' of this list
     uint32_t next_branch_id_;
-
-    bool compression_allowed_;
   };
 
   // Branch and literal fixup.

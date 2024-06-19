@@ -107,9 +107,14 @@ func globalFlags(ctx android.LoadHookContext) ([]string, []string) {
 			"-DART_STACK_OVERFLOW_GAP_x86_64=8192")
 	}
 
-	if ctx.Config().NoBionicPageSizeMacro() {
-		cflags = append(cflags, "-DART_PAGE_SIZE_AGNOSTIC=1")
-	}
+	// This was originally coupled to targets, with the no bionic page size
+	// macro. However, we want all devices to have the same layout for Art
+	// targets. This is important to share optimizations across devices as
+	// well as to make sure all test configurations are consistent (Android
+	// shares tests between targets, and tests built with this option will
+	// only work on devices with this option.
+	// Previously contingent on  ctx.Config().NoBionicPageSizeMacro()
+	cflags = append(cflags, "-DART_PAGE_SIZE_AGNOSTIC=1")
 
 	if ctx.Config().IsEnvTrue("ART_ENABLE_ADDRESS_SANITIZER") {
 		// Used to enable full sanitization, i.e., user poisoning, under ASAN.

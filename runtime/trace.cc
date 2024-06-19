@@ -262,6 +262,18 @@ int GetTraceFormatVersionFromFlags(int flags) {
 
 }  // namespace
 
+// Temporary code for debugging b/342768977
+int num_trace_starts_ GUARDED_BY(Locks::trace_lock_);
+int num_trace_stops_initiated_ GUARDED_BY(Locks::trace_lock_);
+std::atomic<int> num_trace_stops_finished_;
+std::string Trace::GetDebugInformation() {
+  MutexLock mu(Thread::Current(), *Locks::trace_lock_);
+  std::stringstream debug_info;
+  debug_info << "start:" << num_trace_starts_ << "stop:" << num_trace_stops_initiated_ << "done:"
+             << num_trace_stops_finished_ << "trace:" << the_trace_;
+  return debug_info.str();
+}
+
 bool TraceWriter::HasMethodEncoding(ArtMethod* method) {
   return art_method_id_map_.find(method) != art_method_id_map_.end();
 }
@@ -823,6 +835,7 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
       enable_stats = (flags & kTraceCountAllocs) != 0;
       int trace_format_version = GetTraceFormatVersionFromFlags(flags);
       the_trace_ = new Trace(trace_file.release(), buffer_size, flags, output_mode, trace_mode);
+      num_trace_starts_++;
       if (trace_format_version == Trace::kFormatV2) {
         // Record all the methods that are currently loaded. We log all methods when any new class
         // is loaded. This will allow us to process the trace entries without requiring a mutator
@@ -878,6 +891,7 @@ void Trace::StopTracing(bool flush_entries) {
   pthread_t sampling_pthread = 0U;
   {
     MutexLock mu(self, *Locks::trace_lock_);
+    num_trace_stops_initiated_++;
     if (the_trace_ == nullptr) {
       LOG(ERROR) << "Trace stop requested, but no trace currently running";
       return;
@@ -951,6 +965,7 @@ void Trace::StopTracing(bool flush_entries) {
   // are now visible.
   the_trace->trace_writer_->FinishTracing(the_trace->flags_, flush_entries);
   delete the_trace;
+  num_trace_stops_finished_++;
 
   if (stop_alloc_counting) {
     // Can be racy since SetStatsEnabled is not guarded by any locks.
@@ -993,6 +1008,7 @@ void Trace::ReleaseThreadBuffer(Thread* self) {
     return;
   }
   the_trace_->trace_writer_->ReleaseBufferForThread(self);
+  self->SetMethodTraceBuffer(nullptr);
 }
 
 void Trace::Abort() {

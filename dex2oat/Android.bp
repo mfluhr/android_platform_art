@@ -87,17 +87,6 @@ art_cc_defaults {
     export_include_dirs: ["."],
 }
 
-cc_defaults {
-    name: "libart-dex2oat_static_base_defaults",
-    whole_static_libs: [
-        "libbase",
-        "libcrypto_for_art",
-        "liblog",
-        "liblz4",
-        "libz",
-    ],
-}
-
 gensrcs {
     name: "art_dex2oat_operator_srcs",
     cmd: "$(location generate_operator_out) art/dex2oat $(in) > $(out)",
@@ -106,6 +95,21 @@ gensrcs {
         "linker/image_writer.h",
     ],
     output_extension: "operator_out.cc",
+}
+
+cc_defaults {
+    name: "libart-dex2oat_static_base_defaults",
+    whole_static_libs: [
+        "libbase",
+        "liblog",
+        "liblz4",
+        "libz",
+    ],
+    static_libs: [
+        // Cannot use whole_static_libs for libcrypto_for_art since it's a
+        // subset that contains unused functions that depend on missing symbols.
+        "libcrypto_for_art",
+    ],
 }
 
 art_cc_library_static {
@@ -265,9 +269,16 @@ art_cc_binary {
             },
         },
         host: {
-            // Make the host binary static, except for system libraries. This
-            // avoids having to bundle host dynamic libs in prebuilts.
-            static_libs: ["libdex2oat_static"],
+            static_libs: [
+                // Since libcrypto_for_art cannot be a whole_static_libs in
+                // libart-dex2oat_static_base_defaults, and we cannot use a
+                // defaults directly only for host here, we have to repeat this
+                // dependency.
+                "libcrypto_for_art",
+                // Make the host binary static, except for system libraries.
+                // This avoids having to bundle host dynamic libs in prebuilts.
+                "libdex2oat_static",
+            ],
             stl: "c++_static",
             // Override the prefer32 added by art_cc_binary when
             // HOST_PREFER_32_BIT is in use. Necessary because the logic in
@@ -321,17 +332,12 @@ art_cc_binary {
             ],
         },
         host: {
-            // Make the host binary static, except for system libraries. This
-            // avoids having to bundle host dynamic libs in prebuilts.
-            static_libs: ["libdex2oatd_static"],
+            // Comments for host in dex2oat apply here too.
+            static_libs: [
+                "libcrypto_for_art",
+                "libdex2oatd_static",
+            ],
             stl: "c++_static",
-            // Override the prefer32 added by art_cc_binary when
-            // HOST_PREFER_32_BIT is in use. Necessary because the logic in
-            // Soong for setting ctx.Config().BuildOSTarget (used in
-            // dexpreopt.RegisterToolDeps) doesn't take host prefer32 into
-            // account. Note that this override cannot be in cc_defaults because
-            // it'd get overridden by the load hook even when it uses
-            // PrependProperties.
             compile_multilib: "64",
         },
     },
@@ -366,7 +372,10 @@ cc_defaults {
 art_cc_binary {
     name: "dex2oats",
     defaults: ["dex2oats-defaults"],
-    static_libs: ["libdex2oat_static"],
+    static_libs: [
+        "libcrypto_for_art",
+        "libdex2oat_static",
+    ],
 }
 
 art_cc_binary {
@@ -375,7 +384,10 @@ art_cc_binary {
         "art_debug_defaults",
         "dex2oats-defaults",
     ],
-    static_libs: ["libdex2oatd_static"],
+    static_libs: [
+        "libcrypto_for_art",
+        "libdex2oatd_static",
+    ],
 }
 
 art_cc_library_static {

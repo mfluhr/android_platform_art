@@ -452,6 +452,9 @@
       "name": "art-run-test-2244-checker-remove-try-boundary"
     },
     {
+      "name": "art-run-test-2247-checker-write-barrier-elimination"
+    },
+    {
       "name": "art-run-test-2249-checker-return-try-boundary-exit-in-loop"
     },
     {
@@ -501,6 +504,9 @@
     },
     {
       "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+    },
+    {
+      "name": "art-run-test-2273-checker-unreachable-intrinsics"
     },
     {
       "name": "art-run-test-300-package-override"
@@ -1378,6 +1384,9 @@
       "name": "art_standalone_dexlist_tests"
     },
     {
+      "name": "art_standalone_dexopt_chroot_setup_tests"
+    },
+    {
       "name": "art_standalone_dexoptanalyzer_tests"
     },
     {
@@ -1420,6 +1429,9 @@
     },
     {
       "name": "art_standalone_sigchain_tests"
+    },
+    {
+      "name": "libnativebridge-tests"
     },
     {
       "name": "libnativeloader_e2e_tests"
@@ -1880,6 +1892,9 @@
       "name": "art-run-test-2244-checker-remove-try-boundary[com.google.android.art.apex]"
     },
     {
+      "name": "art-run-test-2247-checker-write-barrier-elimination[com.google.android.art.apex]"
+    },
+    {
       "name": "art-run-test-2249-checker-return-try-boundary-exit-in-loop[com.google.android.art.apex]"
     },
     {
@@ -1929,6 +1944,9 @@
     },
     {
       "name": "art-run-test-2269-checker-constant-folding-instrinsics[com.google.android.art.apex]"
+    },
+    {
+      "name": "art-run-test-2273-checker-unreachable-intrinsics[com.google.android.art.apex]"
     },
     {
       "name": "art-run-test-300-package-override[com.google.android.art.apex]"
@@ -2806,6 +2824,9 @@
       "name": "art_standalone_dexlist_tests[com.google.android.art.apex]"
     },
     {
+      "name": "art_standalone_dexopt_chroot_setup_tests[com.google.android.art.apex]"
+    },
+    {
       "name": "art_standalone_dexoptanalyzer_tests[com.google.android.art.apex]"
     },
     {
@@ -3326,6 +3347,9 @@
       "name": "art-run-test-2244-checker-remove-try-boundary"
     },
     {
+      "name": "art-run-test-2247-checker-write-barrier-elimination"
+    },
+    {
       "name": "art-run-test-2249-checker-return-try-boundary-exit-in-loop"
     },
     {
@@ -3375,6 +3399,9 @@
     },
     {
       "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+    },
+    {
+      "name": "art-run-test-2273-checker-unreachable-intrinsics"
     },
     {
       "name": "art-run-test-300-package-override"
@@ -4762,6 +4789,9 @@
       "name": "art-run-test-2244-checker-remove-try-boundary"
     },
     {
+      "name": "art-run-test-2247-checker-write-barrier-elimination"
+    },
+    {
       "name": "art-run-test-2249-checker-return-try-boundary-exit-in-loop"
     },
     {
@@ -4811,6 +4841,9 @@
     },
     {
       "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+    },
+    {
+      "name": "art-run-test-2273-checker-unreachable-intrinsics"
     },
     {
       "name": "art-run-test-300-package-override"
@@ -5738,10 +5771,13 @@
   ],
   "postsubmit": [
     {
-      "name": "art-run-test-2247-checker-write-barrier-elimination"
+      "name": "art-run-test-2274-checker-bitwise-gvn"
     },
     {
-      "name": "art-run-test-2273-checker-unreachable-intrinsics"
+      "name": "art-run-test-458-checker-riscv64-shift-add"
+    },
+    {
+      "name": "art-run-test-856-clone"
     }
   ]
 }

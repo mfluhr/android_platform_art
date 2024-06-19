@@ -2695,7 +2695,7 @@ Thread::~Thread() {
   SetCachedThreadName(nullptr);  // Deallocate name.
   delete tlsPtr_.deps_or_stack_trace_sample.stack_trace_sample;
 
-  CHECK_EQ(tlsPtr_.method_trace_buffer, nullptr);
+  CHECK_EQ(tlsPtr_.method_trace_buffer, nullptr) << Trace::GetDebugInformation();
 
   Runtime::Current()->GetHeap()->AssertThreadLocalBuffersAreRevoked(this);
 

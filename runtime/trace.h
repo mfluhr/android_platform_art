@@ -407,6 +407,9 @@ class Trace final : public instrumentation::InstrumentationListener, public Clas
     kSampling
   };
 
+  // Temporary code for debugging b/342768977
+  static std::string GetDebugInformation();
+
   static void SetDefaultClockSource(TraceClockSource clock_source);
 
   static void Start(const char* trace_filename,
