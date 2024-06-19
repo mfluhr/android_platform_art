@@ -54,9 +54,6 @@ namespace {
 using ::android::base::Result;
 using ::android::nativeloader::LibraryNamespaces;
 
-const std::regex kPartitionNativeLibPathRegex(
-    "/(system(_ext)?|(system/)?(vendor|product))/lib(64)?/.*");
-
 // NATIVELOADER_DEFAULT_NAMESPACE_LIBS is an environment variable that can be
 // used to list extra libraries (separated by ":") that libnativeloader will
 // load from the default namespace. The libraries must be listed without paths,
@@ -340,10 +337,10 @@ void* OpenNativeLibrary(JNIEnv* env,
   // path, so we don't affect the lookup process for libraries specified by name
   // only.
   if (caller_location != nullptr &&
-      // Check that the library is in the partition-wide native library
-      // location. Apps in the partition may have their own native libraries,
-      // and those should still be loaded with the app's classloader namespace.
-      std::regex_match(path, kPartitionNativeLibPathRegex) &&
+      // Apps in the partition may have their own native libraries which should
+      // be loaded with the app's classloader namespace, so only do this for
+      // libraries in the partition-wide lib(64) directories.
+      nativeloader::IsPartitionNativeLibPath(path) &&
       // Don't do this if the system image is older than V, to avoid any compat
       // issues with apps and shared libs in them.
       android::modules::sdklevel::IsAtLeastV()) {

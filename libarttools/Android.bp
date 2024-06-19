@@ -137,7 +137,7 @@ cc_binary {
     shared_libs: [
         "libartbase",
         "libartpalette",
-        "libarttools", // Contains "libc++fs".
+        "libarttools",
         "libbase",
     ],
     static_libs: [
