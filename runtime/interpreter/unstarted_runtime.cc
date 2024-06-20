@@ -2099,8 +2099,7 @@ void UnstartedRuntime::UnstartedJNIThrowableNativeFillInStackTrace(
     [[maybe_unused]] uint32_t* args,
     JValue* result) {
   ScopedObjectAccessUnchecked soa(self);
-  ScopedLocalRef<jobject> stack_trace(self->GetJniEnv(), self->CreateInternalStackTrace(soa));
-  result->SetL(soa.Decode<mirror::Object>(stack_trace.get()));
+  result->SetL(self->CreateInternalStackTrace(soa));
 }
 
 void UnstartedRuntime::UnstartedJNIUnsafeCompareAndSwapInt(

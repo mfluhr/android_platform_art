@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ART_RUNTIME_TRANSACTION_H_
-#define ART_RUNTIME_TRANSACTION_H_
+#ifndef ART_DEX2OAT_TRANSACTION_H_
+#define ART_DEX2OAT_TRANSACTION_H_
 
 #include "base/scoped_arena_containers.h"
 #include "base/macros.h"
@@ -380,31 +380,10 @@ class Transaction final {
   std::string abort_message_;
   mirror::Class* root_;
   mirror::Object* last_allocated_object_;
-  const char* assert_no_new_records_reason_;
-
-  friend class ScopedAssertNoNewTransactionRecords;
 
   DISALLOW_COPY_AND_ASSIGN(Transaction);
 };
 
-class ScopedAssertNoNewTransactionRecords {
- public:
-  explicit ScopedAssertNoNewTransactionRecords(const char* reason)
-    : transaction_(kIsDebugBuild ? InstallAssertion(reason) : nullptr) {}
-
-  ~ScopedAssertNoNewTransactionRecords() {
-    if (kIsDebugBuild && transaction_ != nullptr) {
-      RemoveAssertion(transaction_);
-    }
-  }
-
- private:
-  static Transaction* InstallAssertion(const char* reason);
-  static void RemoveAssertion(Transaction* transaction);
-
-  Transaction* transaction_;
-};
-
 }  // namespace art
 
-#endif  // ART_RUNTIME_TRANSACTION_H_
+#endif  // ART_DEX2OAT_TRANSACTION_H_

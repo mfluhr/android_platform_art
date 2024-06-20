@@ -3070,7 +3070,8 @@ class BuildInternalStackTraceVisitor : public StackVisitor {
   DISALLOW_COPY_AND_ASSIGN(BuildInternalStackTraceVisitor);
 };
 
-jobject Thread::CreateInternalStackTrace(const ScopedObjectAccessAlreadyRunnable& soa) const {
+ObjPtr<mirror::ObjectArray<mirror::Object>> Thread::CreateInternalStackTrace(
+    const ScopedObjectAccessAlreadyRunnable& soa) const {
   // Compute depth of stack, save frames if possible to avoid needing to recompute many.
   constexpr size_t kMaxSavedFrames = 256;
   std::unique_ptr<ArtMethodDexPcPair[]> saved_frames(new ArtMethodDexPcPair[kMaxSavedFrames]);
@@ -3107,7 +3108,7 @@ jobject Thread::CreateInternalStackTrace(const ScopedObjectAccessAlreadyRunnable
       CHECK(method != nullptr);
     }
   }
-  return soa.AddLocalReference<jobject>(trace);
+  return trace;
 }
 
 bool Thread::IsExceptionThrownByCurrentMethod(ObjPtr<mirror::Throwable> exception) const {
@@ -3660,9 +3661,9 @@ void Thread::ThrowNewWrappedException(const char* exception_class_descriptor,
     if (cause.get() != nullptr) {
       exception->SetCause(DecodeJObject(cause.get())->AsThrowable());
     }
-    ScopedLocalRef<jobject> trace(GetJniEnv(), CreateInternalStackTrace(soa));
-    if (trace.get() != nullptr) {
-      exception->SetStackState(DecodeJObject(trace.get()).Ptr());
+    ObjPtr<mirror::ObjectArray<mirror::Object>> trace = CreateInternalStackTrace(soa);
+    if (trace != nullptr) {
+      exception->SetStackState(trace.Ptr());
     }
     SetException(exception.Get());
   } else {

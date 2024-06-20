@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "unstarted_runtime_test.h"
+#include "interpreter/unstarted_runtime_test.h"
 
 #include "class_root-inl.h"
 #include "common_transaction_test.h"

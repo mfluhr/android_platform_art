@@ -1181,7 +1181,7 @@ void JitCodeCache::AddZombieCodeInternal(ArtMethod* method, const void* code_ptr
     CHECK(jni_stubs_map_.find(JniStubKey(method)) != jni_stubs_map_.end());
     zombie_jni_code_.insert(method);
   } else {
-    CHECK(!ContainsElement(zombie_code_, code_ptr)) << method->PrettyMethod() << "@" << code_ptr;
+    CHECK(!ContainsElement(zombie_code_, code_ptr));
     zombie_code_.insert(code_ptr);
   }
   // Arbitrary threshold of number of zombie code before doing a GC.

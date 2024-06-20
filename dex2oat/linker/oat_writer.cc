@@ -2358,7 +2358,7 @@ size_t OatWriter::InitOatCodeDexFiles(size_t offset) {
 
   if (HasImage()) {
     ScopedObjectAccess soa(Thread::Current());
-    ScopedAssertNoThreadSuspension sants("Init image method visitor", Thread::Current());
+    ScopedAssertNoThreadSuspension sants("Init image method visitor");
     InitImageMethodVisitor image_visitor(this, offset, dex_files_);
     success = VisitDexMethods(&image_visitor);
     image_visitor.Postprocess();

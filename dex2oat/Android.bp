@@ -29,11 +29,13 @@ art_cc_defaults {
     defaults: ["art_defaults"],
     host_supported: true,
     srcs: [
+        "aot_class_linker.cc",
         "dex/quick_compiler_callbacks.cc",
         "dex/verification_results.cc",
         "driver/compiled_method.cc",
         "driver/compiled_method_storage.cc",
         "driver/compiler_driver.cc",
+        "interpreter/interpreter_switch_impl1.cc",
         "linker/code_info_table_deduper.cc",
         "linker/elf_writer.cc",
         "linker/elf_writer_quick.cc",
@@ -41,6 +43,8 @@ art_cc_defaults {
         "linker/multi_oat_relative_patcher.cc",
         "linker/oat_writer.cc",
         "linker/relative_patcher.cc",
+        "sdk_checker.cc",
+        "transaction.cc",
         "utils/swap_space.cc",
     ],
 
@@ -395,6 +399,7 @@ art_cc_library_static {
     defaults: ["libart-gtest-defaults"],
     srcs: [
         "common_compiler_driver_test.cc",
+        "common_transaction_test.cc",
     ],
     static_libs: [
         "libart-dex2oat",
@@ -410,6 +415,7 @@ art_cc_library_static {
     ],
     srcs: [
         "common_compiler_driver_test.cc",
+        "common_transaction_test.cc",
     ],
     static_libs: [
         "libartd-dex2oat",
@@ -444,12 +450,14 @@ art_cc_defaults {
         ":art-gtest-jars-Statics",
         ":art-gtest-jars-StringLiterals",
         ":art-gtest-jars-SuperWithAccessChecks",
+        ":art-gtest-jars-Transaction",
         ":art-gtest-jars-VerifierDeps",
         ":art-gtest-jars-VerifierDepsMulti",
         ":art-gtest-jars-VerifySoftFailDuringClinit",
     ],
     tidy_timeout_srcs: [
         "dex2oat_test.cc",
+        "transaction_test.cc",
         "verifier_deps_test.cc",
         "linker/arm/relative_patcher_thumb2_test.cc",
         "linker/arm64/relative_patcher_arm64_test.cc",
@@ -460,6 +468,7 @@ art_cc_defaults {
         "dex2oat_image_test.cc",
         "driver/compiled_method_storage_test.cc",
         "driver/compiler_driver_test.cc",
+        "interpreter/unstarted_runtime_transaction_test.cc",
         "linker/code_info_table_deduper_test.cc",
         "linker/elf_writer_test.cc",
         "linker/image_test.cc",
@@ -467,6 +476,7 @@ art_cc_defaults {
         "linker/index_bss_mapping_encoder_test.cc",
         "linker/multi_oat_relative_patcher_test.cc",
         "linker/oat_writer_test.cc",
+        "transaction_test.cc",
         "verifier_deps_test.cc",
         "utils/swap_space_test.cc",
     ],

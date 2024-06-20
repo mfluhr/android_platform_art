@@ -22,6 +22,7 @@
 #include "dex/class_reference.h"
 #include "gc/heap.h"
 #include "handle_scope-inl.h"
+#include "interpreter/interpreter_switch_impl.h"
 #include "mirror/class-inl.h"
 #include "runtime.h"
 #include "scoped_thread_state_change-inl.h"
@@ -509,6 +510,11 @@ void AotClassLinker::VisitTransactionRoots(RootVisitor* visitor) {
   for (Transaction& transaction : preinitialization_transactions_) {
     transaction.VisitRoots(visitor);
   }
+}
+
+const void* AotClassLinker::GetTransactionalInterpreter() {
+  return reinterpret_cast<const void*>(
+      &interpreter::ExecuteSwitchImplCpp</*transaction_active=*/ true>);
 }
 
 }  // namespace art

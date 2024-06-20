@@ -18,6 +18,7 @@
 
 #include <android-base/logging.h>
 
+#include "aot_class_linker.h"
 #include "base/mutex-inl.h"
 #include "base/stl_util.h"
 #include "common_throws.h"
@@ -30,7 +31,6 @@
 #include "mirror/dex_cache-inl.h"
 #include "mirror/object-inl.h"
 #include "mirror/object_array-inl.h"
-#include "oat/aot_class_linker.h"
 #include "obj_ptr-inl.h"
 #include "runtime.h"
 
@@ -57,8 +57,7 @@ Transaction::Transaction(bool strict,
       heap_(Runtime::Current()->GetHeap()),
       strict_(strict),
       root_(root),
-      last_allocated_object_(nullptr),
-      assert_no_new_records_reason_(nullptr) {
+      last_allocated_object_(nullptr) {
   DCHECK(Runtime::Current()->IsAotCompiler());
   DCHECK_NE(arena_stack != nullptr, arena_pool != nullptr);
 }
@@ -210,7 +209,6 @@ void Transaction::RecordWriteFieldBoolean(mirror::Object* obj,
                                           uint8_t value,
                                           bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.LogBooleanValue(field_offset, value, is_volatile);
@@ -222,7 +220,6 @@ void Transaction::RecordWriteFieldByte(mirror::Object* obj,
                                        int8_t value,
                                        bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.LogByteValue(field_offset, value, is_volatile);
@@ -234,7 +231,6 @@ void Transaction::RecordWriteFieldChar(mirror::Object* obj,
                                        uint16_t value,
                                        bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.LogCharValue(field_offset, value, is_volatile);
@@ -247,7 +243,6 @@ void Transaction::RecordWriteFieldShort(mirror::Object* obj,
                                         int16_t value,
                                         bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.LogShortValue(field_offset, value, is_volatile);
@@ -260,7 +255,6 @@ void Transaction::RecordWriteField32(mirror::Object* obj,
                                      uint32_t value,
                                      bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.Log32BitsValue(field_offset, value, is_volatile);
@@ -272,7 +266,6 @@ void Transaction::RecordWriteField64(mirror::Object* obj,
                                      uint64_t value,
                                      bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.Log64BitsValue(field_offset, value, is_volatile);
@@ -284,7 +277,6 @@ void Transaction::RecordWriteFieldReference(mirror::Object* obj,
                                             mirror::Object* value,
                                             bool is_volatile) {
   DCHECK(obj != nullptr);
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (obj != last_allocated_object_) {
     ObjectLog& object_log = GetOrCreateObjectLog(obj);
     object_log.LogReferenceValue(field_offset, value, is_volatile);
@@ -295,7 +287,6 @@ void Transaction::RecordWriteArray(mirror::Array* array, size_t index, uint64_t 
   DCHECK(array != nullptr);
   DCHECK(array->IsArrayInstance());
   DCHECK(!array->IsObjectArray());
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   if (array != last_allocated_object_) {
     ArrayLog& array_log = array_logs_.GetOrCreate(array, [&]() { return ArrayLog(&allocator_); });
     array_log.LogValue(index, value);
@@ -306,7 +297,6 @@ void Transaction::RecordResolveString(ObjPtr<mirror::DexCache> dex_cache,
                                       dex::StringIndex string_idx) {
   DCHECK(dex_cache != nullptr);
   DCHECK_LT(string_idx.index_, dex_cache->GetDexFile()->NumStringIds());
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   resolve_string_logs_.emplace_front(dex_cache, string_idx);
 }
 
@@ -314,7 +304,6 @@ void Transaction::RecordResolveMethodType(ObjPtr<mirror::DexCache> dex_cache,
                                           dex::ProtoIndex proto_idx) {
   DCHECK(dex_cache != nullptr);
   DCHECK_LT(proto_idx.index_, dex_cache->GetDexFile()->NumProtoIds());
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   resolve_method_type_logs_.emplace_front(dex_cache, proto_idx);
 }
 
@@ -340,7 +329,6 @@ void Transaction::RecordWeakStringRemoval(ObjPtr<mirror::String> s) {
 
 void Transaction::LogInternedString(InternStringLog&& log) {
   Locks::intern_table_lock_->AssertExclusiveHeld(Thread::Current());
-  DCHECK(assert_no_new_records_reason_ == nullptr) << assert_no_new_records_reason_;
   intern_string_logs_.push_front(std::move(log));
 }
 
@@ -798,29 +786,6 @@ void Transaction::ArrayLog::UndoArrayWrite(mirror::Array* array,
     default:
       LOG(FATAL) << "Unsupported type " << array_type;
       UNREACHABLE();
-  }
-}
-
-Transaction* ScopedAssertNoNewTransactionRecords::InstallAssertion(const char* reason) {
-  Transaction* transaction = nullptr;
-  if (kIsDebugBuild && Runtime::Current()->IsActiveTransaction()) {
-    AotClassLinker* class_linker = down_cast<AotClassLinker*>(Runtime::Current()->GetClassLinker());
-    transaction = class_linker->GetTransaction();
-    if (transaction != nullptr) {
-      CHECK(transaction->assert_no_new_records_reason_ == nullptr)
-          << "old: " << transaction->assert_no_new_records_reason_ << " new: " << reason;
-      transaction->assert_no_new_records_reason_ = reason;
-    }
-  }
-  return transaction;
-}
-
-void ScopedAssertNoNewTransactionRecords::RemoveAssertion(Transaction* transaction) {
-  if (kIsDebugBuild) {
-    AotClassLinker* class_linker = down_cast<AotClassLinker*>(Runtime::Current()->GetClassLinker());
-    CHECK(class_linker->GetTransaction() == transaction);
-    CHECK(transaction->assert_no_new_records_reason_ != nullptr);
-    transaction->assert_no_new_records_reason_ = nullptr;
   }
 }
 

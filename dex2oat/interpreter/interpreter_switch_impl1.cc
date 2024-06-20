@@ -17,9 +17,9 @@
 // The interpreter function takes considerable time to compile and link.
 // We compile the explicit definitions separately to speed up the build.
 
-#include "interpreter_switch_impl-inl.h"
+#include "interpreter/interpreter_switch_impl-inl.h"
 
-#include "oat/aot_class_linker.h"
+#include "aot_class_linker.h"
 #include "transaction.h"
 
 namespace art HIDDEN {

@@ -56,9 +56,6 @@ static_assert(kQuietNaN == 0x200);
 static constexpr int32_t kFClassNaNMinValue = 0x100;
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_RISCV64(V) \
-  V(SystemArrayCopyByte)                        \
-  V(SystemArrayCopyChar)                        \
-  V(SystemArrayCopyInt)                         \
   V(FP16Ceil)                                   \
   V(FP16Compare)                                \
   V(FP16Floor)                                  \

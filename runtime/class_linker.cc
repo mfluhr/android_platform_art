@@ -148,13 +148,13 @@
 #include "profile/profile_compilation_info.h"
 #include "runtime.h"
 #include "runtime_callbacks.h"
+#include "scoped_assert_no_transaction_checks.h"
 #include "scoped_thread_state_change-inl.h"
 #include "startup_completed_task.h"
 #include "thread-inl.h"
 #include "thread.h"
 #include "thread_list.h"
 #include "trace.h"
-#include "transaction.h"
 #include "vdex_file.h"
 #include "verifier/class_verifier.h"
 #include "verifier/verifier_deps.h"
@@ -4659,7 +4659,7 @@ ObjPtr<mirror::Class> ClassLinker::CreateArrayClass(Thread* self,
   auto visitor = [this, array_class_size, component_type](ObjPtr<mirror::Object> obj,
                                                           size_t usable_size)
       REQUIRES_SHARED(Locks::mutator_lock_) {
-    ScopedAssertNoNewTransactionRecords sanntr("CreateArrayClass");
+    ScopedAssertNoTransactionChecks santc("CreateArrayClass");
     mirror::Class::InitializeClassVisitor init_class(array_class_size);
     init_class(obj, usable_size);
     ObjPtr<mirror::Class> klass = ObjPtr<mirror::Class>::DownCast(obj);
@@ -11338,6 +11338,12 @@ bool ClassLinker::IsTransactionAborted() const {
 
 void ClassLinker::VisitTransactionRoots([[maybe_unused]] RootVisitor* visitor) {
   // Nothing to do for normal `ClassLinker`, only `AotClassLinker` handles transactions.
+}
+
+const void* ClassLinker::GetTransactionalInterpreter() {
+  // Should not be called on ClassLinker, only on AotClassLinker that overrides this.
+  LOG(FATAL) << "UNREACHABLE";
+  UNREACHABLE();
 }
 
 void ClassLinker::RemoveDexFromCaches(const DexFile& dex_file) {

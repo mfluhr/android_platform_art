@@ -631,6 +631,9 @@ class Runtime {
   }
 
   bool IsActiveTransaction() {
+    if (kIsDebugBuild) {
+      DCheckNoTransactionCheckAllowed();
+    }
     return active_transaction_;
   }
 
@@ -1178,6 +1181,8 @@ class Runtime {
   void InitializeApexVersions();
 
   void AppendToBootClassPath(const std::string& filename, const std::string& location);
+
+  void DCheckNoTransactionCheckAllowed();
 
   // Don't use EXPORT ("default" visibility), because quick_entrypoints_x86.o
   // refers to this symbol and it can't link with R_386_PC32 relocation.

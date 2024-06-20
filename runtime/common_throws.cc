@@ -765,8 +765,7 @@ void ThrowStackOverflowError(Thread* self) {
 
     // stackState is set as result of fillInStackTrace. fillInStackTrace calls
     // nativeFillInStackTrace.
-    ObjPtr<mirror::Object> stack_state_val =
-        soa.Decode<mirror::Object>(self->CreateInternalStackTrace(soa));
+    ObjPtr<mirror::Object> stack_state_val = self->CreateInternalStackTrace(soa);
     if (stack_state_val != nullptr) {
       WellKnownClasses::java_lang_Throwable_stackState
           ->SetObject</*kTransactionActive=*/ false>(exc.Get(), stack_state_val);

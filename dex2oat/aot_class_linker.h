@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ART_RUNTIME_OAT_AOT_CLASS_LINKER_H_
-#define ART_RUNTIME_OAT_AOT_CLASS_LINKER_H_
+#ifndef ART_DEX2OAT_AOT_CLASS_LINKER_H_
+#define ART_DEX2OAT_AOT_CLASS_LINKER_H_
 
 #include <forward_list>
 
@@ -31,7 +31,6 @@ namespace gc {
 class Heap;
 }  // namespace gc
 
-// TODO: move to dex2oat/.
 // AotClassLinker is only used for AOT compiler, which includes some logic for class initialization
 // which will only be used in pre-compilation.
 class AotClassLinker : public ClassLinker {
@@ -138,8 +137,12 @@ class AotClassLinker : public ClassLinker {
       REQUIRES_SHARED(Locks::mutator_lock_);
   bool IsTransactionAborted() const override;
 
+  // Visit transaction roots for AOT compilation.
   void VisitTransactionRoots(RootVisitor* visitor) override
       REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Get transactional switch interpreter entrypoint for AOT compilation.
+  const void* GetTransactionalInterpreter() override;
 
  protected:
   // Overridden version of PerformClassVerification allows skipping verification if the class was
@@ -179,4 +182,4 @@ class AotClassLinker : public ClassLinker {
 
 }  // namespace art
 
-#endif  // ART_RUNTIME_OAT_AOT_CLASS_LINKER_H_
+#endif  // ART_DEX2OAT_AOT_CLASS_LINKER_H_

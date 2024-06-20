@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef ART_RUNTIME_COMMON_TRANSACTION_TEST_H_
-#define ART_RUNTIME_COMMON_TRANSACTION_TEST_H_
+#ifndef ART_DEX2OAT_COMMON_TRANSACTION_TEST_H_
+#define ART_DEX2OAT_COMMON_TRANSACTION_TEST_H_
 
 #include "common_runtime_test.h"
+
+#include "compiler_callbacks.h"
 
 namespace art HIDDEN {
 
 class CommonTransactionTestImpl {
  protected:
+  static CompilerCallbacks* CreateCompilerCallbacks();
+
   static void EnterTransactionMode() REQUIRES_SHARED(Locks::mutator_lock_);
   static void ExitTransactionMode();
   static void RollbackAndExitTransactionMode() REQUIRES_SHARED(Locks::mutator_lock_);
@@ -30,10 +34,16 @@ class CommonTransactionTestImpl {
 };
 
 template <typename TestType>
-class CommonTransactionTestBase : public TestType, public CommonTransactionTestImpl {};
+class CommonTransactionTestBase : public TestType, public CommonTransactionTestImpl {
+ public:
+  void SetUpRuntimeOptions(RuntimeOptions* options) override {
+    TestType::SetUpRuntimeOptions(options);
+    this->callbacks_.reset(CommonTransactionTestImpl::CreateCompilerCallbacks());
+  }
+};
 
 using CommonTransactionTest = CommonTransactionTestBase<CommonRuntimeTest>;
 
 }  // namespace art
 
-#endif  // ART_RUNTIME_COMMON_TRANSACTION_TEST_H_
+#endif  // ART_DEX2OAT_COMMON_TRANSACTION_TEST_H_

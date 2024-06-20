@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ART_RUNTIME_SDK_CHECKER_H_
-#define ART_RUNTIME_SDK_CHECKER_H_
+#ifndef ART_DEX2OAT_SDK_CHECKER_H_
+#define ART_DEX2OAT_SDK_CHECKER_H_
 
 #include "art_field.h"
 #include "art_method.h"
@@ -74,4 +74,4 @@ class SdkChecker {
 
 }  // namespace art
 
-#endif  // ART_RUNTIME_SDK_CHECKER_H_
+#endif  // ART_DEX2OAT_SDK_CHECKER_H_

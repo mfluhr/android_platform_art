@@ -154,7 +154,6 @@
 #include "native_stack_dump.h"
 #include "nativehelper/scoped_local_ref.h"
 #include "nterp_helpers.h"
-#include "oat/aot_class_linker.h"
 #include "oat/elf_file.h"
 #include "oat/image-inl.h"
 #include "oat/oat.h"
@@ -1956,7 +1955,7 @@ bool Runtime::Init(RuntimeArgumentMap&& runtime_options_in) {
   CHECK_GE(GetHeap()->GetContinuousSpaces().size(), 1U);
 
   if (UNLIKELY(IsAotCompiler())) {
-    class_linker_ = new AotClassLinker(intern_table_);
+    class_linker_ = compiler_callbacks_->CreateAotClassLinker(intern_table_);
   } else {
     class_linker_ = new ClassLinker(
         intern_table_,
@@ -3490,6 +3489,15 @@ void Runtime::AddExtraBootDexFiles(const std::string& filename,
     }
   }
   GetClassLinker()->AddExtraBootDexFiles(Thread::Current(), std::move(dex_files));
+}
+
+void Runtime::DCheckNoTransactionCheckAllowed() {
+  if (kIsDebugBuild) {
+    Thread* self = Thread::Current();
+    if (self != nullptr) {
+      self->AssertNoTransactionCheckAllowed();
+    }
+  }
 }
 
 }  // namespace art

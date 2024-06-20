@@ -548,6 +548,11 @@ class EXPORT Thread {
 
   void AssertThreadSuspensionIsAllowable(bool check_locks = true) const;
 
+  void AssertNoTransactionCheckAllowed() const {
+    CHECK(tlsPtr_.last_no_transaction_checks_cause == nullptr)
+        << tlsPtr_.last_no_transaction_checks_cause;
+  }
+
   // Return true if thread suspension is allowable.
   bool IsThreadSuspensionAllowable() const;
 
@@ -860,7 +865,8 @@ class EXPORT Thread {
 
   // Create the internal representation of a stack trace, that is more time
   // and space efficient to compute than the StackTraceElement[].
-  jobject CreateInternalStackTrace(const ScopedObjectAccessAlreadyRunnable& soa) const
+  ObjPtr<mirror::ObjectArray<mirror::Object>> CreateInternalStackTrace(
+      const ScopedObjectAccessAlreadyRunnable& soa) const
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Convert an internal stack trace representation (returned by CreateInternalStackTrace) to a
@@ -2130,12 +2136,11 @@ class EXPORT Thread {
                                frame_id_to_shadow_frame(nullptr),
                                name(nullptr),
                                pthread_self(0),
-                               last_no_thread_suspension_cause(nullptr),
                                active_suspendall_barrier(nullptr),
                                active_suspend1_barriers(nullptr),
+                               thread_local_start(nullptr),
                                thread_local_pos(nullptr),
                                thread_local_end(nullptr),
-                               thread_local_start(nullptr),
                                thread_local_limit(nullptr),
                                thread_local_objects(0),
                                checkpoint_function(nullptr),
@@ -2148,7 +2153,9 @@ class EXPORT Thread {
                                top_reflective_handle_scope(nullptr),
                                method_trace_buffer(nullptr),
                                method_trace_buffer_index(0),
-                               thread_exit_flags(nullptr) {
+                               thread_exit_flags(nullptr),
+                               last_no_thread_suspension_cause(nullptr),
+                               last_no_transaction_checks_cause(nullptr) {
       std::fill(held_mutexes, held_mutexes + kLockLevelCount, nullptr);
     }
 
@@ -2247,9 +2254,6 @@ class EXPORT Thread {
     // A cached pthread_t for the pthread underlying this Thread*.
     pthread_t pthread_self;
 
-    // If no_thread_suspension_ is > 0, what is causing that assertion.
-    const char* last_no_thread_suspension_cause;
-
     // After a thread observes a suspend request and enters a suspended state,
     // it notifies the requestor by arriving at a "suspend barrier". This consists of decrementing
     // the atomic integer representing the barrier. (This implementation was introduced in 2015 to
@@ -2266,13 +2270,13 @@ class EXPORT Thread {
     // The struct as a whole is still stored on the requesting thread's stack.
     WrappedSuspend1Barrier* active_suspend1_barriers GUARDED_BY(Locks::thread_suspend_count_lock_);
 
+    // Thread-local allocation pointer. Can be moved below the following two to correct alignment.
+    uint8_t* thread_local_start;
+
     // thread_local_pos and thread_local_end must be consecutive for ldrd and are 8 byte aligned for
     // potentially better performance.
     uint8_t* thread_local_pos;
     uint8_t* thread_local_end;
-
-    // Thread-local allocation pointer. Can be moved above the preceding two to correct alignment.
-    uint8_t* thread_local_start;
 
     // Thread local limit is how much we can expand the thread local buffer to, it is greater or
     // equal to thread_local_end.
@@ -2328,6 +2332,13 @@ class EXPORT Thread {
 
     // Pointer to the first node of an intrusively doubly-linked list of ThreadExitFlags.
     ThreadExitFlag* thread_exit_flags GUARDED_BY(Locks::thread_list_lock_);
+
+    // If no_thread_suspension_ is > 0, what is causing that assertion.
+    const char* last_no_thread_suspension_cause;
+
+    // If the thread is asserting that there should be no transaction checks,
+    // what is causing that assertion (debug builds only).
+    const char* last_no_transaction_checks_cause;
   } tlsPtr_;
 
   // Small thread-local cache to be used from the interpreter.
@@ -2386,6 +2397,7 @@ class EXPORT Thread {
   friend class gc::collector::SemiSpace;  // For getting stack traces.
   friend class Runtime;  // For CreatePeer.
   friend class QuickExceptionHandler;  // For dumping the stack.
+  friend class ScopedAssertNoTransactionChecks;
   friend class ScopedThreadStateChange;
   friend class StubTest;  // For accessing entrypoints.
   friend class ThreadList;  // For ~Thread, Destroy and EnsureFlipFunctionStarted.

@@ -954,9 +954,12 @@ class EXPORT ClassLinker {
       REQUIRES_SHARED(Locks::mutator_lock_);
   virtual bool IsTransactionAborted() const;
 
-  // Vist transaction roots for AOT compilation.
+  // Visit transaction roots for AOT compilation.
   virtual void VisitTransactionRoots(RootVisitor* visitor)
       REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Get transactional switch interpreter entrypoint for AOT compilation.
+  virtual const void* GetTransactionalInterpreter();
 
   void RemoveDexFromCaches(const DexFile& dex_file);
   ClassTable* GetBootClassTable() REQUIRES_SHARED(Locks::classlinker_classes_lock_) {

@@ -16,10 +16,33 @@
 
 #include "common_transaction_test.h"
 
-#include "oat/aot_class_linker.h"
+#include "aot_class_linker.h"
 #include "runtime.h"
 
 namespace art HIDDEN {
+
+class CommonTransactionTestCompilerCallbacks : public CompilerCallbacks {
+ public:
+  CommonTransactionTestCompilerCallbacks()
+      : CompilerCallbacks(CompilerCallbacks::CallbackMode::kCompileApp) {}
+
+  ClassLinker* CreateAotClassLinker(InternTable* intern_table) override {
+    return new AotClassLinker(intern_table);
+  }
+
+  void AddUncompilableMethod([[maybe_unused]] MethodReference ref) override {}
+  void AddUncompilableClass([[maybe_unused]] ClassReference ref) override {}
+  void ClassRejected([[maybe_unused]] ClassReference ref) override {}
+
+  verifier::VerifierDeps* GetVerifierDeps() const override { return nullptr; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CommonTransactionTestCompilerCallbacks);
+};
+
+CompilerCallbacks* CommonTransactionTestImpl::CreateCompilerCallbacks() {
+  return new CommonTransactionTestCompilerCallbacks();
+}
 
 void CommonTransactionTestImpl::EnterTransactionMode() {
   CHECK(!Runtime::Current()->IsActiveTransaction());
