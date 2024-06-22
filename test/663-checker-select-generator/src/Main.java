@@ -15,8 +15,8 @@
  */
 
 public class Main {
-  // Check that we don't generate a select since we don't have no Phi (not even at the builder
-  // stage) since both values are the same.
+  // Check that we don't generate a select since we don't have a Phi (not even at
+  // the builder stage) since both values are the same.
 
   /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValue(boolean) builder (after)
   /// CHECK-NOT: Phi
@@ -193,17 +193,25 @@ public class Main {
     }
   }
 
-  // Check that we don't generate a select since we only have a single return.
-  // TODO: This is no longer true, since D8 does not share the branches with different lines.
+  // Check that we generate a select, which we collapse into a single return.
 
   /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValueWithReturn(boolean) builder (after)
   /// CHECK:       <<Const10:i\d+>> IntConstant 10
   /// CHECK:       Return [<<Const10>>]
+  /// CHECK:       Return [<<Const10>>]
 
-  /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValueWithReturn(boolean) builder (after)
-  /// CHECK:       Return
-  /// CHECK:       Return
+  /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValueWithReturn(boolean) select_generator (after)
+  /// CHECK-DAG:   <<Bool:z\d+>>   ParameterValue
+  /// CHECK-DAG:   <<Const10:i\d+>> IntConstant 10
+  /// CHECK-DAG:   <<Select:i\d+>>  Select [<<Const10>>,<<Const10>>,<<Bool>>]
 
+  /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValueWithReturn(boolean) instruction_simplifier$after_gvn (after)
+  /// CHECK:       <<Const10:i\d+>> IntConstant 10
+  /// CHECK:       Return [<<Const10>>]
+
+  /// CHECK-START: int Main.$noinline$testSimpleDiamondSameValueWithReturn(boolean) instruction_simplifier$after_gvn (after)
+  /// CHECK:       Return
+  /// CHECK-NOT:   Return
   private static int $noinline$testSimpleDiamondSameValueWithReturn(boolean bool_param) {
     if (bool_param) {
       return 10;
@@ -234,16 +242,28 @@ public class Main {
     }
   }
 
-  // Check that we don't generate a select since we only have a single return.
-  // TODO: This is no longer true, since D8 does not share the branches with different lines.
+  // Check that we generate a select, which we collapse into a single return.
 
   /// CHECK-START: int Main.$noinline$testDoubleDiamondSameValueWithReturn(boolean, boolean) builder (after)
   /// CHECK:       <<Const10:i\d+>> IntConstant 10
   /// CHECK:       Return [<<Const10>>]
+  /// CHECK:       Return [<<Const10>>]
 
-  /// CHECK-START: int Main.$noinline$testDoubleDiamondSameValueWithReturn(boolean, boolean) builder (after)
+  /// CHECK-START: int Main.$noinline$testDoubleDiamondSameValueWithReturn(boolean, boolean) select_generator (after)
+  /// CHECK-DAG:   <<Bool1:z\d+>>   ParameterValue
+  /// CHECK-DAG:   <<Bool2:z\d+>>   ParameterValue
+  /// CHECK-DAG:   <<Const10:i\d+>> IntConstant 10
+  /// CHECK-DAG:   <<Select:i\d+>>  Select [<<Const10>>,<<Const10>>,<<Bool2>>]
+  /// CHECK-DAG:   <<Select2:i\d+>> Select [<<Select>>,<<Const10>>,<<Bool1>>]
+  /// CHECK-DAG:                    Return [<<Select2>>]
+
+  /// CHECK-START: int Main.$noinline$testDoubleDiamondSameValueWithReturn(boolean, boolean) instruction_simplifier$after_gvn (after)
+  /// CHECK:       <<Const10:i\d+>> IntConstant 10
+  /// CHECK:       Return [<<Const10>>]
+
+  /// CHECK-START: int Main.$noinline$testDoubleDiamondSameValueWithReturn(boolean, boolean) instruction_simplifier$after_gvn (after)
   /// CHECK:       Return
-  /// CHECK:       Return
+  /// CHECK-NOT:   Return
   private static int $noinline$testDoubleDiamondSameValueWithReturn(boolean bool_param_1, boolean bool_param_2) {
     if (bool_param_1) {
       return 10;

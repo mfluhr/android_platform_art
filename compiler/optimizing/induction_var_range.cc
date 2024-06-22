@@ -384,6 +384,11 @@ bool InductionVarRange::HasKnownTripCount(const HLoopInformation* loop,
                                           /*out*/ int64_t* trip_count) const {
   bool is_constant = false;
   CheckForFiniteAndConstantProps(loop, &is_constant, trip_count);
+  // Set negative trip counts as 0, since it means that no trips would happen. Note that if the
+  // `is_constant` value is false, `trip_count` would be disregareded.
+  if (*trip_count < 0) {
+    *trip_count = 0;
+  }
   return is_constant;
 }
 

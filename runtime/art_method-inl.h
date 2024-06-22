@@ -664,22 +664,6 @@ void ArtMethod::VisitArrayRoots(RootVisitorType& visitor,
   }
 }
 
-template <typename Visitor>
-inline void ArtMethod::UpdateEntrypoints(const Visitor& visitor, PointerSize pointer_size) {
-  if (IsNative()) {
-    const void* old_native_code = GetEntryPointFromJniPtrSize(pointer_size);
-    const void* new_native_code = visitor(old_native_code);
-    if (old_native_code != new_native_code) {
-      SetEntryPointFromJniPtrSize(new_native_code, pointer_size);
-    }
-  }
-  const void* old_code = GetEntryPointFromQuickCompiledCodePtrSize(pointer_size);
-  const void* new_code = visitor(old_code);
-  if (old_code != new_code) {
-    SetEntryPointFromQuickCompiledCodePtrSize(new_code, pointer_size);
-  }
-}
-
 template <ReadBarrierOption kReadBarrierOption>
 inline bool ArtMethod::StillNeedsClinitCheck() {
   if (!NeedsClinitCheckBeforeCall()) {

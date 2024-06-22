@@ -668,6 +668,10 @@ void TraceWriter::RecordMethodInfoV2(mirror::Class* klass, uint8_t** buffer, siz
 
   std::string class_name_current = klass->PrettyDescriptor();
   const char* source_file_current = klass->GetSourceFile();
+  if (source_file_current == nullptr) {
+    // Generated classes have no source file.
+    source_file_current = "";
+  }
   for (ArtMethod& method : klass->GetMethods(kRuntimePointerSize)) {
     if (!method.IsInvokable()) {
       continue;

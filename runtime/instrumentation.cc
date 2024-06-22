@@ -249,31 +249,59 @@ static bool CodeSupportsEntryExitHooks(const void* entry_point, ArtMethod* metho
   return false;
 }
 
-static void UpdateEntryPoints(ArtMethod* method, const void* quick_code)
+template <typename T>
+bool CompareExchange(uintptr_t ptr, uintptr_t old_value, uintptr_t new_value) {
+  std::atomic<T>* atomic_addr = reinterpret_cast<std::atomic<T>*>(ptr);
+  T cast_old_value = dchecked_integral_cast<T>(old_value);
+  return atomic_addr->compare_exchange_strong(cast_old_value,
+                                              dchecked_integral_cast<T>(new_value),
+                                              std::memory_order_relaxed);
+}
+
+static void UpdateEntryPoints(ArtMethod* method, const void* new_code)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   if (kIsDebugBuild) {
     if (method->StillNeedsClinitCheckMayBeDead()) {
-      CHECK(CanHandleInitializationCheck(quick_code));
+      CHECK(CanHandleInitializationCheck(new_code));
     }
     jit::Jit* jit = Runtime::Current()->GetJit();
-    if (jit != nullptr && jit->GetCodeCache()->ContainsPc(quick_code)) {
+    if (jit != nullptr && jit->GetCodeCache()->ContainsPc(new_code)) {
       // Ensure we always have the thumb entrypoint for JIT on arm32.
       if (kRuntimeISA == InstructionSet::kArm) {
-        CHECK_EQ(reinterpret_cast<uintptr_t>(quick_code) & 1, 1u);
+        CHECK_EQ(reinterpret_cast<uintptr_t>(new_code) & 1, 1u);
       }
     }
     const Instrumentation* instr = Runtime::Current()->GetInstrumentation();
     if (instr->EntryExitStubsInstalled()) {
-      CHECK(CodeSupportsEntryExitHooks(quick_code, method));
+      CHECK(CodeSupportsEntryExitHooks(new_code, method));
     }
     if (instr->InterpreterStubsInstalled() && !method->IsNative()) {
-      CHECK_EQ(quick_code, GetQuickToInterpreterBridge());
+      CHECK_EQ(new_code, GetQuickToInterpreterBridge());
     }
   }
-  // If the method is from a boot image, don't dirty it if the entrypoint
-  // doesn't change.
-  if (method->GetEntryPointFromQuickCompiledCode() != quick_code) {
-    method->SetEntryPointFromQuickCompiledCode(quick_code);
+  const void* current_entry_point = method->GetEntryPointFromQuickCompiledCode();
+  if (current_entry_point == new_code) {
+    // If the method is from a boot image, don't dirty it if the entrypoint
+    // doesn't change.
+    return;
+  }
+
+  // Do an atomic exchange to avoid potentially unregistering JIT code twice.
+  MemberOffset offset = ArtMethod::EntryPointFromQuickCompiledCodeOffset(kRuntimePointerSize);
+  uintptr_t old_value = reinterpret_cast<uintptr_t>(current_entry_point);
+  uintptr_t new_value = reinterpret_cast<uintptr_t>(new_code);
+  uintptr_t ptr = reinterpret_cast<uintptr_t>(method) + offset.Uint32Value();
+  bool success = (kRuntimePointerSize == PointerSize::k32)
+      ? CompareExchange<uint32_t>(ptr, old_value, new_value)
+      : CompareExchange<uint64_t>(ptr, old_value, new_value);
+
+  // If we successfully updated the entrypoint and the old entrypoint is JITted
+  // code, register the old entrypoint as zombie.
+  jit::Jit* jit = Runtime::Current()->GetJit();
+  if (success &&
+      jit != nullptr &&
+      jit->GetCodeCache()->ContainsPc(current_entry_point)) {
+    jit->GetCodeCache()->AddZombieCode(method, current_entry_point);
   }
 }
 
