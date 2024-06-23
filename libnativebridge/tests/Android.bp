@@ -178,8 +178,8 @@ cc_test {
     ],
 }
 
-// Very basic tests in CTS to verify backed-by API coverage of the exported API
-// in libnativebridge.map.txt.
+// Very basic tests in CTS/MCTS to verify backed-by API coverage of the exported
+// API in libnativebridge.map.txt.
 cc_test {
     name: "art_libnativebridge_cts_tests",
     defaults: ["art_standalone_test_defaults"],

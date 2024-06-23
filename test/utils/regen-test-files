@@ -88,6 +88,10 @@ NUM_MTS_ART_RUN_TEST_SHARDS = 1
 # build.
 ENG_ONLY_TEST_LIST_NAME = "mts-art-tests-list-eng-only"
 
+# Name of Lint baseline filename used in certain ART run-tests,
+# e.g. for the `NewApi` check (see e.g. b/268261262).
+LINT_BASELINE_FILENAME = "lint-baseline.xml"
+
 # Curated list of tests that have a custom `run` script, but that are
 # known to work fine with the default test execution strategy (i.e.
 # when ignoring their `run` script), even if not exactly as they would
@@ -230,7 +234,9 @@ known_failing_tests = frozenset([
 postsubmit_only_tests = frozenset([
   "458-checker-riscv64-shift-add",
   "856-clone",
+  "857-default-access",
   "2274-checker-bitwise-gvn",
+  "2275-integral-unsigned-arithmetic",
 ])
 
 known_failing_on_hwasan_tests = frozenset([
@@ -489,6 +495,26 @@ class Generator:
       return True
     return False
 
+  # Generate a Blueprint property group as a string, i.e. something looking like
+  # this:
+  #
+  #   ```
+  #       <group_name>: {
+  #         <key0>: "<value0>",
+  #         ...
+  #         <keyN>: "<valueN>",
+  #       }
+  #   ```
+  #
+  # where `(key0, value0), ..., (keyN, valueN)` are key-value pairs in `props`.
+  def gen_prop_group(self, group_name, props):
+    props_joined = """,
+            """.join([f"{k}: \"{v}\"" for (k, v) in props.items()])
+    return f"""
+          {group_name}: {{
+              {props_joined},
+          }},"""
+
   def gen_libs_list_impl(self, library_type, libraries):
     if len(libraries) == 0:
       return ""
@@ -505,7 +531,7 @@ class Generator:
   def gen_static_libs_list(self, libraries):
     return self.gen_libs_list_impl("static_libs", libraries);
 
-  def gen_java_library_rule(self, name, src_dir, libraries):
+  def gen_java_library_rule(self, name, src_dir, libraries, extra_props):
     return f"""\
 
 
@@ -513,7 +539,7 @@ class Generator:
       java_library {{
           name: "{name}",
           defaults: ["art-run-test-defaults"],{self.gen_libs_list(libraries)}
-          srcs: ["{src_dir}/**/*.java"],
+          srcs: ["{src_dir}/**/*.java"],{extra_props}
       }}"""
 
   # Is (successfully) running `run_test` supported?
@@ -554,7 +580,17 @@ class Generator:
 
     # Optional test metadata (JSON file).
     metadata = self.get_test_metadata(run_test)
-    is_cts_test = "cts" in metadata.get("test_suites", [])
+    test_suites = metadata.get("test_suites", [])
+    is_cts_test = "cts" in test_suites
+    is_mcts_test = "mcts-art" in test_suites
+
+    # For now we make it mandatory for an ART CTS test to be an ART
+    # MCTS test and vice versa.
+    if is_cts_test != is_mcts_test:
+      (present, absent) = ("mts", "mcts-art") if is_cts_test else ("mcts-art", "mts")
+      logging.error(f"Inconsistent test suites state in metadata for ART run-test `{run_test}`: " +
+                    f"`test_suites` contains `{present}` but not `{absent}`")
+      sys.exit(1)
 
     run_test_module_name = ART_RUN_TEST_MODULE_NAME_PREFIX + run_test
 
@@ -571,11 +607,10 @@ class Generator:
 
     # Define the `test_suites` property, if test suites are present in
     # the test's metadata.
-    test_suites_list = metadata.get("test_suites")
     test_suites_prop = ""
-    if test_suites_list:
+    if test_suites:
       test_suites_joined = """,
-              """.join([f"\"{s}\"" for s in test_suites_list])
+              """.join([f"\"{s}\"" for s in test_suites])
       test_suites_prop = f"""\
 
           test_suites: [
@@ -594,9 +629,9 @@ class Generator:
     # against, if needed.
     sdk_version_prop = ""
     if is_cts_test:
-      # Have CTS test modules use the test API (`test_current`) so
-      # that they do not depend on the framework private platform API
-      # (`private`), which is the default.
+      # Have CTS and MCTS test modules use the test API
+      # (`test_current`) so that they do not depend on the framework
+      # private platform API (`private`), which is the default.
       sdk_version_prop = """
           sdk_version: "test_current","""
 
@@ -608,9 +643,14 @@ class Generator:
 
     src_library_rules = []
     test_libraries = []
+    extra_props = ""
+    # Honor the Lint baseline file, if present.
+    if os.path.isfile(os.path.join(run_test_path, LINT_BASELINE_FILENAME)):
+      extra_props += self.gen_prop_group("lint", {"baseline_filename": LINT_BASELINE_FILENAME})
     if os.path.isdir(os.path.join(run_test_path, "src2")):
       test_library = f"{run_test_module_name}-{source_dir}"
-      src_library_rules.append(self.gen_java_library_rule(test_library, source_dir, test_libraries))
+      src_library_rules.append(
+          self.gen_java_library_rule(test_library, source_dir, test_libraries, extra_props))
       test_libraries.append(f"\"{test_library}\"")
       source_dir = "src2"
 

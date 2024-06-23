@@ -5774,10 +5774,16 @@
       "name": "art-run-test-2274-checker-bitwise-gvn"
     },
     {
+      "name": "art-run-test-2275-integral-unsigned-arithmetic"
+    },
+    {
       "name": "art-run-test-458-checker-riscv64-shift-add"
     },
     {
       "name": "art-run-test-856-clone"
+    },
+    {
+      "name": "art-run-test-857-default-access"
     }
   ]
 }
