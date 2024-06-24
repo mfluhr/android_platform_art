@@ -37,7 +37,7 @@
 #include "gc/space/image_space.h"
 #include "interpreter/interpreter.h"
 #include "jit-inl.h"
-#include "jit_code_cache-inl.h"
+#include "jit_code_cache.h"
 #include "jit_create.h"
 #include "jni/java_vm_ext.h"
 #include "mirror/method_handle_impl.h"
@@ -1883,11 +1883,6 @@ void Jit::VisitRoots(RootVisitor* visitor) {
   if (thread_pool_ != nullptr) {
     thread_pool_->VisitRoots(visitor);
   }
-
-  // MethodType-s are weakly interned, but a MethodType can be referenced from JIT-ted code. We
-  // visit JitCodeCache to treat such MethodType-s as strongly reachable.
-  UnbufferedRootVisitor root_visitor(visitor, RootInfo(kRootStickyClass));
-  code_cache_->VisitRootTables(root_visitor);
 }
 
 void JitThreadPool::VisitRoots(RootVisitor* visitor) {

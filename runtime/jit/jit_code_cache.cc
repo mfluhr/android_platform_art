@@ -50,7 +50,6 @@
 #include "jit/profiling_info.h"
 #include "jit/jit_scoped_code_cache_write.h"
 #include "linear_alloc.h"
-#include "mirror/method_type.h"
 #include "oat/oat_file-inl.h"
 #include "oat/oat_quick_method_header.h"
 #include "object_callbacks.h"
@@ -60,7 +59,6 @@
 #include "thread-current-inl.h"
 #include "thread-inl.h"
 #include "thread_list.h"
-#include "well_known_classes-inl.h"
 
 namespace art HIDDEN {
 namespace jit {
@@ -438,30 +436,16 @@ void JitCodeCache::SweepRootTables(IsMarkedVisitor* visitor) {
         if (new_object != object) {
           roots[i] = GcRoot<mirror::Object>(new_object);
         }
-      } else if (object->IsClass<kDefaultVerifyFlags>()) {
+      } else {
         mirror::Object* new_klass = visitor->IsMarked(object);
         if (new_klass == nullptr) {
           roots[i] = GcRoot<mirror::Object>(Runtime::GetWeakClassSentinel());
         } else if (new_klass != object) {
           roots[i] = GcRoot<mirror::Object>(new_klass);
         }
-      } else {
-        mirror::Object* new_method_type = visitor->IsMarked(object);
-
-        // The MethodType have been visited during VisitConcurrentRoots, so they must be live.
-        DCHECK_NE(new_method_type, nullptr) << "old-method-type" << object;
-        ObjPtr<mirror::Class> method_type_class =
-            WellKnownClasses::java_lang_invoke_MethodType.Get<kWithoutReadBarrier>();
-        DCHECK_EQ((new_method_type->GetClass<kVerifyNone, kWithoutReadBarrier>()),
-                   method_type_class.Ptr());
-
-        if (new_method_type != object) {
-          roots[i] = GcRoot<mirror::Object>(new_method_type);
-        }
       }
     }
   }
-
   // Walk over inline caches to clear entries containing unloaded classes.
   for (const auto& [_, info] : profiling_infos_) {
     InlineCache* caches = info->GetInlineCaches();
@@ -583,7 +567,6 @@ void JitCodeCache::RemoveMethodsIn(Thread* self, const LinearAlloc& alloc) {
       if (alloc.ContainsUnsafe(it->second)) {
         method_headers.insert(OatQuickMethodHeader::FromCodePointer(it->first));
         VLOG(jit) << "JIT removed " << it->second->PrettyMethod() << ": " << it->first;
-        method_types_map_.erase(it->first);
         zombie_code_.erase(it->first);
         processed_zombie_code_.erase(it->first);
         it = method_code_map_.erase(it);
@@ -772,27 +755,6 @@ bool JitCodeCache::Commit(Thread* self,
       } else {
         ScopedDebugDisallowReadBarriers sddrb(self);
         method_code_map_.Put(code_ptr, method);
-
-        // Searching for MethodType-s in roots. They need to be treated as strongly reachable while
-        // the corresponding compiled code is not removed.
-        ObjPtr<mirror::Class> method_type_class =
-            WellKnownClasses::java_lang_invoke_MethodType.Get<kWithoutReadBarrier>();
-
-        auto method_types_in_roots = std::vector<GcRoot<mirror::MethodType>>();
-
-        for (auto root : roots) {
-          ObjPtr<mirror::Class> klass = root->GetClass<kDefaultVerifyFlags, kWithoutReadBarrier>();
-          if (klass == method_type_class ||
-              klass == ReadBarrier::IsMarked(method_type_class.Ptr()) ||
-              ReadBarrier::IsMarked(klass.Ptr()) == method_type_class) {
-            ObjPtr<mirror::MethodType> mt = ObjPtr<mirror::MethodType>::DownCast(root.Get());
-            method_types_in_roots.emplace_back(GcRoot(mt));
-          }
-        }
-
-        if (!method_types_in_roots.empty()) {
-          method_types_map_.Put(code_ptr, method_types_in_roots);
-        }
       }
       if (compilation_kind == CompilationKind::kOsr) {
         ScopedDebugDisallowReadBarriers sddrb(self);
@@ -892,7 +854,6 @@ bool JitCodeCache::RemoveMethodLocked(ArtMethod* method, bool release_memory) {
           FreeCodeAndData(it->first);
         }
         VLOG(jit) << "JIT removed " << it->second->PrettyMethod() << ": " << it->first;
-        method_types_map_.erase(it->first);
         it = method_code_map_.erase(it);
       } else {
         ++it;
@@ -1147,7 +1108,6 @@ void JitCodeCache::RemoveUnmarkedCode(Thread* self) {
     } else {
       OatQuickMethodHeader* header = OatQuickMethodHeader::FromCodePointer(code_ptr);
       method_headers.insert(header);
-      method_types_map_.erase(header->GetCode());
       method_code_map_.erase(header->GetCode());
       VLOG(jit) << "JIT removed " << *it;
       it = processed_zombie_code_.erase(it);

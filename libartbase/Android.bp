@@ -69,6 +69,7 @@ cc_defaults {
                 cflags: ["-DART_STATIC_LIBARTBASE"],
             },
             static_libs: [
+                "art-aconfig-flags-lib",
                 "libcap",
                 "libmodules-utils-build",
                 // ZipArchive support, the order matters here to get all symbols.
@@ -85,6 +86,7 @@ cc_defaults {
             ],
             export_shared_lib_headers: ["libbase"], // ART's macros.h depends on libbase's macros.h.
             export_static_lib_headers: [
+                "art-aconfig-flags-lib",
                 "libcap",
             ],
         },
@@ -96,6 +98,9 @@ cc_defaults {
             static: {
                 cflags: ["-DART_STATIC_LIBARTBASE"],
             },
+            static_libs: [
+                "art-aconfig-flags-lib",
+            ],
             whole_static_libs: ["libtinyxml2"],
             shared_libs: [
                 "libziparchive",
@@ -107,6 +112,9 @@ cc_defaults {
                 "libbase",
             ],
             export_shared_lib_headers: ["libbase"], // ART's macros.h depends on libbase's macros.h.
+            export_static_lib_headers: [
+                "art-aconfig-flags-lib",
+            ],
         },
         linux_glibc: {
             static_libs: [
