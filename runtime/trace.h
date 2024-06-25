@@ -293,12 +293,8 @@ class TraceWriter {
 
   // Encodes the header for the events block. This assumes that there is enough space reserved to
   // encode the entry.
-  void EncodeEventBlockHeader(uint8_t* ptr,
-                              uint32_t thread_id,
-                              uint64_t method_index,
-                              uint32_t init_thread_clock_time,
-                              uint32_t init_wall_clock_time,
-                              uint16_t num_records) REQUIRES(trace_writer_lock_);
+  void EncodeEventBlockHeader(uint8_t* ptr, uint32_t thread_id, uint32_t num_records)
+      REQUIRES(trace_writer_lock_);
 
   // Ensures there is sufficient space in the buffer to record the requested_size. If there is not
   // enough sufficient space the current contents of the buffer are written to the file and

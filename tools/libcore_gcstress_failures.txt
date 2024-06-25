@@ -28,8 +28,7 @@
   description: "Timeouts.",
   result: EXEC_FAILED,
   modes: [device],
-  names: ["java.math.BigInteger.BigIntegerTest#testConstructor",
-          "jsr166.TimeUnitTest#testConvert",
+  names: ["jsr166.TimeUnitTest#testConvert",
           "libcore.java.lang.invoke.MethodHandleCombinersTest#testCollectorMultiThreaded",
           "libcore.java.lang.invoke.MethodHandleCombinersTest#testCollectArgumentsMultiThreaded",
           "libcore.java.lang.invoke.MethodHandleCombinersTest#testConstantMultithreaded",
@@ -47,6 +46,7 @@
           "org.apache.harmony.tests.java.util.TimerTest#testOverdueTaskExecutesImmediately",
           "org.apache.harmony.tests.java.util.WeakHashMapTest#test_keySet_hasNext",
           "test.java.math.BigDecimal.DivideMcTests#mcDivideTests",
+          "test.java.math.BigInteger.BigIntegerTest#testConstructor",
           "test.java.util.Collections.RacingCollections#main"]
 },
 {

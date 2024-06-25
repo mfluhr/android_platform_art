@@ -87,8 +87,7 @@ static const int kSummaryHeaderV2 = 3;
 static const uint16_t kTraceHeaderLengthV2 = 32;
 static const uint16_t kTraceRecordSizeSingleClockV2 = 6;
 static const uint16_t kTraceRecordSizeDualClockV2 = kTraceRecordSizeSingleClockV2 + 2;
-static const uint16_t kEntryHeaderSizeSingleClockV2 = 21;
-static const uint16_t kEntryHeaderSizeDualClockV2 = kEntryHeaderSizeSingleClockV2 + 4;
+static const uint16_t kEntryHeaderSizeV2 = 12;
 
 static const uint16_t kTraceVersionSingleClockV2 = 4;
 static const uint16_t kTraceVersionDualClockV2 = 5;
@@ -463,6 +462,13 @@ uint32_t Trace::GetClockOverheadNanoSeconds() {
 static void Append2LE(uint8_t* buf, uint16_t val) {
   *buf++ = static_cast<uint8_t>(val);
   *buf++ = static_cast<uint8_t>(val >> 8);
+}
+
+// TODO: put this somewhere with the big-endian equivalent used by JDWP.
+static void Append3LE(uint8_t* buf, uint16_t val) {
+  *buf++ = static_cast<uint8_t>(val);
+  *buf++ = static_cast<uint8_t>(val >> 8);
+  *buf++ = static_cast<uint8_t>(val >> 16);
 }
 
 // TODO: put this somewhere with the big-endian equivalent used by JDWP.
@@ -1749,17 +1755,17 @@ void TraceWriter::FlushEntriesFormatV2(
     size_t num_records,
     size_t* current_index,
     uint8_t* init_buffer_ptr) {
+  uint8_t* current_buffer_ptr = init_buffer_ptr;
+
+  EncodeEventBlockHeader(current_buffer_ptr, tid, num_records);
+  current_buffer_ptr += kEntryHeaderSizeV2;
+
   bool has_thread_cpu_clock = UseThreadCpuClock(clock_source_);
   bool has_wall_clock = UseWallClock(clock_source_);
   size_t num_entries = GetNumEntries(clock_source_);
   uint32_t prev_wall_timestamp = 0;
   uint32_t prev_thread_timestamp = 0;
   uint64_t prev_method_action_encoding = 0;
-  bool is_first_entry = true;
-  uint8_t* current_buffer_ptr = init_buffer_ptr;
-  uint32_t header_size = (clock_source_ == TraceClockSource::kDual) ? kEntryHeaderSizeDualClockV2 :
-                                                                      kEntryHeaderSizeSingleClockV2;
-
   size_t entry_index = kPerThreadBufSize;
   for (size_t i = 0; i < num_records; i++) {
     entry_index -= num_entries;
@@ -1775,41 +1781,26 @@ void TraceWriter::FlushEntriesFormatV2(
     uint64_t method_id = reinterpret_cast<uintptr_t>(record.method);
     uint64_t method_action_encoding = method_id | record.action;
 
-    if (is_first_entry) {
+    int64_t method_diff = method_action_encoding - prev_method_action_encoding;
+    current_buffer_ptr = EncodeSignedLeb128(current_buffer_ptr, method_diff);
+    prev_method_action_encoding = method_action_encoding;
+
+    if (has_wall_clock) {
+      current_buffer_ptr =
+          EncodeUnsignedLeb128(current_buffer_ptr, (record.wall_clock_time - prev_wall_timestamp));
       prev_wall_timestamp = record.wall_clock_time;
+    }
+
+    if (has_thread_cpu_clock) {
+      current_buffer_ptr = EncodeUnsignedLeb128(current_buffer_ptr,
+                                                (record.thread_cpu_time - prev_thread_timestamp));
       prev_thread_timestamp = record.thread_cpu_time;
-      prev_method_action_encoding = method_action_encoding;
-      is_first_entry = false;
-
-      EncodeEventBlockHeader(init_buffer_ptr,
-                             tid,
-                             method_action_encoding,
-                             prev_thread_timestamp,
-                             prev_wall_timestamp,
-                             num_records);
-      current_buffer_ptr += header_size;
-    } else {
-      int64_t method_diff = method_action_encoding - prev_method_action_encoding;
-      current_buffer_ptr = EncodeSignedLeb128(current_buffer_ptr, method_diff);
-      prev_method_action_encoding = method_action_encoding;
-
-      if (has_wall_clock) {
-        current_buffer_ptr =
-            EncodeUnsignedLeb128(current_buffer_ptr, (record.wall_clock_time - prev_wall_timestamp));
-        prev_wall_timestamp = record.wall_clock_time;
-      }
-
-      if (has_thread_cpu_clock) {
-        current_buffer_ptr =
-            EncodeUnsignedLeb128(current_buffer_ptr, (record.thread_cpu_time - prev_thread_timestamp));
-        prev_thread_timestamp = record.thread_cpu_time;
-      }
     }
   }
 
   // Update the total size of the block excluding header size.
-  uint8_t* total_size_loc = init_buffer_ptr + header_size - 2;
-  Append2LE(total_size_loc, current_buffer_ptr - (init_buffer_ptr + header_size));
+  uint8_t* total_size_loc = init_buffer_ptr + kEntryHeaderSizeV2 - 4;
+  Append4LE(total_size_loc, current_buffer_ptr - (init_buffer_ptr + kEntryHeaderSizeV2));
   *current_index += current_buffer_ptr - init_buffer_ptr;
 }
 
@@ -1949,28 +1940,12 @@ void TraceWriter::EncodeEventEntry(uint8_t* ptr,
   static_assert(kPacketSize == 2 + 4 + 4 + 4, "Packet size incorrect.");
 }
 
-void TraceWriter::EncodeEventBlockHeader(uint8_t* ptr,
-                                         uint32_t thread_id,
-                                         uint64_t init_method_index,
-                                         uint32_t init_thread_clock,
-                                         uint32_t init_wall_clock,
-                                         uint16_t num_records) {
+void TraceWriter::EncodeEventBlockHeader(uint8_t* ptr, uint32_t thread_id, uint32_t num_records) {
   ptr[0] = kEntryHeaderV2;
   Append4LE(ptr + 1, thread_id);
-  Append8LE(ptr + 5, init_method_index);
-  ptr += 13;
-
-  if (UseThreadCpuClock(clock_source_)) {
-    Append4LE(ptr, init_thread_clock);
-    ptr += 4;
-  }
-  if (UseWallClock(clock_source_)) {
-    Append4LE(ptr, init_wall_clock);
-    ptr += 4;
-  }
-  // This specifies the total number of records encoded in the block using lebs. We encode the first
-  // entry in the header, so the block contains one less than num_records.
-  Append2LE(ptr, num_records - 1);
+  // This specifies the total number of records encoded in the block using lebs.
+  DCHECK_LT(num_records, 1u << 24);
+  Append3LE(ptr + 5, num_records);
 }
 
 void TraceWriter::EnsureSpace(uint8_t* buffer,
