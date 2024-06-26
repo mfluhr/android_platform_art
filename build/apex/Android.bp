@@ -299,6 +299,23 @@ apex_test {
     installable: false,
 }
 
+// Same as "com.android.art" APEX, but also contains "imgdiag" binary.
+// Used to collect dirty-image-objects.
+apex_test {
+    name: "test_imgdiag_com.android.art",
+    defaults: ["com.android.art-defaults"],
+    multilib: {
+        both: {
+            binaries: ["imgdiag"],
+        },
+    },
+    key: "com.android.art.key",
+    manifest: "test_apex_manifest.json",
+    file_contexts: ":com.android.art-file_contexts",
+    certificate: ":com.android.art.certificate",
+    installable: false,
+}
+
 // Release version of the ART APEX module (not containing debug
 // variants nor tools), included in user builds. Also used for
 // storage-constrained devices in userdebug and eng builds.

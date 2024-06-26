@@ -28,7 +28,8 @@ namespace art {
 namespace {
 
 static const int kMagicValue = 0x574f4c53;
-static const int kVersionDualClock = 0xf5;
+static const int kVersionDualClockStreaming = 0xf5;
+static const int kVersionDualClock = 0x05;
 static const int kThreadInfo = 0;
 static const int kMethodInfo = 1;
 static const int kTraceEntries = 2;
@@ -242,13 +243,13 @@ extern "C" JNIEXPORT void JNICALL Java_Main_dumpTrace(JNIEnv* env,
   }
   int magic_value = ReadNumber(4, header);
   if (magic_value != kMagicValue) {
-    printf("Incorrect magic value\n");
+    printf("Incorrect magic value got:%0x expected:%0x\n", magic_value, kMagicValue);
     return;
   }
   int version = ReadNumber(2, header + 4);
   printf("version=%0x\n", version);
 
-  bool is_dual_clock = (version == kVersionDualClock);
+  bool is_dual_clock = (version == kVersionDualClock) || (version == kVersionDualClockStreaming);
   bool has_entries = true;
   while (has_entries) {
     uint8_t entry_header;

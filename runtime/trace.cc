@@ -1110,7 +1110,7 @@ TraceWriter::TraceWriter(File* trace_file,
     cur_offset_ = kTraceHeaderLengthV2;
   }
 
-  if (output_mode == TraceOutputMode::kStreaming) {
+  if (output_mode == TraceOutputMode::kStreaming || trace_format_version_ == Trace::kFormatV2) {
     // Flush the header information to the file. We use a per thread buffer, so
     // it is easier to just write the header information directly to file.
     if (!trace_file_->WriteFully(buf_.get(), kTraceHeaderLength)) {
@@ -1162,125 +1162,139 @@ Trace::Trace(File* trace_file,
                                       GetClockOverheadNanoSeconds()));
 }
 
+std::string TraceWriter::CreateSummary(int flags) {
+  std::ostringstream os;
+  // Compute elapsed time.
+  uint64_t elapsed = GetMicroTime(GetTimestamp()) - start_time_;
+  os << StringPrintf("%cversion\n", kTraceTokenChar);
+  os << StringPrintf("%d\n", GetTraceVersion(clock_source_, trace_format_version_));
+  os << StringPrintf("data-file-overflow=%s\n", overflow_ ? "true" : "false");
+  if (UseThreadCpuClock(clock_source_)) {
+    if (UseWallClock(clock_source_)) {
+      os << StringPrintf("clock=dual\n");
+    } else {
+      os << StringPrintf("clock=thread-cpu\n");
+    }
+  } else {
+    os << StringPrintf("clock=wall\n");
+  }
+  os << StringPrintf("elapsed-time-usec=%" PRIu64 "\n", elapsed);
+  if (trace_output_mode_ != TraceOutputMode::kStreaming) {
+    os << StringPrintf("num-method-calls=%zd\n", num_records_);
+  }
+  os << StringPrintf("clock-call-overhead-nsec=%d\n", clock_overhead_ns_);
+  os << StringPrintf("vm=art\n");
+  os << StringPrintf("pid=%d\n", getpid());
+  if ((flags & Trace::kTraceCountAllocs) != 0) {
+    os << "alloc-count=" << Runtime::Current()->GetStat(KIND_ALLOCATED_OBJECTS) << "\n";
+    os << "alloc-size=" << Runtime::Current()->GetStat(KIND_ALLOCATED_BYTES) << "\n";
+    os << "gc-count=" << Runtime::Current()->GetStat(KIND_GC_INVOCATIONS) << "\n";
+  }
+
+  if (trace_format_version_ == Trace::kFormatV1) {
+    os << StringPrintf("%cthreads\n", kTraceTokenChar);
+    DumpThreadList(os);
+    os << StringPrintf("%cmethods\n", kTraceTokenChar);
+    DumpMethodList(os);
+  }
+  os << StringPrintf("%cend\n", kTraceTokenChar);
+  return os.str();
+}
+
 void TraceWriter::FinishTracing(int flags, bool flush_entries) {
   Thread* self = Thread::Current();
-  if (flush_entries) {
-    if (thread_pool_ != nullptr) {
-      // Wait for any workers to be created. If we are stopping tracing as a part of runtime
-      // shutdown, any unstarted workers can create problems if they try attaching while shutting
-      // down.
-      thread_pool_->WaitForWorkersToBeCreated();
-      // Wait for any outstanding writer tasks to finish. Let the thread pool worker finish the
-      // tasks to avoid any re-ordering when processing tasks.
-      thread_pool_->Wait(self, /* do_work= */ false, /* may_hold_locks= */ true);
-      DCHECK_EQ(thread_pool_->GetTaskCount(self), 0u);
-      thread_pool_->StopWorkers(self);
-    }
 
-    size_t final_offset = 0;
-    if (trace_output_mode_ != TraceOutputMode::kStreaming) {
-      MutexLock mu(Thread::Current(), trace_writer_lock_);
-      final_offset = cur_offset_;
+  if (!flush_entries) {
+    // This is only called from the child process post fork to abort the trace.
+    // We shouldn't have any workers in the thread pool here.
+    DCHECK_EQ(thread_pool_, nullptr);
+    trace_file_->MarkUnchecked();  // Do not trigger guard.
+    if (trace_file_->Close() != 0) {
+      PLOG(ERROR) << "Could not close trace file.";
     }
+    return;
+  }
 
-    // Compute elapsed time.
-    uint64_t elapsed = GetMicroTime(GetTimestamp()) - start_time_;
+  if (thread_pool_ != nullptr) {
+    // Wait for any workers to be created. If we are stopping tracing as a part of runtime
+    // shutdown, any unstarted workers can create problems if they try attaching while shutting
+    // down.
+    thread_pool_->WaitForWorkersToBeCreated();
+    // Wait for any outstanding writer tasks to finish. Let the thread pool worker finish the
+    // tasks to avoid any re-ordering when processing tasks.
+    thread_pool_->Wait(self, /* do_work= */ false, /* may_hold_locks= */ true);
+    DCHECK_EQ(thread_pool_->GetTaskCount(self), 0u);
+    thread_pool_->StopWorkers(self);
+  }
 
-    std::ostringstream os;
+  size_t final_offset = 0;
+  if (trace_output_mode_ != TraceOutputMode::kStreaming) {
+    MutexLock mu(Thread::Current(), trace_writer_lock_);
+    final_offset = cur_offset_;
+  }
 
-    os << StringPrintf("%cversion\n", kTraceTokenChar);
-    os << StringPrintf("%d\n", GetTraceVersion(clock_source_, trace_format_version_));
-    os << StringPrintf("data-file-overflow=%s\n", overflow_ ? "true" : "false");
-    if (UseThreadCpuClock(clock_source_)) {
-      if (UseWallClock(clock_source_)) {
-        os << StringPrintf("clock=dual\n");
-      } else {
-        os << StringPrintf("clock=thread-cpu\n");
-      }
-    } else {
-      os << StringPrintf("clock=wall\n");
-    }
-    os << StringPrintf("elapsed-time-usec=%" PRIu64 "\n", elapsed);
-    if (trace_output_mode_ != TraceOutputMode::kStreaming) {
-      os << StringPrintf("num-method-calls=%zd\n", num_records_);
-    }
-    os << StringPrintf("clock-call-overhead-nsec=%d\n", clock_overhead_ns_);
-    os << StringPrintf("vm=art\n");
-    os << StringPrintf("pid=%d\n", getpid());
-    if ((flags & Trace::kTraceCountAllocs) != 0) {
-      os << "alloc-count=" << Runtime::Current()->GetStat(KIND_ALLOCATED_OBJECTS) << "\n";
-      os << "alloc-size=" << Runtime::Current()->GetStat(KIND_ALLOCATED_BYTES) << "\n";
-      os << "gc-count=" <<  Runtime::Current()->GetStat(KIND_GC_INVOCATIONS) << "\n";
-    }
-
-    if (trace_format_version_ == Trace::kFormatV1) {
-      os << StringPrintf("%cthreads\n", kTraceTokenChar);
-      DumpThreadList(os);
-      os << StringPrintf("%cmethods\n", kTraceTokenChar);
-      DumpMethodList(os);
-    }
-    os << StringPrintf("%cend\n", kTraceTokenChar);
-    std::string header(os.str());
-
+  std::string summary = CreateSummary(flags);
+  if (trace_format_version_ == Trace::kFormatV1) {
     if (trace_output_mode_ == TraceOutputMode::kStreaming) {
       DCHECK_NE(trace_file_.get(), nullptr);
       // It is expected that this method is called when all other threads are suspended, so there
       // cannot be any writes to trace_file_ after finish tracing.
       // Write a special token to mark the end of trace records and the start of
       // trace summary.
-      if (trace_format_version_ == Trace::kFormatV1) {
-        uint8_t buf[7];
-        Append2LE(buf, 0);
-        buf[2] = kOpTraceSummary;
-        Append4LE(buf + 3, static_cast<uint32_t>(header.length()));
-        // Write the trace summary. The summary is identical to the file header when
-        // the output mode is not streaming (except for methods).
-        if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
-            !trace_file_->WriteFully(header.c_str(), header.length())) {
-          PLOG(WARNING) << "Failed streaming a tracing event.";
-        }
-      } else {
-        uint8_t buf[3];
-        buf[0] = kSummaryHeaderV2;
-        Append2LE(buf + 1, static_cast<uint32_t>(header.length()));
-        // Write the trace summary. Reports information about tracing mode, number of records and
-        // clock overhead in plain text format.
-        if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
-            !trace_file_->WriteFully(header.c_str(), header.length())) {
-          PLOG(WARNING) << "Failed streaming a tracing event.";
-        }
+      uint8_t buf[7];
+      Append2LE(buf, 0);
+      buf[2] = kOpTraceSummary;
+      Append4LE(buf + 3, static_cast<uint32_t>(summary.length()));
+      // Write the trace summary. The summary is identical to the file header when
+      // the output mode is not streaming (except for methods).
+      if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
+          !trace_file_->WriteFully(summary.c_str(), summary.length())) {
+        PLOG(WARNING) << "Failed streaming a tracing event.";
+      }
+    } else if (trace_output_mode_ == TraceOutputMode::kFile) {
+      DCHECK_NE(trace_file_.get(), nullptr);
+      if (!trace_file_->WriteFully(summary.c_str(), summary.length()) ||
+          !trace_file_->WriteFully(buf_.get(), final_offset)) {
+        std::string detail(StringPrintf("Trace data write failed: %s", strerror(errno)));
+        PLOG(ERROR) << detail;
+        ThrowRuntimeException("%s", detail.c_str());
       }
     } else {
-      if (trace_file_.get() == nullptr) {
-        std::vector<uint8_t> data;
-        data.resize(header.length() + final_offset);
-        memcpy(data.data(), header.c_str(), header.length());
-        memcpy(data.data() + header.length(), buf_.get(), final_offset);
-        Runtime::Current()->GetRuntimeCallbacks()->DdmPublishChunk(CHUNK_TYPE("MPSE"),
-                                                                   ArrayRef<const uint8_t>(data));
-      } else {
-        if (!trace_file_->WriteFully(header.c_str(), header.length()) ||
-            !trace_file_->WriteFully(buf_.get(), final_offset)) {
-          std::string detail(StringPrintf("Trace data write failed: %s", strerror(errno)));
-          PLOG(ERROR) << detail;
-          ThrowRuntimeException("%s", detail.c_str());
-        }
-      }
+      DCHECK_EQ(trace_file_.get(), nullptr);
+      DCHECK(trace_output_mode_ == TraceOutputMode::kDDMS);
+      std::vector<uint8_t> data;
+      data.resize(summary.length() + final_offset);
+      memcpy(data.data(), summary.c_str(), summary.length());
+      memcpy(data.data() + summary.length(), buf_.get(), final_offset);
+      Runtime::Current()->GetRuntimeCallbacks()->DdmPublishChunk(CHUNK_TYPE("MPSE"),
+                                                                 ArrayRef<const uint8_t>(data));
     }
   } else {
-    // This is only called from the child process post fork to abort the trace.
-    // We shouldn't have any workers in the thread pool here.
-    DCHECK_EQ(thread_pool_, nullptr);
+    DCHECK(trace_format_version_ == Trace::kFormatV2);
+    DCHECK(trace_output_mode_ != TraceOutputMode::kDDMS);
+
+    if (trace_output_mode_ == TraceOutputMode::kFile) {
+      if (!trace_file_->WriteFully(buf_.get(), final_offset)) {
+        PLOG(WARNING) << "Failed to write trace output";
+      }
+    }
+
+    // Write the summary packet
+    uint8_t buf[3];
+    buf[0] = kSummaryHeaderV2;
+    Append2LE(buf + 1, static_cast<uint32_t>(summary.length()));
+    // Write the trace summary. Reports information about tracing mode, number of records and
+    // clock overhead in plain text format.
+    if (!trace_file_->WriteFully(buf, sizeof(buf)) ||
+        !trace_file_->WriteFully(summary.c_str(), summary.length())) {
+      PLOG(WARNING) << "Failed streaming a tracing event.";
+    }
   }
 
   if (trace_file_.get() != nullptr) {
     // Do not try to erase, so flush and close explicitly.
-    if (flush_entries) {
-      if (trace_file_->Flush() != 0) {
-        PLOG(WARNING) << "Could not flush trace file.";
-      }
-    } else {
-      trace_file_->MarkUnchecked();  // Do not trigger guard.
+    if (trace_file_->Flush() != 0) {
+      PLOG(WARNING) << "Could not flush trace file.";
     }
     if (trace_file_->Close() != 0) {
       PLOG(ERROR) << "Could not close trace file.";
@@ -1408,7 +1422,8 @@ void TraceWriter::RecordThreadInfo(Thread* thread) {
   }
 
   MutexLock mu(Thread::Current(), trace_writer_lock_);
-  if (trace_output_mode_ != TraceOutputMode::kStreaming) {
+  if (trace_format_version_ == Trace::kFormatV1 &&
+      trace_output_mode_ != TraceOutputMode::kStreaming) {
     threads_list_.Overwrite(GetThreadEncoding(thread->GetTid()), thread_name);
     return;
   }
@@ -1840,7 +1855,8 @@ void TraceWriter::FlushBuffer(uintptr_t* method_trace_entries,
     FlushEntriesFormatV1(
         method_trace_entries, tid, method_infos, current_offset, &current_index, buffer_ptr);
   } else {
-    FlushEntriesFormatV2(method_trace_entries, tid, num_records, &current_index, buffer_ptr);
+    FlushEntriesFormatV2(
+        method_trace_entries, tid, num_records, &current_index, buffer_ptr + current_index);
   }
 
   if (trace_output_mode_ == TraceOutputMode::kStreaming) {
