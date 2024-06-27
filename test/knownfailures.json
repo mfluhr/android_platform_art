@@ -646,18 +646,6 @@
         "env_vars": {"SANITIZE_TARGET": "hwaddress"}
     },
     {
-        "tests": "202-thread-oome",
-        "description": "ASAN aborts when large thread stacks are requested.",
-        "variant": "host",
-        "env_vars": {"SANITIZE_HOST": "address"}
-    },
-    {
-        "tests": "202-thread-oome",
-        "description": "ASAN aborts when large thread stacks are requested.",
-        "variant": "target",
-        "env_vars": {"SANITIZE_TARGET": "address"}
-    },
-    {
         "tests": [
             "018-stack-overflow",
             "107-int-math2"
@@ -1090,6 +1078,11 @@
         "variant": "jvm",
         "bug": "b/73888836",
         "description": ["Failing on RI. Needs further investigating. Some of these use smali."]
+    },
+    {
+        "tests": ["2275-pthread-name"],
+        "variant": "jvm",
+        "description": ["ART specific. We try harder to set pthread thread name."]
     },
     {
         "tests": ["2042-reference-processing",

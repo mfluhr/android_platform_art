@@ -283,7 +283,7 @@ template void Split(const std::string_view& s,
                     size_t len,
                     std::string_view* out_result);
 
-void SetThreadName(const char* thread_name) {
+void SetThreadName(pthread_t thr, const char* thread_name) {
   bool hasAt = false;
   bool hasDot = false;
   const char* s = thread_name;
@@ -306,14 +306,20 @@ void SetThreadName(const char* thread_name) {
   char buf[16];       // MAX_TASK_COMM_LEN=16 is hard-coded in the kernel.
   strncpy(buf, s, sizeof(buf)-1);
   buf[sizeof(buf)-1] = '\0';
-  errno = pthread_setname_np(pthread_self(), buf);
+  errno = pthread_setname_np(thr, buf);
   if (errno != 0) {
     PLOG(WARNING) << "Unable to set the name of current thread to '" << buf << "'";
   }
 #else  // __APPLE__
-  pthread_setname_np(thread_name);
+  if (pthread_equal(thr, pthread_self())) {
+    pthread_setname_np(thread_name);
+  } else {
+    PLOG(WARNING) << "Unable to set the name of another thread to '" << thread_name << "'";
+  }
 #endif
 }
+
+void SetThreadName(const char* thread_name) { SetThreadName(pthread_self(), thread_name); }
 
 void GetTaskStats(pid_t tid, char* state, int* utime, int* stime, int* task_cpu) {
   *utime = *stime = *task_cpu = 0;
