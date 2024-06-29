@@ -669,6 +669,11 @@ class Dex2Oat final {
       if (compiler_options_->IsBootImage() || compiler_options_->IsBootImageExtension()) {
         Usage("Can't have both (--image or --image-fd) and (--app-image-fd or --app-image-file)");
       }
+      if (profile_files_.empty() && profile_file_fds_.empty()) {
+        LOG(WARNING) << "Generating an app image without a profile. This will result in an app "
+                        "image with no classes. Did you forget to add the profile with either "
+                        "--profile-file-fd or --profile-file?";
+      }
       compiler_options_->image_type_ = CompilerOptions::ImageType::kAppImage;
     }
 

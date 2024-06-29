@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 public class Main {
   static volatile boolean name_was_set = false;
   static final String BIRTH_NAME = "birth name";
   static final String NEW_NAME = "new name";
+  static final CountDownLatch child_started = new CountDownLatch(1);
 
   private static class Child implements Runnable {
     @Override
@@ -26,6 +30,7 @@ public class Main {
       if (!name_was_set && !bname.equals(BIRTH_NAME)) {
         System.err.println("Wrong birth name: " + bname);
       }
+      child_started.countDown();
       while (!name_was_set) {
         try {
           Thread.sleep(10);
@@ -51,8 +56,9 @@ public class Main {
     System.out.println(t.getName());
     t.start();
     try {
-      // Wait for it to get started, though it shouldn't matter.
-      Thread.sleep(10);
+      if (!child_started.await(2, TimeUnit.SECONDS)) {
+        System.out.println("Latch wait timed out");
+      }
     } catch (InterruptedException e) {
       System.out.println("Unexpected interrupt in parent");
     }

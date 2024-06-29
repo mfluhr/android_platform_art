@@ -249,9 +249,6 @@ $$(gtest_build_rule) : $$(gtest_exe) $$(gtest_deps)
 .PHONY: $$(gtest_rule)
 $$(gtest_rule): $$(gtest_output)
 
-# Re-run the tests, even if nothing changed. Until the build system has a dedicated "no cache"
-# option, claim to write a file that is never produced.
-$$(gtest_output): .KATI_IMPLICIT_OUTPUTS := $$(gtest_output)-nocache
 # Limit concurrent runs. Each test itself is already highly parallel (and thus memory hungry).
 $$(gtest_output): .KATI_NINJA_POOL := highmem_pool
 $$(gtest_output): NAME := $$(gtest_rule)
