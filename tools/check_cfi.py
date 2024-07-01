@@ -57,8 +57,8 @@ def get_inst_semantics(arch: str) -> List[Any]:
     ptr_size = {"i386": 4, "x86_64": 8}[arch]
     add(r"push. .*", lambda m: ptr_size)
     add(r"pop. .*", lambda m: -ptr_size)
-    add(r"sub. \$(\w+), (?:%esp|%rsp)", lambda m: int(m[1], 0))
-    add(r"add. \$(\w+), (?:%esp|%rsp)", lambda m: -int(m[1], 0))
+    add(r"sub. \$(\w+), (?:%esp|%rsp)( # imm = \w+)?", lambda m: int(m[1], 0))
+    add(r"add. \$(\w+), (?:%esp|%rsp)( # imm = \w+)?", lambda m: -int(m[1], 0))
     add(r"call. (0x\w+) <.*", lambda m: ptr_size, adjust_pc=lambda m: int(m[1], 0))
     add(r"j[a-z]* (0x\w+) <.*", adjust_pc=lambda m: int(m[1], 0))
   if arch in ["arm", "aarch64"]:
