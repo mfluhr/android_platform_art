@@ -36,3 +36,15 @@ cc_aconfig_library {
         "//apex_available:anyapex",
     ],
 }
+
+java_aconfig_library {
+    name: "art-aconfig-flags-java-lib",
+    aconfig_declarations: "art-aconfig-flags",
+    host_supported: true,
+    sdk_version: "core_current",
+    min_sdk_version: "31",
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
+    ],
+}
