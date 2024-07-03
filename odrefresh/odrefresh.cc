@@ -1872,22 +1872,24 @@ OnDeviceRefresh::RunDex2oatForBootClasspath(const std::string& staging_dir,
 
     args.Add(StringPrintf("--base=0x%08x", ART_BASE_ADDRESS));
 
-    std::string dirty_image_objects_file(GetAndroidRoot() + "/etc/dirty-image-objects");
-    std::unique_ptr<File> file(OS::OpenFileForReading(dirty_image_objects_file.c_str()));
-    if (file != nullptr) {
-      args.Add("--dirty-image-objects-fd=%d", file->Fd());
-      readonly_files_raii.push_back(std::move(file));
-    } else if (errno == ENOENT) {
-      LOG(WARNING) << ART_FORMAT("Missing dirty objects file '{}'", dirty_image_objects_file);
-    } else {
-      return CompilationResult::Error(OdrMetrics::Status::kIoError,
-                                      ART_FORMAT("Failed to open dirty objects file '{}': {}",
-                                                 dirty_image_objects_file,
-                                                 strerror(errno)));
+    for (const std::string& prefix : {GetAndroidRoot(), GetArtRoot()}) {
+      std::string dirty_image_objects_file = prefix + "/etc/dirty-image-objects";
+      std::unique_ptr<File> file(OS::OpenFileForReading(dirty_image_objects_file.c_str()));
+      if (file != nullptr) {
+        args.Add("--dirty-image-objects-fd=%d", file->Fd());
+        readonly_files_raii.push_back(std::move(file));
+      } else if (errno == ENOENT) {
+        LOG(WARNING) << ART_FORMAT("Missing dirty objects file '{}'", dirty_image_objects_file);
+      } else {
+        return CompilationResult::Error(OdrMetrics::Status::kIoError,
+                                        ART_FORMAT("Failed to open dirty objects file '{}': {}",
+                                                   dirty_image_objects_file,
+                                                   strerror(errno)));
+      }
     }
 
     std::string preloaded_classes_file(GetAndroidRoot() + "/etc/preloaded-classes");
-    file.reset(OS::OpenFileForReading(preloaded_classes_file.c_str()));
+    std::unique_ptr<File> file(OS::OpenFileForReading(preloaded_classes_file.c_str()));
     if (file != nullptr) {
       args.Add("--preloaded-classes-fds=%d", file->Fd());
       readonly_files_raii.push_back(std::move(file));
