@@ -133,6 +133,11 @@ using WritableProfilePath = ProfilePath::WritableProfilePath;
 
 using std::literals::operator""s;  // NOLINT
 
+// User build is missing the SELinux permission for the test process (run as `shell`) to reopen
+// the memfd that it creates itself
+// (https://cs.android.com/android/platform/superproject/main/+/main:system/sepolicy/private/shell.te;l=221;drc=3335a04676d400bda57d42d4af0ef4b1d311de21).
+#define TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS() TEST_DISABLED_FOR_USER_BUILD()
+
 ScopeGuard<std::function<void()>> ScopedSetLogger(android::base::LogFunction&& logger) {
   android::base::LogFunction old_logger = android::base::SetLogger(std::move(logger));
   return make_scope_guard([old_logger = std::move(old_logger)]() mutable {
@@ -1581,6 +1586,8 @@ TEST_F(ArtdTest, copyAndRewriteProfileException) {
 }
 
 TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileSuccess) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   CreateZipWithSingleEntry(dex_file_, "assets/art-profile/baseline.prof", "valid_profile");
 
   EXPECT_CALL(
@@ -1610,6 +1617,8 @@ TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileSuccess) {
 
 // The input is a plain dex file.
 TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNoProfilePlainDex) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   constexpr const char* kDexMagic = "dex\n";
   CreateFile(dex_file_, kDexMagic + "dex_code"s);
 
@@ -1622,6 +1631,8 @@ TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNoProfilePlainDex) {
 
 // The input is neither a zip nor a plain dex file.
 TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNotZipNotDex) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   CreateFile(dex_file_, "wrong_format");
 
   auto [status, dst] = OR_FAIL(RunCopyAndRewriteEmbeddedProfile</*kExpectOk=*/false>());
@@ -1635,6 +1646,8 @@ TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNotZipNotDex) {
 
 // The input is a zip file without a profile entry.
 TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNoProfileZipNoEntry) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   CreateZipWithSingleEntry(dex_file_, "classes.dex", "dex_code");
 
   auto [result, dst] = OR_FAIL(RunCopyAndRewriteEmbeddedProfile());
@@ -1646,6 +1659,8 @@ TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileNoProfileZipNoEntry) {
 
 // The input is a zip file with a profile entry that doesn't match itself.
 TEST_F(ArtdTest, copyAndRewriteEmbeddedProfileBadProfileNoMatch) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   CreateZipWithSingleEntry(dex_file_, "assets/art-profile/baseline.prof", "no_match");
 
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _))
@@ -2929,6 +2944,8 @@ TEST_F(ArtdPreRebootTest, copyAndRewriteProfile) {
 }
 
 TEST_F(ArtdPreRebootTest, copyAndRewriteEmbeddedProfile) {
+  TEST_DISABLED_FOR_SHELL_WITHOUT_MEMFD_ACCESS();
+
   CreateZipWithSingleEntry(dex_file_, "assets/art-profile/baseline.prof", "valid_profile");
 
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode)

@@ -41,6 +41,7 @@ import android.util.SparseArray;
 
 import androidx.annotation.RequiresApi;
 
+import com.android.modules.utils.build.SdkLevel;
 import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.model.DexoptParams;
 import com.android.server.pm.PackageManagerLocal;
@@ -428,7 +429,7 @@ public final class Utils {
             profileInitializers.add(Pair.create(AidlUtils.toString(profile),
                     () -> artd.copyAndRewriteProfile(profile, output, dexPath)));
         }
-        if (enableEmbeddedProfile) {
+        if (enableEmbeddedProfile && SdkLevel.isAtLeastV()) {
             profileInitializers.add(Pair.create(
                     "embedded profile", () -> artd.copyAndRewriteEmbeddedProfile(output, dexPath)));
         }
