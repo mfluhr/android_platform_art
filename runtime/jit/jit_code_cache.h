@@ -437,7 +437,7 @@ class JitCodeCache {
   JitCodeCache();
 
   void AddZombieCodeInternal(ArtMethod* method, const void* code_ptr)
-      REQUIRES(Locks::jit_lock_)
+      REQUIRES(Locks::jit_mutator_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   ProfilingInfo* AddProfilingInfoInternal(Thread* self,
@@ -452,9 +452,6 @@ class JitCodeCache {
   bool WaitForPotentialCollectionToComplete(Thread* self)
       REQUIRES(Locks::jit_lock_) REQUIRES_SHARED(!Locks::mutator_lock_);
 
-  // Notify all waiting threads that a collection is done.
-  void NotifyCollectionDone(Thread* self) REQUIRES(Locks::jit_lock_);
-
   // Remove CHA dependents and underlying allocations for entries in `method_headers`.
   void FreeAllMethodHeaders(const std::unordered_set<OatQuickMethodHeader*>& method_headers)
       REQUIRES(Locks::jit_lock_)
@@ -468,7 +465,7 @@ class JitCodeCache {
 
   // Call given callback for every compiled method in the code cache.
   void VisitAllMethods(const std::function<void(const void*, ArtMethod*)>& cb)
-      REQUIRES(Locks::jit_lock_);
+      REQUIRES_SHARED(Locks::jit_mutator_lock_);
 
   // Free code and data allocations for `code_ptr`.
   void FreeCodeAndData(const void* code_ptr)
@@ -552,31 +549,29 @@ class JitCodeCache {
   // before the declaring class memory is freed.
 
   // Holds compiled code associated with the shorty for a JNI stub.
-  SafeMap<JniStubKey, JniStubData> jni_stubs_map_ GUARDED_BY(Locks::jit_lock_);
+  SafeMap<JniStubKey, JniStubData> jni_stubs_map_ GUARDED_BY(Locks::jit_mutator_lock_);
 
   // Holds compiled code associated to the ArtMethod.
-  SafeMap<const void*, ArtMethod*> method_code_map_ GUARDED_BY(Locks::jit_lock_);
+  SafeMap<const void*, ArtMethod*> method_code_map_ GUARDED_BY(Locks::jit_mutator_lock_);
   // Subset of `method_code_map_`, but keyed by `ArtMethod*`. Used to treat certain
   // objects (like `MethodType`-s) as strongly reachable from the corresponding ArtMethod.
   SafeMap<ArtMethod*, std::vector<const void*>> method_code_map_reversed_
-      GUARDED_BY(Locks::jit_lock_);
+      GUARDED_BY(Locks::jit_mutator_lock_);
 
   // Holds compiled code associated to the ArtMethod. Used when pre-jitting
   // methods whose entrypoints have the resolution stub.
-  SafeMap<ArtMethod*, const void*> saved_compiled_methods_map_ GUARDED_BY(Locks::jit_lock_);
+  SafeMap<ArtMethod*, const void*> saved_compiled_methods_map_ GUARDED_BY(Locks::jit_mutator_lock_);
 
   // Holds osr compiled code associated to the ArtMethod.
-  SafeMap<ArtMethod*, const void*> osr_code_map_ GUARDED_BY(Locks::jit_lock_);
-
-  // ProfilingInfo objects we have allocated.
-  SafeMap<ArtMethod*, ProfilingInfo*> profiling_infos_ GUARDED_BY(Locks::jit_lock_);
+  SafeMap<ArtMethod*, const void*> osr_code_map_ GUARDED_BY(Locks::jit_mutator_lock_);
 
   // Zombie code and JNI methods to consider for collection.
-  std::set<const void*> zombie_code_ GUARDED_BY(Locks::jit_lock_);
-  std::set<ArtMethod*> zombie_jni_code_ GUARDED_BY(Locks::jit_lock_);
+  std::set<const void*> zombie_code_ GUARDED_BY(Locks::jit_mutator_lock_);
+  std::set<ArtMethod*> zombie_jni_code_ GUARDED_BY(Locks::jit_mutator_lock_);
 
-  std::set<const void*> processed_zombie_code_ GUARDED_BY(Locks::jit_lock_);
-  std::set<ArtMethod*> processed_zombie_jni_code_ GUARDED_BY(Locks::jit_lock_);
+  // ProfilingInfo objects we have allocated. Mutators don't need to access
+  // these so this can be guarded by the JIT lock.
+  SafeMap<ArtMethod*, ProfilingInfo*> profiling_infos_ GUARDED_BY(Locks::jit_lock_);
 
   // Methods that the zygote has compiled and can be shared across processes
   // forked from the zygote.
@@ -591,13 +586,17 @@ class JitCodeCache {
   bool collection_in_progress_ GUARDED_BY(Locks::jit_lock_);
 
   // Whether a GC task is already scheduled.
-  bool gc_task_scheduled_ GUARDED_BY(Locks::jit_lock_);
+  std::atomic<bool> gc_task_scheduled_;
 
   // Bitmap for collecting code and data.
   std::unique_ptr<CodeCacheBitmap> live_bitmap_;
 
   // Whether we can do garbage collection. Not 'const' as tests may override this.
   bool garbage_collect_code_ GUARDED_BY(Locks::jit_lock_);
+
+  // Zombie code being processed by the GC.
+  std::set<const void*> processed_zombie_code_ GUARDED_BY(Locks::jit_lock_);
+  std::set<ArtMethod*> processed_zombie_jni_code_ GUARDED_BY(Locks::jit_lock_);
 
   // ---------------- JIT statistics -------------------------------------- //
 

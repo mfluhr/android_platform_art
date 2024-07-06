@@ -357,6 +357,10 @@ ScopedAStatus DexoptChrootSetup::init() {
   }
   std::lock_guard<std::mutex> lock(mu_, std::adopt_lock);
 
+  if (OS::FileExists(PathInChroot("/linkerconfig/ld.config.txt").c_str())) {
+    return Fatal("init must not be repeatedly called");
+  }
+
   OR_RETURN_NON_FATAL(InitChroot());
   return ScopedAStatus::ok();
 }
