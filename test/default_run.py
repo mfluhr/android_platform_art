@@ -799,6 +799,10 @@ def default_run(ctx, args, **kwargs):
       dex2oat_cmdline += f"gdb {GDB_DEX2OAT_EXTRA_ARGS} \
                           -d '{ANDROID_BUILD_TOP}' --args "
 
+    dex2oat_logger = ""
+    if ON_VM:
+      dex2oat_logger = "--runtime-arg -Xuse-stderr-logger"
+
     dex2oat_cmdline += f"'{ANDROID_ART_BIN_DIR}/{dex2oat_binary}' \
                         {COMPILE_FLAGS} \
                         --boot-image={BOOT_IMAGE} \
@@ -807,6 +811,7 @@ def default_run(ctx, args, **kwargs):
                         {app_image} \
                         --generate-mini-debug-info \
                         --instruction-set={ISA} \
+                        {dex2oat_logger} \
                         {class_loader_context}"
 
     if INSTRUCTION_SET_FEATURES != "":

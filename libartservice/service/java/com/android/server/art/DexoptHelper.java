@@ -239,7 +239,8 @@ public class DexoptHelper {
                                 .dexopt());
             }
 
-            if ((params.getFlags() & ArtFlags.FLAG_FOR_SECONDARY_DEX) != 0) {
+            if (((params.getFlags() & ArtFlags.FLAG_FOR_SECONDARY_DEX) != 0)
+                    && pkgState.getAppId() > 0) {
                 if (cancellationSignal.isCanceled()) {
                     return createResult.apply(DexoptResult.DEXOPT_CANCELLED);
                 }

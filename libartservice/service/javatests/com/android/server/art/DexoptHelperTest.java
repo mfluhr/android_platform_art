@@ -88,6 +88,7 @@ public class DexoptHelperTest {
     private static final String PKG_NAME_LIB3 = "com.example.lib3";
     private static final String PKG_NAME_LIB4 = "com.example.lib4";
     private static final String PKG_NAME_LIBBAZ = "com.example.libbaz";
+    private static final String PKG_NAME_SDK = "com.example.sdk";
 
     @Rule
     public StaticMockitoRule mockitoRule = new StaticMockitoRule(PackageStateModulesUtils.class);
@@ -280,6 +281,28 @@ public class DexoptHelperTest {
                 List.of(mPrimaryResults));
 
         verifyNoMoreDexopt(6 /* expectedPrimaryTimes */, 0 /* expectedSecondaryTimes */);
+    }
+
+    @Test
+    public void testDexoptSdkPrimaryOnly() throws Exception {
+        mParams = new DexoptParams.Builder("bg-dexopt")
+                          .setCompilerFilter("speed-profile")
+                          .setFlags(ArtFlags.FLAG_FOR_PRIMARY_DEX | ArtFlags.FLAG_FOR_SECONDARY_DEX)
+                          .build();
+
+        PackageState sdkPackageState =
+                createPackageState(PKG_NAME_SDK, -1 /* appId */, List.of(), false);
+        lenient().when(mSnapshot.getPackageState(PKG_NAME_SDK)).thenReturn(sdkPackageState);
+        mRequestedPackages = List.of(PKG_NAME_SDK);
+
+        DexoptResult result = mDexoptHelper.dexopt(
+                mSnapshot, mRequestedPackages, mParams, mCancellationSignal, mExecutor);
+
+        assertThat(result.getPackageDexoptResults()).hasSize(1);
+        checkPackageResult(result, 0 /* index */, PKG_NAME_SDK, DexoptResult.DEXOPT_PERFORMED,
+                List.of(mPrimaryResults));
+
+        verifyNoMoreDexopt(1 /* expectedPrimaryTimes */, 0 /* expectedSecondaryTimes */);
     }
 
     @Test
@@ -712,9 +735,14 @@ public class DexoptHelperTest {
 
     private PackageState createPackageState(
             String packageName, List<SharedLibrary> deps, boolean multiSplit) {
+        return createPackageState(packageName, 12345, deps, multiSplit);
+    }
+
+    private PackageState createPackageState(
+            String packageName, int appId, List<SharedLibrary> deps, boolean multiSplit) {
         PackageState pkgState = mock(PackageState.class);
         lenient().when(pkgState.getPackageName()).thenReturn(packageName);
-        lenient().when(pkgState.getAppId()).thenReturn(12345);
+        lenient().when(pkgState.getAppId()).thenReturn(appId);
         lenient().when(pkgState.getSharedLibraryDependencies()).thenReturn(deps);
         AndroidPackage pkg = createPackage(multiSplit);
         lenient().when(pkgState.getAndroidPackage()).thenReturn(pkg);

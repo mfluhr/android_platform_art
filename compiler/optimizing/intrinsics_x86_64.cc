@@ -2080,8 +2080,11 @@ static void GenUnsafePut(LocationSummary* locations, DataType::Type type, bool i
     __ movl(temp, value);
     __ PoisonHeapReference(temp);
     __ movl(Address(base, offset, ScaleFactor::TIMES_1, 0), temp);
-  } else {
+  } else if (type == DataType::Type::kInt32 || type == DataType::Type::kReference) {
     __ movl(Address(base, offset, ScaleFactor::TIMES_1, 0), value);
+  } else {
+    CHECK_EQ(type, DataType::Type::kInt8) << "Unimplemented GenUnsafePut data type";
+    __ movb(Address(base, offset, ScaleFactor::TIMES_1, 0), value);
   }
 
   if (is_volatile) {
