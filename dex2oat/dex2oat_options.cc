@@ -194,12 +194,12 @@ static void AddImageMappings(Builder& builder) {
                     "images.")
           .IntoKey(M::MultiImage)
       .Define("--dirty-image-objects=_")
-          .WithType<std::vector<std::string>>().AppendValues()
+          .WithType<std::string>()
           .WithHelp("list of known dirty objects in the image. The image writer will group them"
                     " together")
           .IntoKey(M::DirtyImageObjects)
       .Define("--dirty-image-objects-fd=_")
-          .WithType<std::vector<int>>().AppendValues()
+          .WithType<int>()
           .WithHelp("Specify a file descriptor for reading the list of known dirty objects in\n"
                     "the image. The image writer will group them together")
           .IntoKey(M::DirtyImageObjectsFd)

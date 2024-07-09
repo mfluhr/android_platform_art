@@ -530,6 +530,8 @@ class Dex2Oat final {
         image_base_(0U),
         image_storage_mode_(ImageHeader::kStorageModeUncompressed),
         passes_to_run_filename_(nullptr),
+        dirty_image_objects_filename_(nullptr),
+        dirty_image_objects_fd_(-1),
         is_host_(false),
         elf_writers_(),
         oat_writers_(),
@@ -842,7 +844,7 @@ class Dex2Oat final {
       }
     }
 
-    if (!dirty_image_objects_filenames_.empty() && !dirty_image_objects_fds_.empty()) {
+    if (dirty_image_objects_filename_ != nullptr && dirty_image_objects_fd_ != -1) {
       Usage("--dirty-image-objects and --dirty-image-objects-fd should not be both specified");
     }
 
@@ -1108,8 +1110,8 @@ class Dex2Oat final {
     AssignIfExists(args, M::AppImageFileFd, &app_image_fd_);
     AssignIfExists(args, M::NoInlineFrom, &no_inline_from_string_);
     AssignIfExists(args, M::ClasspathDir, &classpath_dir_);
-    AssignIfExists(args, M::DirtyImageObjects, &dirty_image_objects_filenames_);
-    AssignIfExists(args, M::DirtyImageObjectsFd, &dirty_image_objects_fds_);
+    AssignIfExists(args, M::DirtyImageObjects, &dirty_image_objects_filename_);
+    AssignIfExists(args, M::DirtyImageObjectsFd, &dirty_image_objects_fd_);
     AssignIfExists(args, M::ImageFormat, &image_storage_mode_);
     AssignIfExists(args, M::CompilationReason, &compilation_reason_);
     AssignTrueIfExists(args, M::CheckLinkageConditions, &check_linkage_conditions_);
@@ -2527,26 +2529,23 @@ class Dex2Oat final {
   }
 
   bool PrepareDirtyObjects() {
-    if (!dirty_image_objects_fds_.empty()) {
-      dirty_image_objects_ = std::make_unique<std::vector<std::string>>();
-      for (int fd : dirty_image_objects_fds_) {
-        if (!ReadCommentedInputFromFd(fd, nullptr, dirty_image_objects_.get())) {
-          LOG(ERROR) << "Failed to create list of dirty objects from fd " << fd;
-          return false;
-        }
-      }
+    if (dirty_image_objects_fd_ != -1) {
+      dirty_image_objects_ =
+          ReadCommentedInputFromFd<std::vector<std::string>>(dirty_image_objects_fd_, nullptr);
       // Close since we won't need it again.
-      for (int fd : dirty_image_objects_fds_) {
-        close(fd);
+      close(dirty_image_objects_fd_);
+      dirty_image_objects_fd_ = -1;
+      if (dirty_image_objects_ == nullptr) {
+        LOG(ERROR) << "Failed to create list of dirty objects from fd " << dirty_image_objects_fd_;
+        return false;
       }
-      dirty_image_objects_fds_.clear();
-    } else {
-      dirty_image_objects_ = std::make_unique<std::vector<std::string>>();
-      for (const std::string& file : preloaded_classes_files_) {
-        if (!ReadCommentedInputFromFile(file.c_str(), nullptr, dirty_image_objects_.get())) {
-          LOG(ERROR) << "Failed to create list of dirty objects from '" << file << "'";
-          return false;
-        }
+    } else if (dirty_image_objects_filename_ != nullptr) {
+      dirty_image_objects_ = ReadCommentedInputFromFile<std::vector<std::string>>(
+          dirty_image_objects_filename_, nullptr);
+      if (dirty_image_objects_ == nullptr) {
+        LOG(ERROR) << "Failed to create list of dirty objects from '"
+            << dirty_image_objects_filename_ << "'";
+        return false;
       }
     }
     return true;
@@ -2948,8 +2947,8 @@ class Dex2Oat final {
   uintptr_t image_base_;
   ImageHeader::StorageMode image_storage_mode_;
   const char* passes_to_run_filename_;
-  std::vector<std::string> dirty_image_objects_filenames_;
-  std::vector<int> dirty_image_objects_fds_;
+  const char* dirty_image_objects_filename_;
+  int dirty_image_objects_fd_;
   std::unique_ptr<std::vector<std::string>> dirty_image_objects_;
   std::unique_ptr<std::vector<std::string>> passes_to_run_;
   bool is_host_;

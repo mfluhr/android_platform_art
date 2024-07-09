@@ -828,6 +828,9 @@ def default_run(ctx, args, **kwargs):
       # Use SIGRTMIN+2 to try to dump threads.
       # Use -k 1m to SIGKILL it a minute later if it hasn't ended.
       dex2oat_cmdline = f"timeout -k {DEX2OAT_TIMEOUT}s -s SIGRTMIN+2 {DEX2OAT_RT_TIMEOUT}s {dex2oat_cmdline} --watchdog-timeout={DEX2OAT_TIMEOUT}000"
+    elif ON_VM:
+      # Increase dex2oat timeout for VM testing environment, as some checker tests are slow.
+      dex2oat_cmdline = f"{dex2oat_cmdline} --watchdog-timeout={5 * DEX2OAT_TIMEOUT}000"
     if PROFILE or RANDOM_PROFILE:
       vdex_cmdline = f"{dex2oat_cmdline} {VDEX_ARGS} --input-vdex={DEX_LOCATION}/oat/{ISA}/{name}.vdex --output-vdex={DEX_LOCATION}/oat/{ISA}/{name}.vdex"
     elif TEST_VDEX:
