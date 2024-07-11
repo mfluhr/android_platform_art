@@ -82,6 +82,8 @@ java_defaults {
     ],
     libs: [
         "androidx.annotation_annotation",
+        "aconfig-annotations-lib",
+        "art-aconfig-flags-java-lib",
         "auto_value_annotations",
         "sdk_module-lib_current_framework-configinfrastructure",
         "sdk_module-lib_current_framework-permission-s",
@@ -94,7 +96,6 @@ java_defaults {
         "sdk_module-lib_current_framework-connectivity",
     ],
     static_libs: [
-        "art-aconfig-flags-java-lib",
         "art-statslog-art-java",
         "artd-aidl-java",
         "dexopt_chroot_setup-aidl-java",
@@ -130,7 +131,6 @@ java_sdk_library {
         "framework-system-server-module-optimize-defaults",
     ],
     permitted_packages: [
-        "com.android.art",
         "com.android.server.art",
     ],
     dex_preopt: {

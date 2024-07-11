@@ -407,6 +407,11 @@ Result<void> DexoptChrootSetup::SetUpChroot(const std::optional<std::string>& ot
 
   if (!IsOtaUpdate(ota_slot)) {  // Mainline update
     OR_RETURN(BindMount("/", CHROOT_DIR));
+    // Normally, we don't need to bind-mount "/system" because it's a part of the image mounted at
+    // "/". However, when readonly partitions are remounted read-write, an overlay is created at
+    // "/system", so we need to bind-mount "/system" to handle this case. On devices where readonly
+    // partitions are not remounted, bind-mounting "/system" doesn't hurt.
+    OR_RETURN(BindMount("/system", PathInChroot("/system")));
     for (const std::string& partition : additional_system_partitions) {
       // Some additional partitions are optional, but that's okay. The root filesystem (mounted at
       // `/`) has empty directories for additional partitions. If additional partitions don't exist,

@@ -143,6 +143,7 @@ bootclasspath_fragment {
         package_prefixes: [
             "android.compat",
             "android.crypto.hpke",
+            "com.android.art.flags",
             "com.android.libcore",
             "com.android.okhttp",
             "com.android.org.bouncycastle",

@@ -16,6 +16,10 @@
 
 package {
     default_applicable_licenses: ["art_license"],
+    default_visibility: [
+        "//art:__subpackages__",
+        "//libcore:__subpackages__",
+    ],
 }
 
 aconfig_declarations {
@@ -40,9 +44,11 @@ cc_aconfig_library {
 java_aconfig_library {
     name: "art-aconfig-flags-java-lib",
     aconfig_declarations: "art-aconfig-flags",
-    host_supported: true,
-    sdk_version: "core_current",
-    min_sdk_version: "31",
+    min_sdk_version: "31", // ART module is enabled on Android 12 or above.
+    sdk_version: "none",
+    patch_module: "java.base",
+    system_modules: "core-all-system-modules",
+    libs: ["framework-api-annotations-lib"],
     apex_available: [
         "//apex_available:platform",
         "//apex_available:anyapex",
