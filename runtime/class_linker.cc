@@ -643,7 +643,9 @@ ClassLinker::ClassLinker(InternTable* intern_table, bool fast_class_not_found_ex
   CHECK(intern_table_ != nullptr);
   static_assert(kFindArrayCacheSize == arraysize(find_array_class_cache_),
                 "Array cache size wrong.");
-  std::fill_n(find_array_class_cache_, kFindArrayCacheSize, GcRoot<mirror::Class>(nullptr));
+  for (size_t i = 0; i < kFindArrayCacheSize; i++) {
+    find_array_class_cache_[i].store(GcRoot<mirror::Class>(nullptr), std::memory_order_relaxed);
+  }
 }
 
 void ClassLinker::CheckSystemClass(Thread* self, Handle<mirror::Class> c1, const char* descriptor) {
@@ -10927,7 +10929,9 @@ jobject ClassLinker::CreatePathClassLoader(Thread* self,
 }
 
 void ClassLinker::DropFindArrayClassCache() {
-  std::fill_n(find_array_class_cache_, kFindArrayCacheSize, GcRoot<mirror::Class>(nullptr));
+  for (size_t i = 0; i < kFindArrayCacheSize; i++) {
+    find_array_class_cache_[i].store(GcRoot<mirror::Class>(nullptr), std::memory_order_relaxed);
+  }
   find_array_class_cache_next_victim_ = 0;
 }
 

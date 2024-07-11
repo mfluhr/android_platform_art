@@ -15,11 +15,14 @@
 package: "com.android.art.flags"
 container: "com.android.art"
 
-# Generic flags that ramp for upcoming Mainline trains. These may be used for
-# any feature where the ramp schedule fits - see http://go/art-monthly-flag-schedule.
-# The feature may target the respective train or any later one. These flags
-# should never be exported.
+# Generic flags that ramp for upcoming Mainline trains
+#
+# These may be used for any feature where the ramp schedule fits - see
+# go/art-monthly-flags for details and go/art-monthly-flag-schedule for exact
+# dates. The feature may target the respective train or any later one. These
+# flags should never be exported.
 
+# Trunkfood ramp early June 2024
 flag {
   name: "m2024_09_ramp"
   namespace: "art_mainline"
@@ -29,6 +32,7 @@ flag {
   is_exported: false
 }
 
+# Trunkfood ramp early July 2024
 flag {
   name: "m2024_10_ramp"
   namespace: "art_mainline"
@@ -38,6 +42,7 @@ flag {
   is_exported: false
 }
 
+# Trunkfood ramp early August 2024
 flag {
   name: "m2024_11_ramp"
   namespace: "art_mainline"
@@ -47,6 +52,7 @@ flag {
   is_exported: false
 }
 
+# Trunkfood ramp early September 2024
 flag {
   name: "m2024_12_ramp"
   namespace: "art_mainline"
@@ -56,6 +62,7 @@ flag {
   is_exported: false
 }
 
+# Trunkfood ramp early October 2024
 flag {
   name: "m2025_01_ramp"
   namespace: "art_mainline"
@@ -65,6 +72,7 @@ flag {
   is_exported: false
 }
 
+# Trunkfood ramp early November 2024
 flag {
   name: "m2025_02_ramp"
   namespace: "art_mainline"
