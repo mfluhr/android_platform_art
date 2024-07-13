@@ -15,6 +15,16 @@
 package: "com.android.art.flags"
 container: "com.android.art"
 
+# TODO(b/352723620): Ramp this fully, then add tests with it.
+flag {
+  name: "test"
+  namespace: "art_mainline"
+  description: "Permanent test flag."
+  bug: "352723620"
+  is_fixed_read_only: true
+  is_exported: false
+}
+
 # Generic flags that ramp for upcoming Mainline trains
 #
 # These may be used for any feature where the ramp schedule fits - see
