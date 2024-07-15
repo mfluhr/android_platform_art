@@ -134,9 +134,9 @@ class EntrypointsOrderTest : public CommonArtTest {
     EXPECT_OFFSET_DIFFP(
         Thread, tlsPtr_, top_reflective_handle_scope, method_trace_buffer, sizeof(void*));
     EXPECT_OFFSET_DIFFP(
-        Thread, tlsPtr_, method_trace_buffer, method_trace_buffer_index, sizeof(void*));
+        Thread, tlsPtr_, method_trace_buffer, method_trace_buffer_curr_entry, sizeof(void*));
     EXPECT_OFFSET_DIFFP(
-        Thread, tlsPtr_, method_trace_buffer_index, thread_exit_flags, sizeof(void*));
+        Thread, tlsPtr_, method_trace_buffer_curr_entry, thread_exit_flags, sizeof(void*));
     EXPECT_OFFSET_DIFFP(
         Thread, tlsPtr_, thread_exit_flags, last_no_thread_suspension_cause, sizeof(void*));
     EXPECT_OFFSET_DIFFP(Thread, tlsPtr_, last_no_thread_suspension_cause,

@@ -1695,28 +1695,29 @@ void InstructionCodeGeneratorX86_64::GenerateMethodEntryExitHook(HInstruction* i
   __ j(kGreater, slow_path->GetEntryLabel());
 
   // Check if there is place in the buffer for a new entry, if no, take slow path.
-  CpuRegister index = locations->GetTemp(0).AsRegister<CpuRegister>();
-  CpuRegister entry_addr = CpuRegister(TMP);
-  uint64_t trace_buffer_index_offset =
-      Thread::TraceBufferIndexOffset<kX86_64PointerSize>().SizeValue();
-  __ gs()->movq(CpuRegister(index),
-                Address::Absolute(trace_buffer_index_offset, /* no_rip= */ true));
-  __ subq(CpuRegister(index), Immediate(kNumEntriesForWallClock));
+  CpuRegister init_entry = locations->GetTemp(0).AsRegister<CpuRegister>();
+  // Use a register that is different from RAX and RDX. RDTSC returns result in RAX and RDX and we
+  // use curr entry to store the result into the buffer.
+  CpuRegister curr_entry = CpuRegister(TMP);
+  DCHECK(curr_entry.AsRegister() != RAX);
+  DCHECK(curr_entry.AsRegister() != RDX);
+  uint64_t trace_buffer_curr_entry_offset =
+      Thread::TraceBufferCurrPtrOffset<kX86_64PointerSize>().SizeValue();
+  __ gs()->movq(CpuRegister(curr_entry),
+                Address::Absolute(trace_buffer_curr_entry_offset, /* no_rip= */ true));
+  __ subq(CpuRegister(curr_entry), Immediate(kNumEntriesForWallClock * sizeof(void*)));
+  __ gs()->movq(init_entry,
+                Address::Absolute(Thread::TraceBufferPtrOffset<kX86_64PointerSize>().SizeValue(),
+                                  /* no_rip= */ true));
+  __ cmpq(curr_entry, init_entry);
   __ j(kLess, slow_path->GetEntryLabel());
 
   // Update the index in the `Thread`.
-  __ gs()->movq(Address::Absolute(trace_buffer_index_offset, /* no_rip= */ true),
-                CpuRegister(index));
-  // Calculate the entry address in the buffer.
-  // entry_addr = base_addr + sizeof(void*) * index
-  __ gs()->movq(entry_addr,
-                Address::Absolute(Thread::TraceBufferPtrOffset<kX86_64PointerSize>().SizeValue(),
-                                  /* no_rip= */ true));
-  __ leaq(CpuRegister(entry_addr),
-          Address(CpuRegister(entry_addr), CpuRegister(index), TIMES_8, 0));
+  __ gs()->movq(Address::Absolute(trace_buffer_curr_entry_offset, /* no_rip= */ true),
+                CpuRegister(curr_entry));
 
   // Record method pointer and action.
-  CpuRegister method = index;
+  CpuRegister method = init_entry;
   __ movq(CpuRegister(method), Address(CpuRegister(RSP), kCurrentMethodStackOffset));
   // Use last two bits to encode trace method action. For MethodEntry it is 0
   // so no need to set the bits since they are 0 already.
@@ -1726,12 +1727,12 @@ void InstructionCodeGeneratorX86_64::GenerateMethodEntryExitHook(HInstruction* i
     static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
     __ orq(method, Immediate(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
   }
-  __ movq(Address(entry_addr, kMethodOffsetInBytes), CpuRegister(method));
+  __ movq(Address(curr_entry, kMethodOffsetInBytes), CpuRegister(method));
   // Get the timestamp. rdtsc returns timestamp in RAX + RDX even in 64-bit architectures.
   __ rdtsc();
   __ shlq(CpuRegister(RDX), Immediate(32));
   __ orq(CpuRegister(RAX), CpuRegister(RDX));
-  __ movq(Address(entry_addr, kTimestampOffsetInBytes), CpuRegister(RAX));
+  __ movq(Address(curr_entry, kTimestampOffsetInBytes), CpuRegister(RAX));
   __ Bind(slow_path->GetExitLabel());
 }
 

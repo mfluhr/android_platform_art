@@ -234,10 +234,7 @@ known_failing_tests = frozenset([
 # removing them from this set (in order to promote them to
 # presubmits).
 postsubmit_only_tests = frozenset([
-  "011-array-copy2",
-  "857-default-access",
-  "2275-checker-empty-loops",
-  "2275-integral-unsigned-arithmetic",
+  "2278-nested-loops",
 ])
 
 known_failing_on_hwasan_tests = frozenset([

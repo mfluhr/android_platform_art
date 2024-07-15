@@ -1274,29 +1274,27 @@ void InstructionCodeGeneratorX86::GenerateMethodEntryExitHook(HInstruction* inst
   // If yes, just take the slow path.
   __ j(kGreater, slow_path->GetEntryLabel());
 
-  // For entry_addr use the first temp that isn't EAX or EDX. We need this after
+  // For curr_entry use the register that isn't EAX or EDX. We need this after
   // rdtsc which returns values in EAX + EDX.
-  Register entry_addr = locations->GetTemp(2).AsRegister<Register>();
-  Register index = locations->GetTemp(1).AsRegister<Register>();
+  Register curr_entry = locations->GetTemp(2).AsRegister<Register>();
+  Register init_entry = locations->GetTemp(1).AsRegister<Register>();
 
   // Check if there is place in the buffer for a new entry, if no, take slow path.
   uint32_t trace_buffer_ptr = Thread::TraceBufferPtrOffset<kX86PointerSize>().Int32Value();
-  uint64_t trace_buffer_index_offset =
-      Thread::TraceBufferIndexOffset<kX86PointerSize>().Int32Value();
+  uint64_t trace_buffer_curr_entry_offset =
+      Thread::TraceBufferCurrPtrOffset<kX86PointerSize>().Int32Value();
 
-  __ fs()->movl(index, Address::Absolute(trace_buffer_index_offset));
-  __ subl(index, Immediate(kNumEntriesForWallClock));
+  __ fs()->movl(curr_entry, Address::Absolute(trace_buffer_curr_entry_offset));
+  __ subl(curr_entry, Immediate(kNumEntriesForWallClock * sizeof(void*)));
+  __ fs()->movl(init_entry, Address::Absolute(trace_buffer_ptr));
+  __ cmpl(curr_entry, init_entry);
   __ j(kLess, slow_path->GetEntryLabel());
 
   // Update the index in the `Thread`.
-  __ fs()->movl(Address::Absolute(trace_buffer_index_offset), index);
-  // Calculate the entry address in the buffer.
-  // entry_addr = base_addr + sizeof(void*) * index
-  __ fs()->movl(entry_addr, Address::Absolute(trace_buffer_ptr));
-  __ leal(entry_addr, Address(entry_addr, index, TIMES_4, 0));
+  __ fs()->movl(Address::Absolute(trace_buffer_curr_entry_offset), curr_entry);
 
   // Record method pointer and trace action.
-  Register method = index;
+  Register method = init_entry;
   __ movl(method, Address(ESP, kCurrentMethodStackOffset));
   // Use last two bits to encode trace method action. For MethodEntry it is 0
   // so no need to set the bits since they are 0 already.
@@ -1306,11 +1304,11 @@ void InstructionCodeGeneratorX86::GenerateMethodEntryExitHook(HInstruction* inst
     static_assert(enum_cast<int32_t>(TraceAction::kTraceMethodExit) == 1);
     __ orl(method, Immediate(enum_cast<int32_t>(TraceAction::kTraceMethodExit)));
   }
-  __ movl(Address(entry_addr, kMethodOffsetInBytes), method);
+  __ movl(Address(curr_entry, kMethodOffsetInBytes), method);
   // Get the timestamp. rdtsc returns timestamp in EAX + EDX.
   __ rdtsc();
-  __ movl(Address(entry_addr, kTimestampOffsetInBytes), EAX);
-  __ movl(Address(entry_addr, kHighTimestampOffsetInBytes), EDX);
+  __ movl(Address(curr_entry, kTimestampOffsetInBytes), EAX);
+  __ movl(Address(curr_entry, kHighTimestampOffsetInBytes), EDX);
   __ Bind(slow_path->GetExitLabel());
 }
 

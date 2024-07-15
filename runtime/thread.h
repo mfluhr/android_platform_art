@@ -1099,9 +1099,9 @@ class EXPORT Thread {
   }
 
   template <PointerSize pointer_size>
-  static constexpr ThreadOffset<pointer_size> TraceBufferIndexOffset() {
+  static constexpr ThreadOffset<pointer_size> TraceBufferCurrPtrOffset() {
     return ThreadOffsetFromTlsPtr<pointer_size>(
-        OFFSETOF_MEMBER(tls_ptr_sized_values, method_trace_buffer_index));
+        OFFSETOF_MEMBER(tls_ptr_sized_values, method_trace_buffer_curr_entry));
   }
 
   template <PointerSize pointer_size>
@@ -1364,10 +1364,21 @@ class EXPORT Thread {
 
   uintptr_t* GetMethodTraceBuffer() { return tlsPtr_.method_trace_buffer; }
 
-  size_t* GetMethodTraceIndexPtr() { return &tlsPtr_.method_trace_buffer_index; }
+  uintptr_t** GetTraceBufferCurrEntryPtr() { return &tlsPtr_.method_trace_buffer_curr_entry; }
 
-  uintptr_t* SetMethodTraceBuffer(uintptr_t* buffer) {
-    return tlsPtr_.method_trace_buffer = buffer;
+  void SetMethodTraceBuffer(uintptr_t* buffer, int init_index) {
+    tlsPtr_.method_trace_buffer = buffer;
+    SetTraceBufferCurrentEntry(init_index);
+  }
+
+  void SetTraceBufferCurrentEntry(int index) {
+    uintptr_t* buffer = tlsPtr_.method_trace_buffer;
+    if (buffer == nullptr) {
+      tlsPtr_.method_trace_buffer_curr_entry = nullptr;
+    } else {
+      DCHECK(buffer != nullptr);
+      tlsPtr_.method_trace_buffer_curr_entry = buffer + index;
+    }
   }
 
   uint64_t GetTraceClockBase() const {
@@ -2152,7 +2163,7 @@ class EXPORT Thread {
                                async_exception(nullptr),
                                top_reflective_handle_scope(nullptr),
                                method_trace_buffer(nullptr),
-                               method_trace_buffer_index(0),
+                               method_trace_buffer_curr_entry(nullptr),
                                thread_exit_flags(nullptr),
                                last_no_thread_suspension_cause(nullptr),
                                last_no_transaction_checks_cause(nullptr) {
@@ -2327,8 +2338,8 @@ class EXPORT Thread {
     // Pointer to a thread-local buffer for method tracing.
     uintptr_t* method_trace_buffer;
 
-    // The index of the next free entry in method_trace_buffer.
-    size_t method_trace_buffer_index;
+    // Pointer to the current entry in the buffer.
+    uintptr_t* method_trace_buffer_curr_entry;
 
     // Pointer to the first node of an intrusively doubly-linked list of ThreadExitFlags.
     ThreadExitFlag* thread_exit_flags GUARDED_BY(Locks::thread_list_lock_);
