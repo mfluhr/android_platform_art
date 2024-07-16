@@ -368,8 +368,8 @@ void InductionVarRange::Replace(HInstruction* instruction,
   for (HLoopInformation* lp = instruction->GetBlock()->GetLoopInformation();  // closest enveloping loop
        lp != nullptr;
        lp = lp->GetPreHeader()->GetLoopInformation()) {
-    // Update instruction's information.
-    ReplaceInduction(induction_analysis_->LookupInfo(lp, instruction), fetch, replacement);
+    // Update loop's InductionInfo about fetch.
+    ReplaceInduction(induction_analysis_->LookupInfo(lp, fetch), fetch, replacement);
     // Update loop's trip-count information.
     ReplaceInduction(induction_analysis_->LookupInfo(lp, GetLoopControl(lp)), fetch, replacement);
   }
