@@ -45,6 +45,11 @@ cc_defaults {
         "artd-aidl-ndk",
         "libfstab",
     ],
+    target: {
+        android: {
+            compile_multilib: "first",
+        },
+    },
 }
 
 art_cc_binary {

@@ -50,6 +50,11 @@ cc_defaults {
         "-format-style=file",
         "-header-filter=(art/odrefresh/|system/apex/)",
     ],
+    target: {
+        android: {
+            compile_multilib: "first",
+        },
+    },
 }
 
 cc_defaults {
@@ -72,11 +77,6 @@ cc_defaults {
         "libbase",
         "libdexfile",
     ],
-    target: {
-        android: {
-            compile_multilib: "first",
-        },
-    },
 }
 
 cc_defaults {
