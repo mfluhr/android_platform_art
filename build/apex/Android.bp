@@ -331,6 +331,9 @@ apex {
     name: "com.android.art.debug",
     defaults: ["com.android.art-devel-defaults"],
     certificate: ":com.android.art.certificate",
+    visibility: [
+        "//packages/modules/common/build",
+    ],
 }
 
 // ART gtests with dependencies on internal ART APEX libraries.
