@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright (C) 2022 The Android Open Source Project
+<!-- Copyright (C) 2024 The Android Open Source Project
 
      Licensed under the Apache License, Version 2.0 (the "License");
      you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
      limitations under the License.
 -->
 <!-- Note: This test config file for {MODULE} is generated from a template. -->
-<configuration description="Runs {MODULE}.">
+<configuration description="Runs {MODULE} in non-multilib mode.">
     <option name="config-descriptor:metadata" key="parameter" value="not_multi_abi" />
     <option name="config-descriptor:metadata" key="mainline-param" value="com.google.android.art.apex" />
     <option name="config-descriptor:metadata" key="mainline-param" value="com.android.art.apex" />
@@ -23,12 +23,6 @@
         <option name="cleanup" value="true" />
         <option name="push" value="{MODULE}->/data/local/tmp/{MODULE}/{MODULE}" />
         <option name="append-bitness" value="true" />
-    </target_preparer>
-
-    <target_preparer class="com.android.compatibility.common.tradefed.targetprep.FilePusher">
-        <option name="cleanup" value="true" />
-        <option name="push" value="art-gtest-jars-Main.jar->/data/local/tmp/{MODULE}/art-gtest-jars-Main.jar" />
-        <option name="push" value="art-gtest-jars-Nested.jar->/data/local/tmp/{MODULE}/art-gtest-jars-Nested.jar" />
     </target_preparer>
 
     <test class="com.android.tradefed.testtype.GTest" >
@@ -45,6 +39,6 @@
         <option name="mainline-module-package-name" value="com.android.art" />
     </object>
 
-    <!-- Only run tests if the device under test is SDK version 34 (Android 14) or above. -->
-    <object type="module_controller" class="com.android.tradefed.testtype.suite.module.Sdk34ModuleController" />
+    <!-- Only run tests if the device under test is SDK version 31 (Android 12) or above. -->
+    <object type="module_controller" class="com.android.tradefed.testtype.suite.module.Sdk31ModuleController" />
 </configuration>

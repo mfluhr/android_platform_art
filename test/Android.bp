@@ -147,6 +147,13 @@ filegroup {
     srcs: ["art-gtests-target-standalone-cts-template.xml"],
 }
 
+// Test configuration template for standalone ART gtests on target (not bundled with the ART APEX)
+// which don't support multilib.
+filegroup {
+    name: "art-gtests-target-standalone-non-multilib-template",
+    srcs: ["art-gtests-target-standalone-non-multilib-template.xml"],
+}
+
 // Test configuration template for standalone ART gtests run with a boot image on target (not
 // bundled with the ART APEX).
 filegroup {

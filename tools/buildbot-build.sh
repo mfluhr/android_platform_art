@@ -112,6 +112,7 @@ implementation_libs=(
   "heapprofd_client_api"
   "libandroid_runtime_lazy"
   "libartpalette-system"
+  "libdebugstore_cxx" # Needed by "libartpalette-system".
   "libbinder"
   "libbinder_ndk"
   "libcutils"

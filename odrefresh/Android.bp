@@ -262,6 +262,7 @@ art_cc_test {
         "libarttools",
         "libbase",
     ],
+    test_config_template: ":art-gtests-target-standalone-non-multilib-template",
 }
 
 genrule {

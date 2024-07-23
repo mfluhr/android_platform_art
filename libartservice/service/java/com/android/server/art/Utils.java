@@ -483,6 +483,24 @@ public final class Utils {
         }
     }
 
+    public static boolean pathStartsWith(@NonNull String path, @NonNull String prefix) {
+        check(!prefix.isEmpty() && !path.isEmpty() && prefix.charAt(0) == '/'
+                && path.charAt(0) == '/');
+        int prefixLen = prefix.length();
+        if (prefix.charAt(prefixLen - 1) == '/') {
+            prefixLen--;
+        }
+        if (path.length() < prefixLen) {
+            return false;
+        }
+        for (int i = 0; i < prefixLen; i++) {
+            if (path.charAt(i) != prefix.charAt(i)) {
+                return false;
+            }
+        }
+        return path.length() == prefixLen || path.charAt(prefixLen) == '/';
+    }
+
     @AutoValue
     public abstract static class Abi {
         static @NonNull Abi create(

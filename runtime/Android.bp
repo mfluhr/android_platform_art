@@ -981,6 +981,7 @@ art_cc_defaults {
     },
     data: [
         ":art-gtest-jars-AllFields",
+        ":art-gtest-jars-DexFuzzerFolder",
         ":art-gtest-jars-ErroneousA",
         ":art-gtest-jars-ErroneousB",
         ":art-gtest-jars-ErroneousInit",
@@ -1058,6 +1059,7 @@ art_cc_defaults {
         "entrypoints/quick/quick_trampoline_entrypoints_test.cc",
         "entrypoints_order_test.cc",
         "exec_utils_test.cc",
+        "fuzzer_corpus_test.cc",
         "gc/accounting/card_table_test.cc",
         "gc/accounting/mod_union_table_test.cc",
         "gc/accounting/space_bitmap_test.cc",
