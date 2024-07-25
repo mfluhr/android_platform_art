@@ -396,7 +396,7 @@ bool ArtifactsExist(const OdrArtifacts& artifacts,
 
 void AddDex2OatCommonOptions(/*inout*/ CmdlineBuilder& args) {
   args.Add("--android-root=out/empty");
-  args.Add("--abort-on-hard-verifier-error");
+  args.Add("--no-abort-on-hard-verifier-error");
   args.Add("--no-abort-on-soft-verifier-error");
   args.Add("--compilation-reason=boot");
   args.Add("--image-format=lz4");

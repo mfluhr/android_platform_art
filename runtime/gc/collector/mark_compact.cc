@@ -411,11 +411,6 @@ MarkCompact::LiveWordsBitmap<kAlignment>* MarkCompact::LiveWordsBitmap<kAlignmen
           MemRangeBitmap::Create("Concurrent Mark Compact live words bitmap", begin, end));
 }
 
-static bool IsSigbusFeatureAvailable() {
-  MarkCompact::GetUffdAndMinorFault();
-  return (gUffdFeatures & kUffdFeaturesForSigbus) == kUffdFeaturesForSigbus;
-}
-
 size_t MarkCompact::ComputeInfoMapSize() {
   size_t moving_space_size = bump_pointer_space_->Capacity();
   size_t chunk_info_vec_size = moving_space_size / kOffsetChunkSize;
@@ -461,14 +456,13 @@ MarkCompact::MarkCompact(Heap* heap)
       compacting_(false),
       uffd_initialized_(false),
       clamp_info_map_status_(ClampInfoStatus::kClampInfoNotDone) {
-  // NOTE: If the CHECK is ever removed, then ensure gUffdFeatures gets
-  // initialized at this point.
-  CHECK(IsSigbusFeatureAvailable());
   if (kIsDebugBuild) {
     updated_roots_.reset(new std::unordered_set<void*>());
   }
+  if (gUffdFeatures == 0) {
+    GetUffdAndMinorFault();
+  }
   uint8_t* moving_space_begin = bump_pointer_space_->Begin();
-
   // TODO: Depending on how the bump-pointer space move is implemented. If we
   // switch between two virtual memories each time, then we will have to
   // initialize live_words_bitmap_ accordingly.
