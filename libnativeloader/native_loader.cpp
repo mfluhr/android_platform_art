@@ -31,6 +31,7 @@
 
 #include "android-base/file.h"
 #include "android-base/macros.h"
+#include <android-base/properties.h>
 #include "android-base/strings.h"
 #include "android-base/thread_annotations.h"
 #include "base/macros.h"
@@ -40,6 +41,7 @@
 
 #ifdef ART_TARGET_ANDROID
 #include "android-modules-utils/sdk_level.h"
+#include "android/api-level.h"
 #include "library_namespaces.h"
 #include "log/log.h"
 #include "nativeloader/dlext_namespaces.h"
@@ -269,6 +271,20 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
   return nullptr;
 }
 
+#if defined(ART_TARGET_ANDROID)
+static bool ShouldBypassLoadingLibSoBridge() {
+  struct stat st;
+  if (stat("/system/lib64/libsobridge.so", &st) != 0) {
+    return false;
+  }
+  std::string property = android::base::GetProperty("ro.product.build.fingerprint", "");
+  return android_get_device_api_level() == 33 &&
+      (property.starts_with("Xiaomi") ||
+       property.starts_with("Redmi") ||
+       property.starts_with("POCO"));
+}
+#endif
+
 void* OpenNativeLibrary(JNIEnv* env,
                         int32_t target_sdk_version,
                         const char* path,
@@ -315,6 +331,16 @@ void* OpenNativeLibrary(JNIEnv* env,
       if (handle.value() != nullptr) {
         return handle.value();
       }
+    }
+
+    // Handle issue b/349878424.
+    static bool bypass_loading_libsobridge = ShouldBypassLoadingLibSoBridge();
+
+    if (bypass_loading_libsobridge && strcmp("libsobridge.so", path) == 0) {
+      // Load a different library to pretend the loading was successful. This
+      // allows the device to boot.
+      ALOGD("Loading libbase.so instead of libsobridge.so due to b/349878424");
+      path = "libbase.so";
     }
 
     // Fall back to the system namespace. This happens for preloaded JNI

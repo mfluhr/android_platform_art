@@ -24,8 +24,7 @@ package {
 }
 
 cc_defaults {
-    name: "libart_verify_dex_fuzzer-defaults",
-    srcs: ["libart_verify_dex_fuzzer.cc"],
+    name: "libart_fuzzer-defaults",
 
     // Build and run on x86 too.
     host_supported: true,
@@ -53,6 +52,45 @@ cc_defaults {
     },
 }
 
+cc_defaults {
+    name: "libart_verify_dex_fuzzer-defaults",
+    srcs: ["libart_verify_dex_fuzzer.cc"],
+
+    defaults: [
+        "libart_fuzzer-defaults",
+    ],
+}
+
+cc_defaults {
+    name: "libart_verify_classes_fuzzer-defaults",
+    srcs: ["libart_verify_classes_fuzzer.cc"],
+
+    defaults: [
+        "art_defaults",
+        "libart_fuzzer-defaults",
+    ],
+
+    target: {
+        android: {
+            shared_libs: [
+                "libdl_android",
+            ],
+        },
+    },
+
+    data: [
+        ":core-oj",
+        ":core-libart",
+        ":okhttp",
+        ":bouncycastle",
+        ":apache-xml",
+        // TODO: Figure out how to enable core-icu4j
+        // ":core-icu4j",
+        // TODO: Figure out how to enable conscrypt
+        // ":conscrypt",
+    ],
+}
+
 cc_fuzz {
     name: "libart_verify_dex_fuzzer",
     defaults: [
@@ -71,6 +109,20 @@ cc_fuzz {
     defaults: [
         "libart_verify_dex_fuzzer-defaults",
         "libartd_static_defaults",
+    ],
+    // Can not be in defaults due to soong limitations.
+    corpus: [
+        ":art_runtest_corpus",
+        "corpus/*",
+    ],
+}
+
+cc_fuzz {
+    // TODO Add a debug version
+    name: "libart_verify_classes_fuzzer",
+    defaults: [
+        "libart_verify_classes_fuzzer-defaults",
+        "libart_static_defaults",
     ],
     // Can not be in defaults due to soong limitations.
     corpus: [

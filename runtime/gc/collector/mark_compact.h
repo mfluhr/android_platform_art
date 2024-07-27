@@ -490,10 +490,10 @@ class MarkCompact final : public GarbageCollector {
   // Called by SIGBUS handler to compact and copy/map the fault page in moving space.
   void ConcurrentlyProcessMovingPage(uint8_t* fault_page,
                                      uint8_t* buf,
-                                     size_t nr_moving_space_used_pages)
-      REQUIRES_SHARED(Locks::mutator_lock_);
+                                     size_t nr_moving_space_used_pages,
+                                     bool tolerate_enoent) REQUIRES_SHARED(Locks::mutator_lock_);
   // Called by SIGBUS handler to process and copy/map the fault page in linear-alloc.
-  void ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page)
+  void ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page, bool tolerate_enoent)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Process concurrently all the pages in linear-alloc. Called by gc-thread.
@@ -520,7 +520,8 @@ class MarkCompact final : public GarbageCollector {
   size_t MapMovingSpacePages(size_t start_idx,
                              size_t arr_len,
                              bool from_fault,
-                             bool return_on_contention) REQUIRES_SHARED(Locks::mutator_lock_);
+                             bool return_on_contention,
+                             bool tolerate_enoent) REQUIRES_SHARED(Locks::mutator_lock_);
 
   bool IsValidFd(int fd) const { return fd >= 0; }
 
@@ -558,7 +559,8 @@ class MarkCompact final : public GarbageCollector {
   // function also uses thread's priority to decide how long we delay before
   // forcing the ioctl operation. If ioctl returns EEXIST, then also function
   // returns. Returns number of bytes (multiple of page-size) mapped.
-  size_t CopyIoctl(void* dst, void* buffer, size_t length, bool return_on_contention);
+  size_t CopyIoctl(
+      void* dst, void* buffer, size_t length, bool return_on_contention, bool tolerate_enoent);
 
   // Called after updating linear-alloc page(s) to map the page. It first
   // updates the state of the pages to kProcessedAndMapping and after ioctl to
@@ -570,7 +572,8 @@ class MarkCompact final : public GarbageCollector {
                                   Atomic<PageState>* state,
                                   size_t length,
                                   bool free_pages,
-                                  bool single_ioctl);
+                                  bool single_ioctl,
+                                  bool tolerate_enoent);
   // Called for clamping of 'info_map_' and other GC data structures, which are
   // small and/or in >4GB address space. There is no real benefit of clamping
   // them synchronously during app forking. It clamps only if clamp_info_map_status_
@@ -795,15 +798,16 @@ class MarkCompact final : public GarbageCollector {
   // Userfault file descriptor, accessed only by the GC itself.
   // kFallbackMode value indicates that we are in the fallback mode.
   int uffd_;
-  // Number of mutator-threads currently executing SIGBUS handler. When the
-  // GC-thread is done with compaction, it set the most significant bit to
-  // indicate that. Mutator threads check for the flag when incrementing in the
-  // handler.
-  std::atomic<SigbusCounterType> sigbus_in_progress_count_;
-  // Number of mutator-threads/uffd-workers working on moving-space page. It
-  // must be 0 before gc-thread can unregister the space after it's done
-  // sequentially compacting all pages of the space.
-  std::atomic<uint16_t> compaction_in_progress_count_;
+  // Counters to synchronize mutator threads and gc-thread at the end of
+  // compaction. Counter 0 represents the number of mutators still working on
+  // moving space pages which started before gc-thread finished compacting pages,
+  // whereas the counter 1 represents those which started afterwards but
+  // before unregistering the space from uffd. Once counter 1 reaches 0, the
+  // gc-thread madvises spaces and data structures like page-status array.
+  // Both the counters are set to 0 before compaction begins. They are or'ed
+  // with kSigbusCounterCompactionDoneMask one-by-one by gc-thread after
+  // compaction to communicate the status to future mutators.
+  std::atomic<SigbusCounterType> sigbus_in_progress_count_[2];
   // When using SIGBUS feature, this counter is used by mutators to claim a page
   // out of compaction buffers to be used for the entire compaction cycle.
   std::atomic<uint16_t> compaction_buffer_counter_;

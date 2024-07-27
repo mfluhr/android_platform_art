@@ -451,8 +451,7 @@ MarkCompact::MarkCompact(Heap* heap)
       moving_space_begin_(bump_pointer_space_->Begin()),
       moving_space_end_(bump_pointer_space_->Limit()),
       uffd_(kFdUnused),
-      sigbus_in_progress_count_(kSigbusCounterCompactionDoneMask),
-      compaction_in_progress_count_(0),
+      sigbus_in_progress_count_{kSigbusCounterCompactionDoneMask, kSigbusCounterCompactionDoneMask},
       compacting_(false),
       uffd_initialized_(false),
       clamp_info_map_status_(ClampInfoStatus::kClampInfoNotDone) {
@@ -1732,7 +1731,8 @@ size_t MarkCompact::ZeropageIoctl(void* addr,
   }
 }
 
-size_t MarkCompact::CopyIoctl(void* dst, void* buffer, size_t length, bool return_on_contention) {
+size_t MarkCompact::CopyIoctl(
+    void* dst, void* buffer, size_t length, bool return_on_contention, bool tolerate_enoent) {
   int32_t backoff_count = -1;
   int32_t max_backoff = 10;  // max native priority.
   struct uffdio_copy uffd_copy;
@@ -1784,9 +1784,10 @@ size_t MarkCompact::CopyIoctl(void* dst, void* buffer, size_t length, bool retur
       uffd_copy.copy += gPageSize;
       break;
     } else {
-      DCHECK_EQ(uffd_copy.copy, -errno);
-      LOG(FATAL) << "ioctl_userfaultfd: copy failed: " << strerror(errno) << ". src:" << buffer
-                 << " dst:" << dst;
+      CHECK(tolerate_enoent && errno == ENOENT)
+          << "ioctl_userfaultfd: copy failed: " << strerror(errno) << ". src:" << buffer
+          << " dst:" << dst;
+      return uffd_copy.copy > 0 ? uffd_copy.copy : 0;
     }
   }
   return uffd_copy.copy;
@@ -1812,7 +1813,11 @@ bool MarkCompact::DoPageCompactionWithStateChange(size_t page_idx,
     func();
     if (kMode == kCopyMode) {
       if (map_immediately) {
-        CopyIoctl(to_space_page, page, gPageSize, /*return_on_contention=*/false);
+        CopyIoctl(to_space_page,
+                  page,
+                  gPageSize,
+                  /*return_on_contention=*/false,
+                  /*tolerate_enoent=*/false);
         // Store is sufficient as no other thread could modify the status at this
         // point. Relaxed order is sufficient as the ioctl will act as a fence.
         moving_pages_status_[page_idx].store(static_cast<uint8_t>(PageState::kProcessedAndMapped),
@@ -1954,8 +1959,8 @@ bool MarkCompact::FreeFromSpacePages(size_t cur_page_idx, int mode, size_t end_i
       if (MapMovingSpacePages(cur_page_idx,
                               end_idx_for_mapping,
                               /*from_ioctl=*/false,
-                              /*return_on_contention=*/true) ==
-          end_idx_for_mapping - cur_page_idx) {
+                              /*return_on_contention=*/true,
+                              /*tolerate_enoent=*/false) == end_idx_for_mapping - cur_page_idx) {
         all_mapped = true;
       }
     } else {
@@ -2094,8 +2099,11 @@ void MarkCompact::CompactMovingSpace(uint8_t* page) {
     if (kMode == kCopyMode && (!success || page == reserve_page) && end_idx_for_mapping - idx > 1) {
       // map the pages in the following address as they can't be mapped with the
       // pages yet-to-be-compacted as their src-side pages won't be contiguous.
-      MapMovingSpacePages(
-          idx + 1, end_idx_for_mapping, /*from_fault=*/false, /*return_on_contention=*/true);
+      MapMovingSpacePages(idx + 1,
+                          end_idx_for_mapping,
+                          /*from_fault=*/false,
+                          /*return_on_contention=*/true,
+                          /*tolerate_enoent=*/false);
     }
     if (FreeFromSpacePages(idx, kMode, end_idx_for_mapping)) {
       end_idx_for_mapping = idx;
@@ -2103,8 +2111,11 @@ void MarkCompact::CompactMovingSpace(uint8_t* page) {
   }
   // map one last time to finish anything left.
   if (kMode == kCopyMode && end_idx_for_mapping > 0) {
-    MapMovingSpacePages(
-        idx, end_idx_for_mapping, /*from_fault=*/false, /*return_on_contention=*/false);
+    MapMovingSpacePages(idx,
+                        end_idx_for_mapping,
+                        /*from_fault=*/false,
+                        /*return_on_contention=*/false,
+                        /*tolerate_enoent=*/false);
   }
   DCHECK_EQ(to_space_end, bump_pointer_space_->Begin());
 }
@@ -2112,7 +2123,8 @@ void MarkCompact::CompactMovingSpace(uint8_t* page) {
 size_t MarkCompact::MapMovingSpacePages(size_t start_idx,
                                         size_t arr_len,
                                         bool from_fault,
-                                        bool return_on_contention) {
+                                        bool return_on_contention,
+                                        bool tolerate_enoent) {
   DCHECK_LT(start_idx, arr_len);
   size_t arr_idx = start_idx;
   bool wait_for_unmapped = false;
@@ -2148,8 +2160,11 @@ size_t MarkCompact::MapMovingSpacePages(size_t start_idx,
       uint8_t* from_space_start = from_space_begin_ + from_space_offset;
       DCHECK_ALIGNED_PARAM(to_space_start, gPageSize);
       DCHECK_ALIGNED_PARAM(from_space_start, gPageSize);
-      size_t mapped_len =
-          CopyIoctl(to_space_start, from_space_start, map_count * gPageSize, return_on_contention);
+      size_t mapped_len = CopyIoctl(to_space_start,
+                                    from_space_start,
+                                    map_count * gPageSize,
+                                    return_on_contention,
+                                    tolerate_enoent);
       for (size_t l = 0; l < mapped_len; l += gPageSize, arr_idx++) {
         // Store is sufficient as anyone storing is doing it with the same value.
         moving_pages_status_[arr_idx].store(static_cast<uint8_t>(PageState::kProcessedAndMapped),
@@ -2826,7 +2841,8 @@ void MarkCompact::CompactionPause() {
           });
     }
     // Release order wrt to mutator threads' SIGBUS handler load.
-    sigbus_in_progress_count_.store(0, std::memory_order_release);
+    sigbus_in_progress_count_[0].store(0, std::memory_order_relaxed);
+    sigbus_in_progress_count_[1].store(0, std::memory_order_release);
     KernelPreparation();
   }
 
@@ -2839,7 +2855,6 @@ void MarkCompact::CompactionPause() {
     bump_pointer_space_->RecordFree(freed_objects_, freed_bytes);
     RecordFree(ObjectBytePair(freed_objects_, freed_bytes));
   } else {
-    DCHECK_EQ(compaction_in_progress_count_.load(std::memory_order_relaxed), 0u);
     DCHECK_EQ(compaction_buffer_counter_.load(std::memory_order_relaxed), 1);
   }
   stack_low_addr_ = nullptr;
@@ -2928,32 +2943,32 @@ bool MarkCompact::SigbusHandler(siginfo_t* info) {
    public:
     explicit ScopedInProgressCount(MarkCompact* collector) : collector_(collector) {
       // Increment the count only if compaction is not done yet.
-      SigbusCounterType prev =
-          collector_->sigbus_in_progress_count_.load(std::memory_order_relaxed);
-      while ((prev & kSigbusCounterCompactionDoneMask) == 0) {
-        if (collector_->sigbus_in_progress_count_.compare_exchange_strong(
-                prev, prev + 1, std::memory_order_acquire)) {
-          DCHECK_LT(prev, kSigbusCounterCompactionDoneMask - 1);
-          compaction_done_ = false;
-          return;
+      for (idx_ = 0; idx_ < 2; idx_++) {
+        SigbusCounterType prev =
+            collector_->sigbus_in_progress_count_[idx_].load(std::memory_order_relaxed);
+        while ((prev & kSigbusCounterCompactionDoneMask) == 0) {
+          if (collector_->sigbus_in_progress_count_[idx_].compare_exchange_strong(
+                  prev, prev + 1, std::memory_order_acquire)) {
+            DCHECK_LT(prev, kSigbusCounterCompactionDoneMask - 1);
+            return;
+          }
         }
       }
-      compaction_done_ = true;
     }
 
-    bool IsCompactionDone() const {
-      return compaction_done_;
-    }
+    bool TolerateEnoent() const { return idx_ == 1; }
+
+    bool IsCompactionDone() const { return idx_ == 2; }
 
     ~ScopedInProgressCount() {
-      if (!IsCompactionDone()) {
-        collector_->sigbus_in_progress_count_.fetch_sub(1, std::memory_order_release);
+      if (idx_ < 2) {
+        collector_->sigbus_in_progress_count_[idx_].fetch_sub(1, std::memory_order_release);
       }
     }
 
    private:
     MarkCompact* const collector_;
-    bool compaction_done_;
+    uint8_t idx_;
   };
 
   if (info->si_code != BUS_ADRERR) {
@@ -2969,14 +2984,16 @@ bool MarkCompact::SigbusHandler(siginfo_t* info) {
       Thread* self = Thread::Current();
       Locks::mutator_lock_->AssertSharedHeld(self);
       size_t nr_moving_space_used_pages = moving_first_objs_count_ + black_page_count_;
-      ConcurrentlyProcessMovingPage(
-          fault_page, self->GetThreadLocalGcBuffer(), nr_moving_space_used_pages);
+      ConcurrentlyProcessMovingPage(fault_page,
+                                    self->GetThreadLocalGcBuffer(),
+                                    nr_moving_space_used_pages,
+                                    spc.TolerateEnoent());
       return true;
     } else {
       // Find the linear-alloc space containing fault-addr
       for (auto& data : linear_alloc_spaces_data_) {
         if (data.begin_ <= fault_page && data.end_ > fault_page) {
-          ConcurrentlyProcessLinearAllocPage(fault_page);
+          ConcurrentlyProcessLinearAllocPage(fault_page, spc.TolerateEnoent());
           return true;
         }
       }
@@ -2999,24 +3016,8 @@ bool MarkCompact::SigbusHandler(siginfo_t* info) {
 
 void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
                                                 uint8_t* buf,
-                                                size_t nr_moving_space_used_pages) {
-  // TODO: add a class for Scoped dtor to set that a page has already mapped.
-  // This helps in avoiding a zero-page ioctl in gc-thread before unregistering
-  // unused space.
-  class ScopedInProgressCount {
-   public:
-    explicit ScopedInProgressCount(MarkCompact* collector) : collector_(collector) {
-      collector_->compaction_in_progress_count_.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    ~ScopedInProgressCount() {
-      collector_->compaction_in_progress_count_.fetch_sub(1, std::memory_order_relaxed);
-    }
-
-   private:
-    MarkCompact* collector_;
-  };
-
+                                                size_t nr_moving_space_used_pages,
+                                                bool tolerate_enoent) {
   Thread* self = Thread::Current();
   uint8_t* unused_space_begin =
       bump_pointer_space_->Begin() + nr_moving_space_used_pages * gPageSize;
@@ -3025,7 +3026,7 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
     // There is a race which allows more than one thread to install a
     // zero-page. But we can tolerate that. So absorb the EEXIST returned by
     // the ioctl and move on.
-    ZeropageIoctl(fault_page, gPageSize, /*tolerate_eexist=*/true, /*tolerate_enoent=*/true);
+    ZeropageIoctl(fault_page, gPageSize, /*tolerate_eexist=*/true, tolerate_enoent);
     return;
   }
   size_t page_idx = DivideByPageSize(fault_page - bump_pointer_space_->Begin());
@@ -3047,8 +3048,7 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
       }
     }
     if (length > 0) {
-      length =
-          ZeropageIoctl(fault_page, length, /*tolerate_eexist=*/true, /*tolerate_enoent=*/true);
+      length = ZeropageIoctl(fault_page, length, /*tolerate_eexist=*/true, tolerate_enoent);
       for (size_t len = 0, idx = page_idx; len < length; idx++, len += gPageSize) {
         moving_pages_status_[idx].store(static_cast<uint8_t>(PageState::kProcessedAndMapped),
                                         std::memory_order_release);
@@ -3073,20 +3073,13 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
       // Nothing to do.
       break;
     } else {
-      // The increment to the in-progress counter must be done before updating
-      // the page's state. Otherwise, we will end up leaving a window wherein
-      // the GC-thread could observe that no worker is working on compaction
-      // and could end up unregistering the moving space from userfaultfd.
-      ScopedInProgressCount spc(this);
-      // Acquire order to ensure we don't start writing to shadow map, which is
-      // shared, before the CAS is successful. Release order to ensure that the
-      // increment to moving_compaction_in_progress above is not re-ordered
-      // after the CAS.
+      // Acquire order to ensure we don't start writing to a page, which could
+      // be shared, before the CAS is successful.
       if (state == PageState::kUnprocessed &&
           moving_pages_status_[page_idx].compare_exchange_strong(
               raw_state,
               static_cast<uint8_t>(PageState::kMutatorProcessing),
-              std::memory_order_acq_rel)) {
+              std::memory_order_acquire)) {
         if (UNLIKELY(buf == nullptr)) {
           uint16_t idx = compaction_buffer_counter_.fetch_add(1, std::memory_order_relaxed);
           // The buffer-map is one page bigger as the first buffer is used by GC-thread.
@@ -3127,7 +3120,7 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
         // to immediately map the page, so that info is not needed.
         moving_pages_status_[page_idx].store(static_cast<uint8_t>(PageState::kProcessedAndMapping),
                                              std::memory_order_release);
-        CopyIoctl(fault_page, buf, gPageSize, /*return_on_contention=*/false);
+        CopyIoctl(fault_page, buf, gPageSize, /*return_on_contention=*/false, tolerate_enoent);
         // Store is sufficient as no other thread modifies the status at this stage.
         moving_pages_status_[page_idx].store(static_cast<uint8_t>(PageState::kProcessedAndMapped),
                                              std::memory_order_release);
@@ -3142,7 +3135,8 @@ void MarkCompact::ConcurrentlyProcessMovingPage(uint8_t* fault_page,
         if (MapMovingSpacePages(page_idx,
                                 arr_len,
                                 /*from_fault=*/true,
-                                /*return_on_contention=*/false) > 0) {
+                                /*return_on_contention=*/false,
+                                tolerate_enoent) > 0) {
           break;
         }
         raw_state = moving_pages_status_[page_idx].load(std::memory_order_acquire);
@@ -3156,7 +3150,8 @@ bool MarkCompact::MapUpdatedLinearAllocPages(uint8_t* start_page,
                                              Atomic<PageState>* state,
                                              size_t length,
                                              bool free_pages,
-                                             bool single_ioctl) {
+                                             bool single_ioctl,
+                                             bool tolerate_enoent) {
   DCHECK_ALIGNED_PARAM(length, gPageSize);
   Atomic<PageState>* madv_state = state;
   size_t madv_len = length;
@@ -3195,7 +3190,8 @@ bool MarkCompact::MapUpdatedLinearAllocPages(uint8_t* start_page,
       map_len = CopyIoctl(start_page,
                           start_shadow_page,
                           map_len,
-                          /*return_on_contention=*/false);
+                          /*return_on_contention=*/false,
+                          tolerate_enoent);
       DCHECK_NE(map_len, 0u);
       // Declare that the pages are ready to be accessed. Store is sufficient
       // as any thread will be storing the same value.
@@ -3231,7 +3227,7 @@ bool MarkCompact::MapUpdatedLinearAllocPages(uint8_t* start_page,
   return true;
 }
 
-void MarkCompact::ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page) {
+void MarkCompact::ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page, bool tolerate_enoent) {
   auto arena_iter = linear_alloc_arenas_.end();
   {
     TrackedArena temp_arena(fault_page);
@@ -3253,7 +3249,7 @@ void MarkCompact::ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page) {
       arena_iter->second <= fault_page) {
     // Fault page isn't in any of the arenas that existed before we started
     // compaction. So map zeropage and return.
-    ZeropageIoctl(fault_page, gPageSize, /*tolerate_eexist=*/true, /*tolerate_enoent=*/false);
+    ZeropageIoctl(fault_page, gPageSize, /*tolerate_eexist=*/true, tolerate_enoent);
   } else {
     // Find the linear-alloc space containing fault-page
     LinearAllocSpaceData* space_data = nullptr;
@@ -3298,11 +3294,15 @@ void MarkCompact::ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page) {
               // userfault. Instead, just map a zeropage, which is not only
               // correct but also efficient as it avoids unnecessary memcpy
               // in the kernel.
-              ZeropageIoctl(
-                  fault_page, gPageSize, /*tolerate_eexist=*/false, /*tolerate_enoent=*/false);
-              state_arr[page_idx].store(PageState::kProcessedAndMapped, std::memory_order_release);
+              if (ZeropageIoctl(fault_page,
+                                gPageSize,
+                                /*tolerate_eexist=*/false,
+                                tolerate_enoent)) {
+                state_arr[page_idx].store(PageState::kProcessedAndMapped,
+                                          std::memory_order_release);
+              }
+              return;
             }
-            return;
           }
         }
           continue;
@@ -3314,7 +3314,8 @@ void MarkCompact::ConcurrentlyProcessLinearAllocPage(uint8_t* fault_page) {
                                          state_arr + page_idx,
                                          space_data->end_ - fault_page,
                                          /*free_pages=*/false,
-                                         /*single_ioctl=*/true)) {
+                                         /*single_ioctl=*/true,
+                                         tolerate_enoent)) {
             return;
           }
           // fault_page was not mapped by this thread (some other thread claimed
@@ -3368,7 +3369,8 @@ void MarkCompact::ProcessLinearAlloc() {
                                state_arr + page_idx,
                                unmapped_range_end - unmapped_range_start,
                                /*free_pages=*/true,
-                               /*single_ioctl=*/false);
+                               /*single_ioctl=*/false,
+                               /*tolerate_enoent=*/false);
   };
   for (auto& pair : linear_alloc_arenas_) {
     const TrackedArena* arena = pair.first;
@@ -3516,46 +3518,54 @@ void MarkCompact::CompactionPhase() {
 
   ProcessLinearAlloc();
 
-  // Set compaction-done bit so that no new mutator threads start compaction
-  // process in the SIGBUS handler.
-  SigbusCounterType count = sigbus_in_progress_count_.fetch_or(kSigbusCounterCompactionDoneMask,
-                                                               std::memory_order_acq_rel);
-  // Wait for SIGBUS handlers already in play.
-  for (uint32_t i = 0; count > 0; i++) {
-    BackOff(i);
-    count = sigbus_in_progress_count_.load(std::memory_order_acquire);
-    count &= ~kSigbusCounterCompactionDoneMask;
-  }
-  // Unregister linear-alloc spaces
-  for (auto& data : linear_alloc_spaces_data_) {
-    DCHECK_EQ(data.end_ - data.begin_, static_cast<ssize_t>(data.shadow_.Size()));
-    UnregisterUffd(data.begin_, data.shadow_.Size());
-    // madvise linear-allocs's page-status array. Note that we don't need to
-    // madvise the shado-map as the pages from it were reclaimed in
-    // ProcessLinearAlloc() after arenas were mapped.
-    data.page_status_map_.MadviseDontNeedAndZero();
-  }
+  auto wait_for_compaction_counter = [this](size_t idx) {
+    SigbusCounterType count = sigbus_in_progress_count_[idx].fetch_or(
+        kSigbusCounterCompactionDoneMask, std::memory_order_acq_rel);
+    // Wait for SIGBUS handlers already in play.
+    for (uint32_t i = 0; count > 0; i++) {
+      BackOff(i);
+      count = sigbus_in_progress_count_[idx].load(std::memory_order_acquire);
+      count &= ~kSigbusCounterCompactionDoneMask;
+    }
+  };
+  // Set compaction-done bit in the first counter to indicate that gc-thread
+  // is done compacting and mutators should stop incrementing this counter.
+  // Mutator should tolerate ENOENT after this. This helps avoid priority
+  // inversion in case mutators need to map zero-pages after compaction is
+  // finished but before gc-thread manages to unregister the spaces.
+  wait_for_compaction_counter(0);
 
-  // Make sure no mutator is reading from the from-space before unregistering
-  // userfaultfd from moving-space and then zapping from-space. The mutator
-  // and GC may race to set a page state to processing or further along. The two
-  // attempts are ordered. If the collector wins, then the mutator will see that
-  // and not access the from-space page. If the muator wins, then the
-  // compaction_in_progress_count_ increment by the mutator happens-before the test
-  // here, and we will not see a zero value until the mutator has completed.
-  for (uint32_t i = 0; compaction_in_progress_count_.load(std::memory_order_acquire) > 0; i++) {
-    BackOff(i);
-  }
+  // Unregister moving-space
   size_t moving_space_size = bump_pointer_space_->Capacity();
   size_t used_size = (moving_first_objs_count_ + black_page_count_) * gPageSize;
   if (used_size > 0) {
     UnregisterUffd(bump_pointer_space_->Begin(), used_size);
   }
+  // Unregister linear-alloc spaces
+  for (auto& data : linear_alloc_spaces_data_) {
+    DCHECK_EQ(data.end_ - data.begin_, static_cast<ssize_t>(data.shadow_.Size()));
+    UnregisterUffd(data.begin_, data.shadow_.Size());
+  }
+
+  // Set compaction-done bit in the second counter to indicate that gc-thread
+  // is done unregistering the spaces and therefore mutators, if in SIGBUS,
+  // should return without attempting to map the faulted page. When the mutator
+  // will access the address again, it will succeed. Once this counter is 0,
+  // the gc-thread can safely initialize/madvise the data structures.
+  wait_for_compaction_counter(1);
+
   // Release all of the memory taken by moving-space's from-map
   from_space_map_.MadviseDontNeedAndZero();
   // mprotect(PROT_NONE) all maps except to-space in debug-mode to catch any unexpected accesses.
   DCHECK_EQ(mprotect(from_space_begin_, moving_space_size, PROT_NONE), 0)
       << "mprotect(PROT_NONE) for from-space failed: " << strerror(errno);
+
+  // madvise linear-allocs's page-status array. Note that we don't need to
+  // madvise the shado-map as the pages from it were reclaimed in
+  // ProcessLinearAlloc() after arenas were mapped.
+  for (auto& data : linear_alloc_spaces_data_) {
+    data.page_status_map_.MadviseDontNeedAndZero();
+  }
 }
 
 template <size_t kBufferSize>

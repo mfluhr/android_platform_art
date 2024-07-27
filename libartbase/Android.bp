@@ -69,6 +69,7 @@ cc_defaults {
                 cflags: ["-DART_STATIC_LIBARTBASE"],
             },
             static_libs: [
+                "art-aconfig-flags-lib",
                 "libcap",
                 "libmodules-utils-build",
                 // ZipArchive support, the order matters here to get all symbols.
@@ -85,19 +86,8 @@ cc_defaults {
             ],
             export_shared_lib_headers: ["libbase"], // ART's macros.h depends on libbase's macros.h.
             export_static_lib_headers: [
+                "art-aconfig-flags-lib",
                 "libcap",
-            ],
-        },
-        linux: {
-            // TODO(b/350967139): Move art-aconfig-flags-lib to the top level
-            // when aconfig supports darwin and windows. Until then it's harder
-            // to use flags in code that needs to build for them, e.g.
-            // libartbase, libdexfile, and dexdump.
-            static_libs: [
-                "art-aconfig-flags-lib",
-            ],
-            export_static_lib_headers: [
-                "art-aconfig-flags-lib",
             ],
         },
         not_windows: {
@@ -108,6 +98,9 @@ cc_defaults {
             static: {
                 cflags: ["-DART_STATIC_LIBARTBASE"],
             },
+            static_libs: [
+                "art-aconfig-flags-lib",
+            ],
             whole_static_libs: ["libtinyxml2"],
             shared_libs: [
                 "libziparchive",
@@ -119,6 +112,9 @@ cc_defaults {
                 "libbase",
             ],
             export_shared_lib_headers: ["libbase"], // ART's macros.h depends on libbase's macros.h.
+            export_static_lib_headers: [
+                "art-aconfig-flags-lib",
+            ],
         },
         linux_glibc: {
             static_libs: [
