@@ -1503,6 +1503,7 @@ void ThreadList::Unregister(Thread* self, bool should_run_callbacks) {
   if (UNLIKELY(self->GetMethodTraceBuffer() != nullptr)) {
     Trace::ReleaseThreadBuffer(self);
   }
+  CHECK_EQ(self->GetMethodTraceBuffer(), nullptr) << Trace::GetDebugInformation();
   delete self;
 
   // Release the thread ID after the thread is finished and deleted to avoid cases where we can
