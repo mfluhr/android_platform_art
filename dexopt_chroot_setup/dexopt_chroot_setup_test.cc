@@ -89,7 +89,7 @@ class DexoptChrootSetupTest : public CommonArtTest {
       return;
     }
     scratch_dir_.reset();
-    dexopt_chroot_setup_->tearDown();
+    dexopt_chroot_setup_->tearDown(/*in_allowConcurrent=*/false);
     CommonArtTest::TearDown();
   }
 
@@ -184,17 +184,17 @@ TEST_F(DexoptChrootSetupTest, Run) {
   EXPECT_EQ(status.getExceptionCode(), EX_ILLEGAL_STATE);
   EXPECT_STREQ(status.getMessage(), "init must not be repeatedly called");
 
-  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown());
+  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown(/*in_allowConcurrent=*/false));
 
   EXPECT_FALSE(std::filesystem::exists(DexoptChrootSetup::CHROOT_DIR));
 
   // Check that `tearDown` can be repeatedly called too.
-  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown());
+  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown(/*in_allowConcurrent=*/false));
 
   // Check that `setUp` can be followed directly by a `tearDown`.
   ASSERT_STATUS_OK(
       dexopt_chroot_setup_->setUp(/*in_otaSlot=*/std::nullopt, /*in_mapSnapshotsForOta=*/false));
-  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown());
+  ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown(/*in_allowConcurrent=*/false));
   EXPECT_FALSE(std::filesystem::exists(DexoptChrootSetup::CHROOT_DIR));
 }
 

@@ -437,7 +437,7 @@ static bool ShouldCompileBasedOnProfile(const CompilerOptions& compiler_options,
 
     // On non-low RAM devices, compile startup methods to potentially speed up
     // startup.
-    if (!result && Runtime::Current()->GetHeap()->IsLowMemoryMode()) {
+    if (!result && !Runtime::Current()->GetHeap()->IsLowMemoryMode()) {
       result = profile_compilation_info->IsStartupMethod(profile_index, method_ref.index);
     }
 
