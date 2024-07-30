@@ -16,6 +16,7 @@
 
 #include <iostream>
 
+#include "android-base/file.h"
 #include "android-base/strings.h"
 #include "base/file_utils.h"
 #include "base/mem_map.h"
@@ -34,12 +35,15 @@
 // Global variable to signal LSAN that we are not leaking memory.
 uint8_t* allocated_signal_stack = nullptr;
 
-std::string GetDexFileName(const std::string& jar_name, bool host) {
-  std::string prefix_device =
-      android::base::StringPrintf("/data/fuzz/%s", GetInstructionSetString(art::kRuntimeISA));
-  std::string prefix(host ? art::GetAndroidRoot() : prefix_device);
-  std::string result = android::base::StringPrintf(
-      "%s/libart_verify_classes_fuzzer/data/%s.jar", prefix.c_str(), jar_name.c_str());
+std::string GetDexFileName(const std::string& jar_name) {
+  // The jar files are located in the data directory within the directory of the fuzzer's binary.
+  std::string executable_dir = android::base::GetExecutableDirectory();
+  // Add logging for debugging as a temporary measure on the infrastructure side.
+  LOG(ERROR) << "Print executable directory: " << executable_dir;
+
+  std::string result =
+      android::base::StringPrintf("%s/data/%s.jar", executable_dir.c_str(), jar_name.c_str());
+
   return result;
 }
 
@@ -57,7 +61,7 @@ std::vector<std::string> GetLibCoreDexFileNames() {
   };
   result.reserve(modules.size());
   for (const std::string& module : modules) {
-    result.push_back(GetDexFileName(module, !art::kIsTargetBuild));
+    result.push_back(GetDexFileName(module));
   }
   return result;
 }

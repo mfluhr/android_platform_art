@@ -119,7 +119,11 @@ runnable_test_exceptions = frozenset([
   "1338-gc-no-los",
 ])
 
+# Known slow tests, for which the timeout value is raised.
 known_slow_tests = frozenset([
+  "080-oom-throw",
+  "099-vmdebug",
+  "109-suspend-check",
   "175-alloc-big-bignums",
 ])
 
@@ -234,7 +238,8 @@ known_failing_tests = frozenset([
 # removing them from this set (in order to promote them to
 # presubmits).
 postsubmit_only_tests = frozenset([
-  "2278-nested-loops",
+  "2279-aconfig-flags",
+  "2279-second-inner-loop-references-first",
 ])
 
 known_failing_on_hwasan_tests = frozenset([

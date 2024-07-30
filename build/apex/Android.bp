@@ -398,12 +398,6 @@ apex_test {
     },
 }
 
-// TODO(b/279835185) This is a placeholder to satisfy the current references.
-//   Remove this when all references are removed.
-host_snapshot {
-    name: "com.android.art.host",
-}
-
 python_binary_host {
     name: "art-apex-tester",
     srcs: ["art_apex_test.py"],

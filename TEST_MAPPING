@@ -521,6 +521,9 @@
       "name": "art-run-test-2275-integral-unsigned-arithmetic"
     },
     {
+      "name": "art-run-test-2278-nested-loops"
+    },
+    {
       "name": "art-run-test-300-package-override"
     },
     {
@@ -1980,6 +1983,9 @@
     },
     {
       "name": "art-run-test-2275-integral-unsigned-arithmetic[com.google.android.art.apex]"
+    },
+    {
+      "name": "art-run-test-2278-nested-loops[com.google.android.art.apex]"
     },
     {
       "name": "art-run-test-300-package-override[com.google.android.art.apex]"
@@ -3458,6 +3464,9 @@
       "name": "art-run-test-2275-integral-unsigned-arithmetic"
     },
     {
+      "name": "art-run-test-2278-nested-loops"
+    },
+    {
       "name": "art-run-test-300-package-override"
     },
     {
@@ -4921,6 +4930,9 @@
       "name": "art-run-test-2275-integral-unsigned-arithmetic"
     },
     {
+      "name": "art-run-test-2278-nested-loops"
+    },
+    {
       "name": "art-run-test-300-package-override"
     },
     {
@@ -5855,7 +5867,10 @@
   ],
   "postsubmit": [
     {
-      "name": "art-run-test-2278-nested-loops"
+      "name": "art-run-test-2279-aconfig-flags"
+    },
+    {
+      "name": "art-run-test-2279-second-inner-loop-references-first"
     }
   ]
 }
