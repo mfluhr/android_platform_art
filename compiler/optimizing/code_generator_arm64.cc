@@ -818,6 +818,33 @@ class ReadBarrierForRootSlowPathARM64 : public SlowPathCodeARM64 {
   DISALLOW_COPY_AND_ASSIGN(ReadBarrierForRootSlowPathARM64);
 };
 
+class TracingMethodEntryExitHooksSlowPathARM64 : public SlowPathCodeARM64 {
+ public:
+  explicit TracingMethodEntryExitHooksSlowPathARM64(bool is_method_entry)
+      : SlowPathCodeARM64(/* instruction= */ nullptr), is_method_entry_(is_method_entry) {}
+
+  void EmitNativeCode(CodeGenerator* codegen) override {
+    QuickEntrypointEnum entry_point =
+        (is_method_entry_) ? kQuickRecordEntryTraceEvent : kQuickRecordExitTraceEvent;
+    CodeGeneratorARM64* arm64_codegen = down_cast<CodeGeneratorARM64*>(codegen);
+    vixl::aarch64::Label call;
+    __ Bind(GetEntryLabel());
+    uint32_t entrypoint_offset = GetThreadOffset<kArm64PointerSize>(entry_point).Int32Value();
+    __ Ldr(lr, MemOperand(tr, entrypoint_offset));
+    __ Blr(lr);
+    __ B(GetExitLabel());
+  }
+
+  const char* GetDescription() const override {
+    return "TracingMethodEntryExitHooksSlowPath";
+  }
+
+ private:
+  const bool is_method_entry_;
+
+  DISALLOW_COPY_AND_ASSIGN(TracingMethodEntryExitHooksSlowPathARM64);
+};
+
 class MethodEntryExitHooksSlowPathARM64 : public SlowPathCodeARM64 {
  public:
   explicit MethodEntryExitHooksSlowPathARM64(HInstruction* instruction)
@@ -1289,6 +1316,25 @@ void InstructionCodeGeneratorARM64::VisitMethodEntryHook(HMethodEntryHook* instr
   GenerateMethodEntryExitHook(instruction);
 }
 
+void CodeGeneratorARM64::MaybeRecordTraceEvent(bool is_method_entry) {
+  if (!kAlwaysEnableProfileCode) {
+    return;
+  }
+
+  MacroAssembler* masm = GetVIXLAssembler();
+  UseScratchRegisterScope temps(masm);
+  Register addr = temps.AcquireX();
+  CHECK(addr.Is(vixl::aarch64::x16));
+
+  SlowPathCodeARM64* slow_path =
+      new (GetScopedAllocator()) TracingMethodEntryExitHooksSlowPathARM64(is_method_entry);
+  AddSlowPath(slow_path);
+
+  __ Ldr(addr, MemOperand(tr, Thread::TraceBufferPtrOffset<kArm64PointerSize>().SizeValue()));
+  __ Cbnz(addr, slow_path->GetEntryLabel());
+  __ Bind(slow_path->GetExitLabel());
+}
+
 void CodeGeneratorARM64::MaybeIncrementHotness(HSuspendCheck* suspend_check, bool is_frame_entry) {
   MacroAssembler* masm = GetVIXLAssembler();
   if (GetCompilerOptions().CountHotnessInCompiledCode()) {
@@ -1443,6 +1489,8 @@ void CodeGeneratorARM64::GenerateFrameEntry() {
       Register wzr = Register(VIXLRegCodeFromART(WZR), kWRegSize);
       __ Str(wzr, MemOperand(sp, GetStackOffsetOfShouldDeoptimizeFlag()));
     }
+
+    MaybeRecordTraceEvent(/* is_method_entry= */ true);
   }
   MaybeIncrementHotness(/* suspend_check= */ nullptr, /* is_frame_entry= */ true);
   MaybeGenerateMarkingRegisterCheck(/* code= */ __LINE__);
@@ -1451,6 +1499,8 @@ void CodeGeneratorARM64::GenerateFrameEntry() {
 void CodeGeneratorARM64::GenerateFrameExit() {
   GetAssembler()->cfi().RememberState();
   if (!HasEmptyFrame()) {
+    MaybeRecordTraceEvent(/* is_method_entry= */ false);
+
     int32_t frame_size = dchecked_integral_cast<int32_t>(GetFrameSize());
     uint32_t core_spills_offset = frame_size - GetCoreSpillSize();
     CPURegList preserved_core_registers = GetFramePreservedCoreRegisters();

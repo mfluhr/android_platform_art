@@ -76,6 +76,9 @@ extern "C" mirror::Object* art_quick_read_barrier_mark_introspection(mirror::Obj
 extern "C" mirror::Object* art_quick_read_barrier_mark_introspection_arrays(mirror::Object*);
 extern "C" mirror::Object* art_quick_read_barrier_mark_introspection_gc_roots(mirror::Object*);
 
+extern "C" void art_quick_record_entry_trace_event();
+extern "C" void art_quick_record_exit_trace_event();
+
 void UpdateReadBarrierEntrypoints(QuickEntryPoints* qpoints, bool is_active) {
   // ARM64 is the architecture with the largest number of core
   // registers (32) that supports the read barrier configuration.
@@ -193,6 +196,13 @@ void InitEntryPoints(JniEntryPoints* jpoints,
   UpdateReadBarrierEntrypoints(qpoints, /*is_active=*/ false);
   qpoints->SetReadBarrierSlow(artReadBarrierSlow);
   qpoints->SetReadBarrierForRootSlow(artReadBarrierForRootSlow);
+
+  if (kAlwaysEnableProfileCode) {
+    // These are used for always-on-tracing, currently only supported on arm64
+    // devices.
+    qpoints->SetRecordEntryTraceEvent(art_quick_record_entry_trace_event);
+    qpoints->SetRecordExitTraceEvent(art_quick_record_exit_trace_event);
+  }
 }
 
 }  // namespace art

@@ -2491,6 +2491,37 @@ ENTRY art_quick_compile_optimized
     ret
 END art_quick_compile_optimized
 
+ENTRY art_quick_record_entry_trace_event
+    ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    // xIP0 has the trace buffer pointer. This is loaded on the fast path before
+    // checking if we need to call this method. This will be still valid here.
+    cmp xIP1, xIP0
+    bhs .Lupdate_entry
+    mov xIP1, #TRACE_BUFFER_SIZE
+    add xIP1, xIP0, xIP1
+.Lupdate_entry:
+    str x0, [xIP1]
+    sub xIP1, xIP1, 8
+    str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    ret
+END art_quick_record_entry_trace_event
+
+ENTRY art_quick_record_exit_trace_event
+    ldr xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    // xIP0 has the trace buffer pointer. This is loaded on the fast path before
+    // checking if we need to call this method. This will be still valid here.
+    cmp xIP1, xIP0
+    bhs .Lupdate_entry_exit
+    mov xIP1, #TRACE_BUFFER_SIZE
+    add xIP1, xIP0, xIP1
+.Lupdate_entry_exit:
+    mov xIP0, #1
+    str xIP0, [xIP1]
+    sub xIP1, xIP1, 8
+    str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
+    ret
+END art_quick_record_exit_trace_event
+
     .extern artMethodEntryHook
 ENTRY art_quick_method_entry_hook
     SETUP_SAVE_EVERYTHING_FRAME

@@ -414,8 +414,10 @@ class EntrypointsOrderTest : public CommonArtTest {
     EXPECT_OFFSET_DIFFNP(
         QuickEntryPoints, pReadBarrierForRootSlow, pMethodEntryHook, sizeof(void*));
     EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pMethodEntryHook, pMethodExitHook, sizeof(void*));
+    EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pMethodExitHook, pRecordEntryTraceEvent, sizeof(void*));
+    EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pRecordEntryTraceEvent, pRecordExitTraceEvent, sizeof(void*));
 
-    CHECKED(OFFSETOF_MEMBER(QuickEntryPoints, pMethodExitHook) + sizeof(void*) ==
+    CHECKED(OFFSETOF_MEMBER(QuickEntryPoints, pRecordExitTraceEvent) + sizeof(void*) ==
                 sizeof(QuickEntryPoints),
             QuickEntryPoints_all);
   }

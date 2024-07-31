@@ -94,6 +94,10 @@ std::ostream& operator<<(std::ostream& os, TracingMode rhs);
 //
 // All values are stored in little-endian order.
 
+// TODO(mythria): A randomly chosen value. Tune it later based on the number of
+// entries required in the buffer.
+static constexpr size_t kAlwaysOnTraceBufSize = 2048;
+
 enum TraceAction {
     kTraceMethodEnter = 0x00,       // method entry
     kTraceMethodExit = 0x01,        // method exit

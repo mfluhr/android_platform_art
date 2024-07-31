@@ -38,8 +38,6 @@ uint8_t* allocated_signal_stack = nullptr;
 std::string GetDexFileName(const std::string& jar_name) {
   // The jar files are located in the data directory within the directory of the fuzzer's binary.
   std::string executable_dir = android::base::GetExecutableDirectory();
-  // Add logging for debugging as a temporary measure on the infrastructure side.
-  LOG(ERROR) << "Print executable directory: " << executable_dir;
 
   std::string result =
       android::base::StringPrintf("%s/data/%s.jar", executable_dir.c_str(), jar_name.c_str());
