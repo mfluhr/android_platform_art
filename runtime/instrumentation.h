@@ -26,6 +26,7 @@
 #include <queue>
 #include <unordered_set>
 
+#include "arch/context.h"
 #include "arch/instruction_set.h"
 #include "base/locks.h"
 #include "base/macros.h"
@@ -533,11 +534,14 @@ class Instrumentation {
                                 DeoptimizationMethodType deopt_type,
                                 bool is_ref,
                                 const JValue& result) REQUIRES_SHARED(Locks::mutator_lock_);
-  void DeoptimizeIfNeeded(Thread* self,
-                          ArtMethod** sp,
-                          DeoptimizationMethodType type,
-                          JValue result,
-                          bool is_ref) REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Deoptimize upon pending exception or if the caller requires it. Returns a long jump context if
+  // a deoptimization is needed and taken.
+  Context* DeoptimizeIfNeeded(Thread* self,
+                              ArtMethod** sp,
+                              DeoptimizationMethodType type,
+                              JValue result,
+                              bool is_ref) REQUIRES_SHARED(Locks::mutator_lock_);
   // This returns if the caller of runtime method requires a deoptimization. This checks both if the
   // method requires a deopt or if this particular frame needs a deopt because of a class
   // redefinition.

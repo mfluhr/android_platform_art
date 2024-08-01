@@ -21,7 +21,7 @@
 
 namespace art HIDDEN {
 
-extern "C" void artDeoptimizeIfNeeded(Thread* self, uintptr_t result, bool is_ref)
+extern "C" Context* artDeoptimizeIfNeeded(Thread* self, uintptr_t result, bool is_ref)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   instrumentation::Instrumentation* instr = Runtime::Current()->GetInstrumentation();
   DCHECK(!self->IsExceptionPending());
@@ -32,10 +32,10 @@ extern "C" void artDeoptimizeIfNeeded(Thread* self, uintptr_t result, bool is_re
   DeoptimizationMethodType type = instr->GetDeoptimizationMethodType(*sp);
   JValue jvalue;
   jvalue.SetJ(result);
-  instr->DeoptimizeIfNeeded(self, sp, type, jvalue, is_ref);
+  return instr->DeoptimizeIfNeeded(self, sp, type, jvalue, is_ref);
 }
 
-extern "C" void artTestSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
+extern "C" Context* artTestSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
   // Called when there is a pending checkpoint or suspend request.
   ScopedQuickEntrypointChecks sqec(self);
   self->CheckSuspend();
@@ -45,11 +45,11 @@ extern "C" void artTestSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::muta
   ArtMethod** sp = self->GetManagedStack()->GetTopQuickFrame();
   JValue result;
   result.SetJ(0);
-  Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
+  return Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
       self, sp, DeoptimizationMethodType::kKeepDexPc, result, /* is_ref= */ false);
 }
 
-extern "C" void artImplicitSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
+extern "C" Context* artImplicitSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
   // Called when there is a pending checkpoint or suspend request.
   ScopedQuickEntrypointChecks sqec(self);
   self->CheckSuspend(/*implicit=*/ true);
@@ -59,7 +59,7 @@ extern "C" void artImplicitSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::
   ArtMethod** sp = self->GetManagedStack()->GetTopQuickFrame();
   JValue result;
   result.SetJ(0);
-  Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
+  return Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
       self, sp, DeoptimizationMethodType::kKeepDexPc, result, /* is_ref= */ false);
 }
 

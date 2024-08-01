@@ -684,20 +684,12 @@ class EXPORT Thread {
   // that needs to be dealt with, false otherwise.
   bool ObserveAsyncException() REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // Find catch block and perform long jump to appropriate exception handle. When
-  // is_method_exit_exception is true, the exception was thrown by the method exit callback and we
-  // should not send method unwind for the method on top of the stack since method exit callback was
-  // already called.
-  NO_RETURN void QuickDeliverException(bool is_method_exit_exception = false)
+  // Find catch block then prepare and return the long jump context to the appropriate exception
+  // handler. When is_method_exit_exception is true, the exception was thrown by the method exit
+  // callback and we should not send method unwind for the method on top of the stack since method
+  // exit callback was already called.
+  Context* QuickDeliverException(bool is_method_exit_exception = false)
       REQUIRES_SHARED(Locks::mutator_lock_);
-
-  Context* GetLongJumpContext();
-  void ReleaseLongJumpContext(Context* context) {
-    if (tlsPtr_.long_jump_context != nullptr) {
-      ReleaseLongJumpContextInternal();
-    }
-    tlsPtr_.long_jump_context = context;
-  }
 
   // Get the current method and dex pc. If there are errors in retrieving the dex pc, this will
   // abort the runtime iff abort_on_error is true.
@@ -1835,8 +1827,6 @@ class EXPORT Thread {
 
   static bool IsAotCompiler();
 
-  void ReleaseLongJumpContextInternal();
-
   void SetCachedThreadName(const char* name);
 
   // Helper class for manipulating the 32 bits of atomically changed state and flags.
@@ -2141,7 +2131,6 @@ class EXPORT Thread {
                                monitor_enter_object(nullptr),
                                top_handle_scope(nullptr),
                                class_loader_override(nullptr),
-                               long_jump_context(nullptr),
                                stacked_shadow_frame_record(nullptr),
                                deoptimization_context_stack(nullptr),
                                frame_id_to_shadow_frame(nullptr),
@@ -2149,9 +2138,9 @@ class EXPORT Thread {
                                pthread_self(0),
                                active_suspendall_barrier(nullptr),
                                active_suspend1_barriers(nullptr),
-                               thread_local_start(nullptr),
                                thread_local_pos(nullptr),
                                thread_local_end(nullptr),
+                               thread_local_start(nullptr),
                                thread_local_limit(nullptr),
                                thread_local_objects(0),
                                checkpoint_function(nullptr),
@@ -2240,9 +2229,6 @@ class EXPORT Thread {
     // useful for testing.
     jobject class_loader_override;
 
-    // Thread local, lazily allocated, long jump context. Used to deliver exceptions.
-    Context* long_jump_context;
-
     // For gc purpose, a shadow frame record stack that keeps track of:
     // 1) shadow frames under construction.
     // 2) deoptimization shadow frames.
@@ -2281,13 +2267,13 @@ class EXPORT Thread {
     // The struct as a whole is still stored on the requesting thread's stack.
     WrappedSuspend1Barrier* active_suspend1_barriers GUARDED_BY(Locks::thread_suspend_count_lock_);
 
-    // Thread-local allocation pointer. Can be moved below the following two to correct alignment.
-    uint8_t* thread_local_start;
-
     // thread_local_pos and thread_local_end must be consecutive for ldrd and are 8 byte aligned for
     // potentially better performance.
     uint8_t* thread_local_pos;
     uint8_t* thread_local_end;
+
+    // Thread-local allocation pointer. Can be moved above the preceding two to correct alignment.
+    uint8_t* thread_local_start;
 
     // Thread local limit is how much we can expand the thread local buffer to, it is greater or
     // equal to thread_local_end.

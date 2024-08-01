@@ -342,9 +342,6 @@ uint32_t ArtMethod::FindCatchBlock(Handle<mirror::Class> exception_type,
       // removed by a pro-guard like tool.
       // Note: this is not RI behavior. RI would have failed when loading the class.
       self->ClearException();
-      // Delete any long jump context as this routine is called during a stack walk which will
-      // release its in use context at the end.
-      delete self->GetLongJumpContext();
       LOG(WARNING) << "Unresolved exception class when finding catch block: "
         << DescriptorToDot(GetTypeDescriptorFromTypeIdx(iter_type_idx));
     } else if (iter_exception_type->IsAssignableFrom(exception_type.Get())) {

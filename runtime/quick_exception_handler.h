@@ -46,11 +46,6 @@ class QuickExceptionHandler {
   QuickExceptionHandler(Thread* self, bool is_deoptimization)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  NO_RETURN ~QuickExceptionHandler() {
-    LOG(FATAL) << "UNREACHABLE";  // Expected to take long jump.
-    UNREACHABLE();
-  }
-
   // Find the catch handler for the given exception and call all required Instrumentation methods.
   // Note this might result in the exception being caught being different from 'exception'.
   void FindCatch(ObjPtr<mirror::Throwable> exception, bool is_method_exit_exception)
@@ -81,8 +76,8 @@ class QuickExceptionHandler {
   void SetCatchEnvironmentForOptimizedHandler(StackVisitor* stack_visitor)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
-  // Long jump either to a catch handler or to the upcall.
-  NO_RETURN void DoLongJump(bool smash_caller_saves = true) REQUIRES_SHARED(Locks::mutator_lock_);
+  // Prepares a long jump context for a jump to either to a catch handler or to the upcall.
+  Context* PrepareLongJump(bool smash_caller_saves = true) REQUIRES_SHARED(Locks::mutator_lock_);
 
   void SetHandlerQuickFrame(ArtMethod** handler_quick_frame) {
     handler_quick_frame_ = handler_quick_frame;
@@ -148,7 +143,7 @@ class QuickExceptionHandler {
 
  private:
   Thread* const self_;
-  Context* const context_;
+  std::unique_ptr<Context> context_;
   // Should we deoptimize the stack?
   const bool is_deoptimization_;
   // Quick frame with found handler or last frame if no handler found.

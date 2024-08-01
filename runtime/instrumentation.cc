@@ -55,8 +55,8 @@
 #include "thread_list.h"
 
 namespace art HIDDEN {
-extern "C" NO_RETURN void artDeoptimize(Thread* self, bool skip_method_exit_callbacks);
-extern "C" NO_RETURN void artDeliverPendingExceptionFromCode(Thread* self);
+extern "C" Context* artDeoptimize(Thread* self, bool skip_method_exit_callbacks);
+extern "C" void artDeliverPendingExceptionFromCode(Thread* self);
 
 namespace instrumentation {
 
@@ -1724,11 +1724,11 @@ bool Instrumentation::PushDeoptContextIfNeeded(Thread* self,
   return true;
 }
 
-void Instrumentation::DeoptimizeIfNeeded(Thread* self,
-                                         ArtMethod** sp,
-                                         DeoptimizationMethodType type,
-                                         JValue return_value,
-                                         bool is_reference) {
+Context* Instrumentation::DeoptimizeIfNeeded(Thread* self,
+                                             ArtMethod** sp,
+                                             DeoptimizationMethodType type,
+                                             JValue return_value,
+                                             bool is_reference) {
   if (self->IsAsyncExceptionPending() || ShouldDeoptimizeCaller(self, sp)) {
     self->PushDeoptimizationContext(return_value,
                                     is_reference,
@@ -1737,8 +1737,10 @@ void Instrumentation::DeoptimizeIfNeeded(Thread* self,
                                     type);
     // This is requested from suspend points or when returning from runtime methods so exit
     // callbacks wouldn't be run yet. So don't skip method callbacks.
-    artDeoptimize(self, /* skip_method_exit_callbacks= */ false);
+    return artDeoptimize(self, /* skip_method_exit_callbacks= */ false);
   }
+  // No exception or deoptimization.
+  return nullptr;
 }
 
 bool Instrumentation::NeedsSlowInterpreterForMethod(Thread* self, ArtMethod* method) {
