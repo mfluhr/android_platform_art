@@ -29,9 +29,10 @@
 #include "parallel_move_resolver.h"
 #include "utils/arm/assembler_arm_vixl.h"
 
-// TODO(VIXL): make vixl clean wrt -Wshadow.
+// TODO(VIXL): Make VIXL compile cleanly with -Wshadow, -Wdeprecated-declarations.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include "aarch32/constants-aarch32.h"
 #include "aarch32/instructions-aarch32.h"
 #include "aarch32/macro-assembler-aarch32.h"

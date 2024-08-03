@@ -40,3 +40,23 @@ phony {
         ],
     }),
 }
+
+// Fake packages to ensure generation of libopenjdkd when one builds with mm/mmm/mmma.
+//
+// The library is required for starting a runtime in debug mode, but libartd does not depend on it
+// (dependency cycle otherwise).
+//
+// Note: * As the package is phony to create a dependency the package name is irrelevant.
+//       * We make MULTILIB explicit to "both," just to state here that we want both libraries on
+//         64-bit systems, even if it is the default.
+phony_rule {
+    name: "art-libartd-libopenjdkd-host-dependency",
+    phony_deps: [
+        "libopenjdkd",
+    ],
+    compile_multilib: "both",
+    enabled: select(soong_config_variable("art_module", "art_build_host_debug"), {
+        false: false,
+        default: true,
+    }),
+}

@@ -2172,7 +2172,7 @@ size_t OatWriter::InitIndexBssMappingsHelper(size_t offset,
     offset += CalculateIndexBssMappingSize(dex_file->NumMethodIds(),
                                            static_cast<size_t>(pointer_size),
                                            method_indexes,
-                                           [=](uint32_t index) {
+                                           [this, dex_file](uint32_t index) {
                                              return bss_method_entries_.Get({dex_file, index});
                                            });
   }
@@ -2210,7 +2210,7 @@ size_t OatWriter::InitIndexBssMappingsHelper(size_t offset,
         dex_file->NumStringIds(),
         sizeof(GcRoot<mirror::String>),
         string_indexes,
-        [=](uint32_t index) {
+        [this, dex_file](uint32_t index) {
           return bss_string_entries_.Get({dex_file, dex::StringIndex(index)});
         });
   }
@@ -2224,7 +2224,7 @@ size_t OatWriter::InitIndexBssMappingsHelper(size_t offset,
         dex_file->NumProtoIds(),
         sizeof(GcRoot<mirror::MethodType>),
         proto_indexes,
-        [=](uint32_t index) {
+        [this, dex_file](uint32_t index) {
           return bss_method_type_entries_.Get({dex_file, dex::ProtoIndex(index)});
         });
   }
@@ -2894,7 +2894,7 @@ size_t OatWriter::WriteIndexBssMappingsHelper(OutputStream* out,
                              dex_file->NumMethodIds(),
                              static_cast<size_t>(pointer_size),
                              method_indexes,
-                             [=](uint32_t index) {
+                             [this, dex_file](uint32_t index) {
                                return bss_method_entries_.Get({dex_file, index});
                              });
     if (method_mappings_size == 0u) {
@@ -2964,7 +2964,7 @@ size_t OatWriter::WriteIndexBssMappingsHelper(OutputStream* out,
                              dex_file->NumStringIds(),
                              sizeof(GcRoot<mirror::String>),
                              string_indexes,
-                             [=](uint32_t index) {
+                             [this, dex_file](uint32_t index) {
                                return bss_string_entries_.Get({dex_file, dex::StringIndex(index)});
                              });
     if (string_mappings_size == 0u) {
@@ -2986,7 +2986,7 @@ size_t OatWriter::WriteIndexBssMappingsHelper(OutputStream* out,
                              dex_file->NumProtoIds(),
                              sizeof(GcRoot<mirror::MethodType>),
                              method_type_indexes,
-                             [=](uint32_t index) {
+                             [this, dex_file](uint32_t index) {
                                return bss_method_type_entries_
                                    .Get({dex_file, dex::ProtoIndex(index)});
                              });

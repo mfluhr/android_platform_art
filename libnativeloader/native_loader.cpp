@@ -272,9 +272,10 @@ jstring CreateClassLoaderNamespace(JNIEnv* env,
 }
 
 #if defined(ART_TARGET_ANDROID)
-static bool ShouldBypassLoadingLibSoBridge() {
+static bool ShouldBypassLoadingForB349878424() {
   struct stat st;
-  if (stat("/system/lib64/libsobridge.so", &st) != 0) {
+  if (stat("/system/lib64/libsobridge.so", &st) != 0 &&
+      stat("/system/lib64/libwalkstack.so", &st) != 0) {
     return false;
   }
   std::string property = android::base::GetProperty("ro.product.build.fingerprint", "");
@@ -334,12 +335,13 @@ void* OpenNativeLibrary(JNIEnv* env,
     }
 
     // Handle issue b/349878424.
-    static bool bypass_loading_libsobridge = ShouldBypassLoadingLibSoBridge();
+    static bool bypass_loading_for_b349878424 = ShouldBypassLoadingForB349878424();
 
-    if (bypass_loading_libsobridge && strcmp("libsobridge.so", path) == 0) {
+    if (bypass_loading_for_b349878424 &&
+        (strcmp("libsobridge.so", path) == 0 || strcmp("libwalkstack.so", path) == 0)) {
       // Load a different library to pretend the loading was successful. This
       // allows the device to boot.
-      ALOGD("Loading libbase.so instead of libsobridge.so due to b/349878424");
+      ALOGD("Loading libbase.so instead of %s due to b/349878424", path);
       path = "libbase.so";
     }
 

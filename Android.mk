@@ -247,31 +247,6 @@ endif
 # "include $(BUILD_...)".
 LOCAL_PATH := $(art_path)
 
-####################################################################################################
-# Fake packages to ensure generation of libopenjdkd when one builds with mm/mmm/mmma.
-#
-# The library is required for starting a runtime in debug mode, but libartd does not depend on it
-# (dependency cycle otherwise).
-#
-# Note: * As the package is phony to create a dependency the package name is irrelevant.
-#       * We make MULTILIB explicit to "both," just to state here that we want both libraries on
-#         64-bit systems, even if it is the default.
-
-# ART on the host.
-ifneq ($(HOST_OS),darwin)
-ifeq ($(ART_BUILD_HOST_DEBUG),true)
-include $(CLEAR_VARS)
-LOCAL_MODULE := art-libartd-libopenjdkd-host-dependency
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
-LOCAL_LICENSE_CONDITIONS := notice
-LOCAL_NOTICE_FILE := $(LOCAL_PATH)/NOTICE
-LOCAL_MULTILIB := both
-LOCAL_REQUIRED_MODULES := libopenjdkd
-LOCAL_IS_HOST_MODULE := true
-include $(BUILD_PHONY_PACKAGE)
-endif
-endif # HOST_OS != darwin
-
 ########################################################################
 # "m build-art" for quick minimal build
 .PHONY: build-art
