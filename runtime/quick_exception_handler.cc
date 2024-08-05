@@ -806,7 +806,7 @@ void QuickExceptionHandler::DeoptimizePartialFragmentFixup() {
   }
 }
 
-Context* QuickExceptionHandler::PrepareLongJump(bool smash_caller_saves) {
+std::unique_ptr<Context> QuickExceptionHandler::PrepareLongJump(bool smash_caller_saves) {
   // Prepare and return the context.
   context_->SetSP(reinterpret_cast<uintptr_t>(handler_quick_frame_));
   CHECK_NE(handler_quick_frame_pc_, 0u);
@@ -826,7 +826,7 @@ Context* QuickExceptionHandler::PrepareLongJump(bool smash_caller_saves) {
   }
   // Clear the dex_pc list so as not to leak memory.
   handler_dex_pc_list_.reset();
-  return context_.release();
+  return std::move(context_);
 }
 
 void QuickExceptionHandler::DumpFramesWithType(Thread* self, bool details) {

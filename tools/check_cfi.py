@@ -33,8 +33,8 @@ ARCHES = ["i386", "x86_64", "arm", "aarch64", "riscv64"]
 IGNORE : Dict[str, List[str]] = {
     # Aligns stack.
     "art_quick_osr_stub": ["i386"],
-    # Intermediate invalid CFI while loading all registers.
-    "art_quick_do_long_jump": ["x86_64"],
+    # Unverifiable intermediate CFI after loading the stack pointer from context.
+    "art_quick_do_long_jump": ["arm", "aarch64", "i386", "x86_64", "riscv64"],
     # Saves/restores SP in other register.
     "art_quick_generic_jni_trampoline": ["arm", "i386", "x86_64"],
     # Starts with non-zero offset at the start of the method.

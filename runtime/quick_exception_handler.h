@@ -19,6 +19,7 @@
 
 #include <android-base/logging.h>
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 #include "base/array_ref.h"
@@ -77,7 +78,8 @@ class QuickExceptionHandler {
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Prepares a long jump context for a jump to either to a catch handler or to the upcall.
-  Context* PrepareLongJump(bool smash_caller_saves = true) REQUIRES_SHARED(Locks::mutator_lock_);
+  std::unique_ptr<Context> PrepareLongJump(bool smash_caller_saves = true)
+      REQUIRES_SHARED(Locks::mutator_lock_);
 
   void SetHandlerQuickFrame(ArtMethod** handler_quick_frame) {
     handler_quick_frame_ = handler_quick_frame;

@@ -688,7 +688,13 @@ class EXPORT Thread {
   // handler. When is_method_exit_exception is true, the exception was thrown by the method exit
   // callback and we should not send method unwind for the method on top of the stack since method
   // exit callback was already called.
-  Context* QuickDeliverException(bool is_method_exit_exception = false)
+  std::unique_ptr<Context> QuickDeliverException(bool is_method_exit_exception = false)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Perform deoptimization. Return a `Context` prepared for a long jump.
+  std::unique_ptr<Context> Deoptimize(DeoptimizationKind kind,
+                                      bool single_frame,
+                                      bool skip_method_exit_callbacks)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Get the current method and dex pc. If there are errors in retrieving the dex pc, this will

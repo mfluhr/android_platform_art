@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "arch/context.h"
 #include "base/logging.h"  // For VLOG_IS_ON.
 #include "base/mutex.h"
 #include "callee_save_frame.h"
@@ -25,44 +26,14 @@
 
 namespace art HIDDEN {
 
-static Context* artDeoptimizeImpl(Thread* self,
-                              DeoptimizationKind kind,
-                              bool single_frame,
-                              bool skip_method_exit_callbacks)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
-  Runtime::Current()->IncrementDeoptimizationCount(kind);
-  if (VLOG_IS_ON(deopt)) {
-    if (single_frame) {
-      // Deopt logging will be in DeoptimizeSingleFrame. It is there to take advantage of the
-      // specialized visitor that will show whether a method is Quick or Shadow.
-    } else {
-      LOG(INFO) << "Deopting:";
-      self->Dump(LOG_STREAM(INFO));
-    }
-  }
-
-  self->AssertHasDeoptimizationContext();
-  QuickExceptionHandler exception_handler(self, true);
-  if (single_frame) {
-    exception_handler.DeoptimizeSingleFrame(kind);
-  } else {
-    exception_handler.DeoptimizeStack(skip_method_exit_callbacks);
-  }
-  if (exception_handler.IsFullFragmentDone()) {
-    return exception_handler.PrepareLongJump(true);
-  } else {
-    exception_handler.DeoptimizePartialFragmentFixup();
-    // We cannot smash the caller-saves, as we need the ArtMethod in a parameter register that would
-    // be caller-saved. This has the downside that we cannot track incorrect register usage down the
-    // line.
-    return exception_handler.PrepareLongJump(false);
-  }
-}
-
 extern "C" Context* artDeoptimize(Thread* self, bool skip_method_exit_callbacks)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
-  return artDeoptimizeImpl(self, DeoptimizationKind::kFullFrame, false, skip_method_exit_callbacks);
+  std::unique_ptr<Context> context = self->Deoptimize(DeoptimizationKind::kFullFrame,
+                                                      /*single_frame=*/ false,
+                                                      skip_method_exit_callbacks);
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // This is called directly from compiled code by an HDeoptimize.
@@ -79,7 +50,11 @@ extern "C" Context* artDeoptimizeFromCompiledCode(DeoptimizationKind kind, Threa
                                   DeoptimizationMethodType::kDefault);
   // Deopting from compiled code, so method exit haven't run yet. Don't skip method exit callbacks
   // if required.
-  return artDeoptimizeImpl(self, kind, true, /* skip_method_exit_callbacks= */ false);
+  std::unique_ptr<Context> context = self->Deoptimize(kind,
+                                                      /*single_frame=*/ true,
+                                                      /* skip_method_exit_callbacks= */ false);
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 }  // namespace art

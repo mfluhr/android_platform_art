@@ -384,7 +384,6 @@ MACRO0(DELIVER_PENDING_EXCEPTION_FRAME_READY)
     pushl %fs:THREAD_SELF_OFFSET               // pass Thread::Current()
     CFI_ADJUST_CFA_OFFSET(4)
     call SYMBOL(artDeliverPendingExceptionFromCode)  // artDeliverPendingExceptionFromCode(Thread*)
-    mov %eax, %edi                             // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
     CFI_ADJUST_CFA_OFFSET(-16)                 // Reset CFA in case there is more code afterwards.

@@ -571,6 +571,7 @@ ARM_ENTRY art_quick_do_long_jump
     ldr  lr, [sp, #56]    @ Load LR from gprs_, 56 = 4 * 14.
     ldr  sp, [sp, #52]    @ Load SP from gprs_ 52 = 4 * 13.
                           @ Do not access gprs_ from now, they are below SP.
+    .cfi_def_cfa_offset 0
     REFRESH_MARKING_REGISTER
     bx   r12              @ Do long jump.
 END art_quick_do_long_jump

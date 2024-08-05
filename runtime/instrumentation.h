@@ -26,7 +26,6 @@
 #include <queue>
 #include <unordered_set>
 
-#include "arch/context.h"
 #include "arch/instruction_set.h"
 #include "base/locks.h"
 #include "base/macros.h"
@@ -44,6 +43,7 @@ class Throwable;
 }  // namespace mirror
 class ArtField;
 class ArtMethod;
+class Context;
 template <typename T> class Handle;
 template <typename T> class MutableHandle;
 struct NthCallerVisitor;
@@ -537,11 +537,11 @@ class Instrumentation {
 
   // Deoptimize upon pending exception or if the caller requires it. Returns a long jump context if
   // a deoptimization is needed and taken.
-  Context* DeoptimizeIfNeeded(Thread* self,
-                              ArtMethod** sp,
-                              DeoptimizationMethodType type,
-                              JValue result,
-                              bool is_ref) REQUIRES_SHARED(Locks::mutator_lock_);
+  std::unique_ptr<Context> DeoptimizeIfNeeded(Thread* self,
+                                              ArtMethod** sp,
+                                              DeoptimizationMethodType type,
+                                              JValue result,
+                                              bool is_ref) REQUIRES_SHARED(Locks::mutator_lock_);
   // This returns if the caller of runtime method requires a deoptimization. This checks both if the
   // method requires a deopt or if this particular frame needs a deopt because of a class
   // redefinition.

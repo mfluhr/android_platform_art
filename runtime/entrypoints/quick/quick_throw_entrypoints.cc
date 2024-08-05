@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "arch/context.h"
 #include "art_method-inl.h"
 #include "callee_save_frame.h"
 #include "dex/code_item_accessors-inl.h"
@@ -30,7 +31,9 @@ namespace art HIDDEN {
 extern "C" Context* artDeliverPendingExceptionFromCode(Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 extern "C" Context* artInvokeObsoleteMethod(ArtMethod* method, Thread* self)
@@ -39,7 +42,9 @@ extern "C" Context* artInvokeObsoleteMethod(ArtMethod* method, Thread* self)
   ScopedQuickEntrypointChecks sqec(self);
   ThrowInternalError("Attempting to invoke obsolete version of '%s'.",
                      method->PrettyMethod().c_str());
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Called by generated code to throw an exception.
@@ -58,7 +63,9 @@ extern "C" Context* artDeliverExceptionFromCode(mirror::Throwable* exception, Th
   } else {
     self->SetException(exception);
   }
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Called by generated code to throw a NPE exception.
@@ -68,7 +75,9 @@ extern "C" Context* artThrowNullPointerExceptionFromCode(Thread* self)
   // We come from an explicit check in the generated code. This path is triggered
   // only if the object is indeed null.
   ThrowNullPointerExceptionFromDexPC(/* check_address= */ false, 0U);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Installed by a signal handler to throw a NPE exception.
@@ -76,7 +85,9 @@ extern "C" Context* artThrowNullPointerExceptionFromSignal(uintptr_t addr, Threa
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowNullPointerExceptionFromDexPC(/* check_address= */ true, addr);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Called by generated code to throw an arithmetic divide by zero exception.
@@ -84,7 +95,9 @@ extern "C" Context* artThrowDivZeroFromCode(Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowArithmeticExceptionDivideByZero();
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Called by generated code to throw an array index out of bounds exception.
@@ -92,7 +105,9 @@ extern "C" Context* artThrowArrayBoundsFromCode(int index, int length, Thread* s
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowArrayIndexOutOfBoundsException(index, length);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 // Called by generated code to throw a string index out of bounds exception.
@@ -100,19 +115,23 @@ extern "C" Context* artThrowStringBoundsFromCode(int index, int length, Thread* 
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowStringIndexOutOfBoundsException(index, length);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 extern "C" Context* artThrowStackOverflowFromCode(Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowStackOverflowError(self);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 extern "C" Context* artThrowClassCastException(mirror::Class* dest_type,
-                                           mirror::Class* src_type,
-                                           Thread* self)
+                                               mirror::Class* src_type,
+                                               Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   if (dest_type == nullptr) {
@@ -137,24 +156,28 @@ extern "C" Context* artThrowClassCastException(mirror::Class* dest_type,
   }
   DCHECK(!dest_type->IsAssignableFrom(src_type));
   ThrowClassCastException(dest_type, src_type);
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 extern "C" Context* artThrowClassCastExceptionForObject(mirror::Object* obj,
-                                                    mirror::Class* dest_type,
-                                                    Thread* self)
+                                                        mirror::Class* dest_type,
+                                                        Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   DCHECK(obj != nullptr);
   return artThrowClassCastException(dest_type, obj->GetClass(), self);
 }
 
 extern "C" Context* artThrowArrayStoreException(mirror::Object* array,
-                                            mirror::Object* value,
-                                            Thread* self)
+                                                mirror::Object* value,
+                                                Thread* self)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedQuickEntrypointChecks sqec(self);
   ThrowArrayStoreException(value->GetClass(), array->GetClass());
-  return self->QuickDeliverException();
+  std::unique_ptr<Context> context = self->QuickDeliverException();
+  DCHECK(context != nullptr);
+  return context.release();
 }
 
 }  // namespace art

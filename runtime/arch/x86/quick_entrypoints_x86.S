@@ -211,7 +211,6 @@ MACRO2(NO_ARG_RUNTIME_EXCEPTION, c_name, cxx_name)
     pushl %fs:THREAD_SELF_OFFSET               // pass Thread::Current()
     CFI_ADJUST_CFA_OFFSET(4)
     call CALLVAR(cxx_name)                     // cxx_name(Thread*)
-    mov %eax, %edi                             // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
     END_FUNCTION VAR(c_name)
@@ -225,7 +224,6 @@ MACRO2(NO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING, c_name, cxx_name)
     pushl %fs:THREAD_SELF_OFFSET               // pass Thread::Current()
     CFI_ADJUST_CFA_OFFSET(4)
     call CALLVAR(cxx_name)                     // cxx_name(Thread*)
-    mov %eax, %edi                             // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
     END_FUNCTION VAR(c_name)
@@ -240,7 +238,6 @@ MACRO2(ONE_ARG_RUNTIME_EXCEPTION, c_name, cxx_name)
     CFI_ADJUST_CFA_OFFSET(4)
     PUSH eax                                   // pass arg1
     call CALLVAR(cxx_name)                     // cxx_name(arg1, Thread*)
-    mov %eax, %edi                             // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
     END_FUNCTION VAR(c_name)
@@ -256,7 +253,6 @@ MACRO2(TWO_ARG_RUNTIME_EXCEPTION_SAVE_EVERYTHING, c_name, cxx_name)
     PUSH ecx                                   // pass arg2
     PUSH eax                                   // pass arg1
     call CALLVAR(cxx_name)                     // cxx_name(arg1, arg2, Thread*)
-    mov %eax, %edi                             // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
     END_FUNCTION VAR(c_name)
@@ -284,7 +280,6 @@ DEFINE_FUNCTION_CUSTOM_CFA art_quick_throw_null_pointer_exception_from_signal, 2
     CFI_ADJUST_CFA_OFFSET(4)
     PUSH eax                                              // pass arg1
     call SYMBOL(artThrowNullPointerExceptionFromSignal)   // (addr, self)
-    mov %eax, %edi                                        // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_throw_null_pointer_exception_from_signal
@@ -656,31 +651,30 @@ END_FUNCTION art_quick_invoke_static_stub
 
     /*
      * Long jump stub.
-     * On entry edi is the long jump context. This is expected to be returned from a previous
-     * entrypoint call which threw an exception or deoptimized.
+     * Custom calling convention: On entry EAX is the long jump context. This is expected to
+     * be returned from a previous entrypoint call which threw an exception or deoptimized.
      */
 DEFINE_FUNCTION art_quick_do_long_jump
 #if defined(__APPLE__)
     int3
     int3
 #else
-    // Reserve space for the gprs + fprs;
-    INCREASE_FRAME X86_LONG_JUMP_CONTEXT_SIZE
+    // Reserve space for the gprs + fprs; add 16-byte stack alignment padding for call.
+    // (Note that the return address plus 3 args below shall take exactly 16 bytes.)
+    INCREASE_FRAME (X86_LONG_JUMP_CONTEXT_SIZE + 15) & ~15
 
-    lea 0(%esp), %esi                              // GPRS
-    lea X86_LONG_JUMP_GPRS_SIZE(%esp), %edx        // FPRS
+    lea 0(%esp), %esi                               // GPRS
+    lea X86_LONG_JUMP_GPRS_SIZE(%esp), %edx         // FPRS
 
     PUSH_ARG edx
     PUSH_ARG esi
-    PUSH_ARG edi
-
+    PUSH_ARG eax
     call SYMBOL(artContextCopyForLongJump)          // Context* context,
                                                     // uintptr_t* gprs,
                                                     // uintptr_t* fprs
 
-    POP_ARG edi
-    POP_ARG esi                                     // GPRS
-    POP_ARG edx                                     // FPRS
+    DECREASE_FRAME 8                                // Remove the context and GPRS arguments.
+    POP_ARG edx                                     // Restore FPRS, make ESP point to GPRS.
 
     // Address base of FPRs.
     movsd 0(%edx), %xmm0     // Load up XMM0-XMM7.
@@ -691,10 +685,12 @@ DEFINE_FUNCTION art_quick_do_long_jump
     movsd 40(%edx), %xmm5
     movsd 48(%edx), %xmm6
     movsd 56(%edx), %xmm7
-    movl %esi, %esp  // ESP points to gprs.
     popal            // Load all registers except ESP and EIP with values in gprs.
-    POP esp          // Load stack pointer.
-    ret              // From higher in the stack pop eip.
+    CFI_ADJUST_CFA_OFFSET(-(X86_LONG_JUMP_GPRS_SIZE - /*ESP*/ 4))
+
+    POP_ARG esp      // Load stack pointer.
+    CFI_DEF_CFA(esp, 4)
+    ret              // From higher in the stack pop EIP.
 #endif
 END_FUNCTION art_quick_do_long_jump
 
@@ -830,8 +826,8 @@ MACRO2(DEOPT_OR_RETURN, temp, is_ref = 0)
   DECREASE_FRAME(16)                // pop arguments
 
   CFI_REMEMBER_STATE
-  cmp LITERAL(0), %eax
-  jne 3f
+  testl %eax, %eax
+  jnz 3f
 
   RESTORE_SAVE_EVERYTHING_FRAME
   ret
@@ -839,7 +835,6 @@ MACRO2(DEOPT_OR_RETURN, temp, is_ref = 0)
 3:
   // Deoptimize
   CFI_RESTORE_STATE_AND_DEF_CFA esp, FRAME_SIZE_SAVE_EVERYTHING
-  mov %eax, %edi                    // pass Context*
   call SYMBOL(art_quick_do_long_jump)
   UNREACHABLE
 END_MACRO
@@ -863,8 +858,8 @@ MACRO2(DEOPT_OR_RESTORE_SAVE_EVERYTHING_FRAME_AND_RETURN_EAX, temp, is_ref = 0)
   DECREASE_FRAME(16)                                // pop arguments
 
   CFI_REMEMBER_STATE
-  cmp LITERAL(0), %eax
-  jne 3f
+  testl %eax, %eax
+  jnz 3f
 
   RESTORE_SAVE_EVERYTHING_FRAME
   ret
@@ -872,7 +867,6 @@ MACRO2(DEOPT_OR_RESTORE_SAVE_EVERYTHING_FRAME_AND_RETURN_EAX, temp, is_ref = 0)
 3:
   // Deoptimize
   CFI_RESTORE_STATE_AND_DEF_CFA esp, FRAME_SIZE_SAVE_EVERYTHING
-  mov %eax, %edi                                    // pass Context*
   call SYMBOL(art_quick_do_long_jump)
   UNREACHABLE
 END_MACRO
@@ -1308,7 +1302,6 @@ DEFINE_FUNCTION art_quick_check_instance_of
     PUSH ecx                              // pass arg2
     PUSH eax                              // pass arg1
     call SYMBOL(artThrowClassCastExceptionForObject)  // (Object* src, Class* dest, Thread*)
-    mov %eax, %edi                        // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_check_instance_of
@@ -1386,7 +1379,6 @@ DEFINE_FUNCTION art_quick_aput_obj
     PUSH_ARG edx                  // Pass arg2 - value.
     PUSH_ARG eax                  // Pass arg1 - array.
     call SYMBOL(artThrowArrayStoreException) // (array, value, Thread*)
-    mov %eax, %edi                // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 
@@ -1446,8 +1438,8 @@ DEFINE_FUNCTION art_quick_test_suspend
     DECREASE_FRAME 16                                 // pop arguments
 
     CFI_REMEMBER_STATE
-    cmp LITERAL(0), %eax
-    jne .Ltest_suspend_deoptimize
+    testl %eax, %eax
+    jnz .Ltest_suspend_deoptimize
 
     RESTORE_SAVE_EVERYTHING_FRAME                     // restore frame up to return address
     ret                                               // return
@@ -1455,7 +1447,6 @@ DEFINE_FUNCTION art_quick_test_suspend
 .Ltest_suspend_deoptimize:
     // Deoptimize
     CFI_RESTORE_STATE_AND_DEF_CFA esp, FRAME_SIZE_SAVE_EVERYTHING
-    mov %eax, %edi                                    // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_test_suspend
@@ -1807,7 +1798,6 @@ DEFINE_FUNCTION art_quick_deoptimize_from_compiled_code
     CFI_ADJUST_CFA_OFFSET(4)
     PUSH eax
     call SYMBOL(artDeoptimizeFromCompiledCode)  // (DeoptimizationKind, Thread*)
-    mov %eax, %edi                              // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_deoptimize_from_compiled_code
@@ -2179,8 +2169,8 @@ DEFINE_FUNCTION art_quick_update_inline_cache
     movl INLINE_CACHE_CLASSES_OFFSET(%ebp), %eax
     cmpl %ecx, %eax
     je .Ldone
-    cmpl LITERAL(0), %eax
-    jne .Lentry2
+    testl %eax, %eax
+    jnz .Lentry2
     lock cmpxchg %ecx, INLINE_CACHE_CLASSES_OFFSET(%ebp)
     jz .Ldone
     jmp .Lentry1
@@ -2188,8 +2178,8 @@ DEFINE_FUNCTION art_quick_update_inline_cache
     movl (INLINE_CACHE_CLASSES_OFFSET+4)(%ebp), %eax
     cmpl %ecx, %eax
     je .Ldone
-    cmpl LITERAL(0), %eax
-    jne .Lentry3
+    testl %eax, %eax
+    jnz .Lentry3
     lock cmpxchg %ecx, (INLINE_CACHE_CLASSES_OFFSET+4)(%ebp)
     jz .Ldone
     jmp .Lentry2
@@ -2197,8 +2187,8 @@ DEFINE_FUNCTION art_quick_update_inline_cache
     movl (INLINE_CACHE_CLASSES_OFFSET+8)(%ebp), %eax
     cmpl %ecx, %eax
     je .Ldone
-    cmpl LITERAL(0), %eax
-    jne .Lentry4
+    testl %eax, %eax
+    jnz .Lentry4
     lock cmpxchg %ecx, (INLINE_CACHE_CLASSES_OFFSET+8)(%ebp)
     jz .Ldone
     jmp .Lentry3
@@ -2206,8 +2196,8 @@ DEFINE_FUNCTION art_quick_update_inline_cache
     movl (INLINE_CACHE_CLASSES_OFFSET+12)(%ebp), %eax
     cmpl %ecx, %eax
     je .Ldone
-    cmpl LITERAL(0), %eax
-    jne .Lentry5
+    testl %eax, %eax
+    jnz .Lentry5
     lock cmpxchg %ecx, (INLINE_CACHE_CLASSES_OFFSET+12)(%ebp)
     jz .Ldone
     jmp .Lentry4
@@ -2262,8 +2252,8 @@ DEFINE_FUNCTION art_quick_method_entry_hook
     CFI_ADJUST_CFA_OFFSET(-16)
 
     CFI_REMEMBER_STATE
-    cmp LITERAL(0), %eax
-    jne .Lentryhook_deopt
+    testl %eax, %eax
+    jnz .Lentryhook_deopt
 
     // Normal return.
     RESTORE_SAVE_EVERYTHING_FRAME
@@ -2272,7 +2262,6 @@ DEFINE_FUNCTION art_quick_method_entry_hook
 .Lentryhook_deopt:
     // Deoptimize.
     CFI_RESTORE_STATE_AND_DEF_CFA esp, FRAME_SIZE_SAVE_EVERYTHING
-    mov %eax, %edi                  // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_method_entry_hook
@@ -2306,8 +2295,8 @@ DEFINE_FUNCTION art_quick_method_exit_hook
     CFI_ADJUST_CFA_OFFSET(-32)
 
     CFI_REMEMBER_STATE
-    cmp LITERAL(0), %eax
-    jne .Lexithook_deopt_or_exception
+    testl %eax, %eax
+    jnz .Lexithook_deopt_or_exception
 
     // Return result could have been changed if it's a reference.
     movl %ecx, (80)(%esp)
@@ -2319,7 +2308,6 @@ DEFINE_FUNCTION art_quick_method_exit_hook
 .Lexithook_deopt_or_exception:
     // Deoptimize or exception thrown.
     CFI_RESTORE_STATE_AND_DEF_CFA esp, FRAME_SIZE_SAVE_EVERYTHING
-    mov %eax, %edi                 // pass Context*
     call SYMBOL(art_quick_do_long_jump)
     UNREACHABLE
 END_FUNCTION art_quick_method_exit_hook

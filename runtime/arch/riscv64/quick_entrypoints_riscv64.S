@@ -558,6 +558,7 @@ ENTRY art_quick_do_long_jump
 
     // Set sp. Do not access fprs_ and gprs_ from now, they are below sp.
     mv sp, t0
+    .cfi_def_cfa_offset 0
 
     jr  t1
 END art_quick_do_long_jump

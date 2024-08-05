@@ -133,8 +133,6 @@ namespace art HIDDEN {
 using android::base::StringAppendV;
 using android::base::StringPrintf;
 
-extern "C" Context* artDeoptimize(Thread* self, bool skip_method_exit_callbacks);
-
 bool Thread::is_started_ = false;
 pthread_key_t Thread::pthread_key_self_;
 ConditionVariable* Thread::resume_cond_ = nullptr;
@@ -3934,7 +3932,7 @@ void Thread::DumpThreadOffset(std::ostream& os, uint32_t offset) {
   os << offset;
 }
 
-Context* Thread::QuickDeliverException(bool skip_method_exit_callbacks) {
+std::unique_ptr<Context> Thread::QuickDeliverException(bool skip_method_exit_callbacks) {
   // Get exception from thread.
   ObjPtr<mirror::Throwable> exception = GetException();
   CHECK(exception != nullptr);
@@ -3942,7 +3940,9 @@ Context* Thread::QuickDeliverException(bool skip_method_exit_callbacks) {
     // This wasn't a real exception, so just clear it here. If there was an actual exception it
     // will be recorded in the DeoptimizationContext and it will be restored later.
     ClearException();
-    return artDeoptimize(this, skip_method_exit_callbacks);
+    return Deoptimize(DeoptimizationKind::kFullFrame,
+                      /*single_frame=*/ false,
+                      skip_method_exit_callbacks);
   }
 
   ReadBarrier::MaybeAssertToSpaceInvariant(exception.Ptr());
@@ -3984,7 +3984,9 @@ Context* Thread::QuickDeliverException(bool skip_method_exit_callbacks) {
             exception,
             /* from_code= */ false,
             method_type);
-        return artDeoptimize(this, skip_method_exit_callbacks);
+        return Deoptimize(DeoptimizationKind::kFullFrame,
+                          /*single_frame=*/ false,
+                          skip_method_exit_callbacks);
       } else {
         LOG(WARNING) << "Got a deoptimization request on un-deoptimizable method "
                      << visitor.caller->PrettyMethod();
@@ -4010,6 +4012,38 @@ Context* Thread::QuickDeliverException(bool skip_method_exit_callbacks) {
     ReadBarrier::MaybeAssertToSpaceInvariant(GetException());
   }
   return exception_handler.PrepareLongJump();
+}
+
+std::unique_ptr<Context> Thread::Deoptimize(DeoptimizationKind kind,
+                                            bool single_frame,
+                                            bool skip_method_exit_callbacks) {
+  Runtime::Current()->IncrementDeoptimizationCount(kind);
+  if (VLOG_IS_ON(deopt)) {
+    if (single_frame) {
+      // Deopt logging will be in DeoptimizeSingleFrame. It is there to take advantage of the
+      // specialized visitor that will show whether a method is Quick or Shadow.
+    } else {
+      LOG(INFO) << "Deopting:";
+      Dump(LOG_STREAM(INFO));
+    }
+  }
+
+  AssertHasDeoptimizationContext();
+  QuickExceptionHandler exception_handler(this, true);
+  if (single_frame) {
+    exception_handler.DeoptimizeSingleFrame(kind);
+  } else {
+    exception_handler.DeoptimizeStack(skip_method_exit_callbacks);
+  }
+  if (exception_handler.IsFullFragmentDone()) {
+    return exception_handler.PrepareLongJump(/*smash_caller_saves=*/ true);
+  } else {
+    exception_handler.DeoptimizePartialFragmentFixup();
+    // We cannot smash the caller-saves, as we need the ArtMethod in a parameter register that would
+    // be caller-saved. This has the downside that we cannot track incorrect register usage down the
+    // line.
+    return exception_handler.PrepareLongJump(/*smash_caller_saves=*/ false);
+  }
 }
 
 ArtMethod* Thread::GetCurrentMethod(uint32_t* dex_pc_out,

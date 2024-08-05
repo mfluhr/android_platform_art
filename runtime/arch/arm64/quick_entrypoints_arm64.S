@@ -860,6 +860,7 @@ ENTRY art_quick_do_long_jump
 
     // Set SP. Do not access fprs_ and gprs_ from now, they are below SP.
     mov sp, xIP0
+    .cfi_def_cfa_offset 0
 
     REFRESH_MARKING_REGISTER
     REFRESH_SUSPEND_CHECK_REGISTER

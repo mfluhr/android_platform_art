@@ -638,23 +638,24 @@ DEFINE_FUNCTION art_quick_do_long_jump
     movq (X86_64_LONG_JUMP_GPRS_SIZE+120)(%rsp), %xmm15
     // Restore FPRs.
     // Load all registers except RSP and RIP with values in gprs.
-    popq %r15
-    popq %r14
-    popq %r13
-    popq %r12
-    popq %r11
-    popq %r10
-    popq %r9
-    popq %r8
-    popq %rdi
-    popq %rsi
-    popq %rbp
+    POP_ARG r15
+    POP_ARG r14
+    POP_ARG r13
+    POP_ARG r12
+    POP_ARG r11
+    POP_ARG r10
+    POP_ARG r9
+    POP_ARG r8
+    POP_ARG rdi
+    POP_ARG rsi
+    POP_ARG rbp
     addq LITERAL(8), %rsp   // Skip rsp
-    popq %rbx
-    popq %rdx
-    popq %rcx
-    popq %rax
+    POP_ARG rbx
+    POP_ARG rdx
+    POP_ARG rcx
+    POP_ARG rax
     popq %rsp      // Load stack pointer.
+    CFI_DEF_CFA(rsp, 8)
     ret            // From higher in the stack pop rip.
 #endif  // __APPLE__
 END_FUNCTION art_quick_do_long_jump
@@ -764,8 +765,8 @@ MACRO1(DEOPT_OR_RETURN, is_ref = 0)
   call SYMBOL(artDeoptimizeIfNeeded)
 
   CFI_REMEMBER_STATE
-  cmpq LITERAL(0), %rax
-  jne 3f
+  testq %rax, %rax
+  jnz 3f
 
   RESTORE_SAVE_EVERYTHING_FRAME
   ret
@@ -793,8 +794,8 @@ MACRO1(DEOPT_OR_RESTORE_SAVE_EVERYTHING_FRAME_AND_RETURN_RAX, is_ref = 0)
   call SYMBOL(artDeoptimizeIfNeeded)
 
   CFI_REMEMBER_STATE
-  cmpq LITERAL(0), %rax
-  jne 3f
+  testq %rax, %rax
+  jnz 3f
 
   RESTORE_SAVE_EVERYTHING_FRAME
   ret
@@ -1188,8 +1189,8 @@ DEFINE_FUNCTION art_quick_check_instance_of
     CFI_ADJUST_CFA_OFFSET(8)
     SETUP_FP_CALLEE_SAVE_FRAME
     call SYMBOL(artInstanceOfFromCode)  // (Object* obj, Class* ref_klass)
-    testq %rax, %rax
     CFI_REMEMBER_STATE
+    testq %rax, %rax
     jz .Lthrow_class_cast_exception   // jump forward if not assignable
     RESTORE_FP_CALLEE_SAVE_FRAME
     addq LITERAL(24), %rsp            // pop arguments
@@ -1321,8 +1322,8 @@ DEFINE_FUNCTION art_quick_test_suspend
     call SYMBOL(artTestSuspendFromCode)         // (Thread*)
 
     CFI_REMEMBER_STATE
-    cmpq LITERAL(0), %rax
-    jne .Ltest_suspend_deoptimize
+    testq %rax, %rax
+    jnz .Ltest_suspend_deoptimize
 
     // Normal return.
     RESTORE_SAVE_EVERYTHING_FRAME               // restore frame up to return address
@@ -2063,12 +2064,11 @@ DEFINE_FUNCTION art_quick_method_entry_hook
     movq FRAME_SIZE_SAVE_EVERYTHING(%rsp), %rdi // pass ArtMethod
     movq %gs:THREAD_SELF_OFFSET, %rsi           // pass Thread::Current()
     movq %rsp, %rdx                             // SP
-
-    CFI_REMEMBER_STATE
     call SYMBOL(artMethodEntryHook)             // (ArtMethod*, Thread*, sp)
 
-    cmpq LITERAL(0), %rax
-    jne .Lentryhook_deopt
+    CFI_REMEMBER_STATE
+    testq %rax, %rax
+    jnz .Lentryhook_deopt
 
     // Normal return.
     RESTORE_SAVE_EVERYTHING_FRAME
@@ -2096,8 +2096,8 @@ DEFINE_FUNCTION art_quick_method_exit_hook
                                                 //  frame_size)
 
     CFI_REMEMBER_STATE
-    cmpq LITERAL(0), %rax
-    jne .Lexithook_deopt_or_exception
+    testq %rax, %rax
+    jnz .Lexithook_deopt_or_exception
 
     // Normal return.
     RESTORE_SAVE_EVERYTHING_FRAME

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "arch/context.h"
 #include "callee_save_frame.h"
 #include "jit/jit.h"
 #include "runtime.h"
@@ -23,6 +24,7 @@ namespace art HIDDEN {
 
 extern "C" Context* artDeoptimizeIfNeeded(Thread* self, uintptr_t result, bool is_ref)
     REQUIRES_SHARED(Locks::mutator_lock_) {
+  ScopedQuickEntrypointChecks sqec(self);
   instrumentation::Instrumentation* instr = Runtime::Current()->GetInstrumentation();
   DCHECK(!self->IsExceptionPending());
 
@@ -32,7 +34,8 @@ extern "C" Context* artDeoptimizeIfNeeded(Thread* self, uintptr_t result, bool i
   DeoptimizationMethodType type = instr->GetDeoptimizationMethodType(*sp);
   JValue jvalue;
   jvalue.SetJ(result);
-  return instr->DeoptimizeIfNeeded(self, sp, type, jvalue, is_ref);
+  std::unique_ptr<Context> context = instr->DeoptimizeIfNeeded(self, sp, type, jvalue, is_ref);
+  return context.release();
 }
 
 extern "C" Context* artTestSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
@@ -45,8 +48,9 @@ extern "C" Context* artTestSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::
   ArtMethod** sp = self->GetManagedStack()->GetTopQuickFrame();
   JValue result;
   result.SetJ(0);
-  return Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
+  std::unique_ptr<Context> context = Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
       self, sp, DeoptimizationMethodType::kKeepDexPc, result, /* is_ref= */ false);
+  return context.release();
 }
 
 extern "C" Context* artImplicitSuspendFromCode(Thread* self) REQUIRES_SHARED(Locks::mutator_lock_) {
@@ -59,8 +63,9 @@ extern "C" Context* artImplicitSuspendFromCode(Thread* self) REQUIRES_SHARED(Loc
   ArtMethod** sp = self->GetManagedStack()->GetTopQuickFrame();
   JValue result;
   result.SetJ(0);
-  return Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
+  std::unique_ptr<Context> context = Runtime::Current()->GetInstrumentation()->DeoptimizeIfNeeded(
       self, sp, DeoptimizationMethodType::kKeepDexPc, result, /* is_ref= */ false);
+  return context.release();
 }
 
 extern "C" void artCompileOptimized(ArtMethod* method, Thread* self)
