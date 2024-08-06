@@ -28,9 +28,6 @@ namespace art HIDDEN {
 // Size of Dex virtual registers.
 static constexpr size_t kVRegSize = 4;
 
-// Should we always generate code to trace executed dex methods.
-static constexpr bool kAlwaysEnableProfileCode = false;
-
 #ifdef ART_PAGE_SIZE_AGNOSTIC
 // Accessor for the page size constant local to the libart.
 //

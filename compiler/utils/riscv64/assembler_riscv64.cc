@@ -69,7 +69,6 @@ void Riscv64Assembler::FinalizeCode() {
 
 void Riscv64Assembler::Lui(XRegister rd, uint32_t imm20) {
   if (IsExtensionEnabled(Riscv64Extension::kZca)) {
-    int32_t simm = static_cast<int32_t>(imm20);
     if (rd != Zero && rd != SP && IsImmCLuiEncodable(imm20)) {
       CLui(rd, imm20);
       return;

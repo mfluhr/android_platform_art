@@ -19,6 +19,7 @@
 
 #include "arch/arm64/asm_support_arm64.h"
 #include "base/bit_utils.h"
+#include "com_android_art_flags.h"
 #include "entrypoints/entrypoint_utils.h"
 #include "entrypoints/jni/jni_entrypoints.h"
 #include "entrypoints/math_entrypoints.h"
@@ -28,6 +29,8 @@
 #include "entrypoints/quick/quick_entrypoints.h"
 #include "entrypoints/runtime_asm_entrypoints.h"
 #include "interpreter/interpreter.h"
+
+namespace art_flags = com::android::art::flags;
 
 namespace art HIDDEN {
 
@@ -197,7 +200,7 @@ void InitEntryPoints(JniEntryPoints* jpoints,
   qpoints->SetReadBarrierSlow(artReadBarrierSlow);
   qpoints->SetReadBarrierForRootSlow(artReadBarrierForRootSlow);
 
-  if (kAlwaysEnableProfileCode) {
+  if (art_flags::always_enable_profile_code()) {
     // These are used for always-on-tracing, currently only supported on arm64
     // devices.
     qpoints->SetRecordEntryTraceEvent(art_quick_record_entry_trace_event);

@@ -1365,7 +1365,6 @@ void LSEVisitor::PrepareLoopRecords(HBasicBlock* block) {
     heap_values.resize(num_heap_locations,
                        {/*value=*/Value::Unknown(), /*stored_by=*/Value::Unknown()});
     // Also keep the stores before the loop header, including in blocks that were not visited yet.
-    bool is_osr = GetGraph()->IsCompilingOsr();
     for (size_t idx = 0u; idx != num_heap_locations; ++idx) {
       KeepStores(Value::ForLoopPhiPlaceholder(GetPhiPlaceholder(block->GetBlockId(), idx)));
     }

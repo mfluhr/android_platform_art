@@ -25,6 +25,16 @@ flag {
   is_exported: false
 }
 
+# Flag for the experimental feature of on-demand method tracing
+flag {
+  name: "always_enable_profile_code"
+  namespace: "art_mainline"
+  description: "Flag to control on-demand method tracing feature"
+  bug: "352518093"
+  is_fixed_read_only: true
+  is_exported: true
+}
+
 # Generic flags that ramp for upcoming Mainline trains
 #
 # These may be used for any feature where the ramp schedule fits - see

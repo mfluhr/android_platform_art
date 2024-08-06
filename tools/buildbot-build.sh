@@ -120,6 +120,11 @@ implementation_libs=(
   "libvndksupport"
 )
 
+# riscv64 has a newer version of libbinder which depends on libapexsupport.
+if [[ $TARGET_ARCH = "riscv64" ]]; then
+    implementation_libs+=("libapexsupport") # Needed by "libbinder".
+fi
+
 if [ -d frameworks/base ]; then
   # In full manifest branches, build the implementation libraries from source
   # instead of using prebuilts.

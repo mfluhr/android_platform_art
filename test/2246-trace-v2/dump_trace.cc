@@ -185,7 +185,6 @@ bool ProcessTraceEntries(std::unique_ptr<File>& file,
   int64_t prev_method_value = 0;
   for (int i = 0; i < num_records; i++) {
     int64_t diff = 0;
-    auto buffer_ptr = current_buffer_ptr;
     if (!DecodeSignedLeb128Checked(&current_buffer_ptr, buffer + total_size - 1, &diff)) {
       LOG(FATAL) << "Reading past the buffer???";
     }
