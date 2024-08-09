@@ -239,6 +239,10 @@ class QuickArgumentVisitor {
   // | RBX/R3          |    callee save
   // | RDX/R2          |    arg2
   // | RCX/R1          |    arg3
+  // | XMM15           |    callee save
+  // | XMM14           |    callee save
+  // | XMM13           |    callee save
+  // | XMM12           |    callee save
   // | XMM7            |    float arg 8
   // | XMM6            |    float arg 7
   // | XMM5            |    float arg 6

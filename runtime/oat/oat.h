@@ -44,8 +44,8 @@ std::ostream& operator<<(std::ostream& stream, StubType stub_type);
 class EXPORT PACKED(4) OatHeader {
  public:
   static constexpr std::array<uint8_t, 4> kOatMagic { { 'o', 'a', 't', '\n' } };
-  // Last oat version changed reason: Adding new entrypoints for on demand tracing.
-  static constexpr std::array<uint8_t, 4> kOatVersion{{'2', '4', '5', '\0'}};
+  // Last oat version changed reason: Implement variable sized ref-offset bitmap in mirror::Class.
+  static constexpr std::array<uint8_t, 4> kOatVersion{{'2', '4', '6', '\0'}};
 
   static constexpr const char* kDex2OatCmdLineKey = "dex2oat-cmdline";
   static constexpr const char* kDebuggableKey = "debuggable";
