@@ -22,9 +22,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -39,6 +42,7 @@
 #include "android-base/no_destructor.h"
 #include "android-base/properties.h"
 #include "android-base/result.h"
+#include "android-base/scopeguard.h"
 #include "android-base/strings.h"
 #include "android/binder_auto_utils.h"
 #include "android/binder_manager.h"
@@ -46,6 +50,7 @@
 #include "base/file_utils.h"
 #include "base/macros.h"
 #include "base/os.h"
+#include "base/stl_util.h"
 #include "exec_utils.h"
 #include "fstab/fstab.h"
 #include "tools/binder_utils.h"
@@ -60,6 +65,7 @@ namespace {
 using ::android::base::ConsumePrefix;
 using ::android::base::Error;
 using ::android::base::Join;
+using ::android::base::make_scope_guard;
 using ::android::base::NoDestructor;
 using ::android::base::ReadFileToString;
 using ::android::base::Result;
@@ -85,6 +91,8 @@ const NoDestructor<std::string> kSnapshotMappedFile(
     std::string(DexoptChrootSetup::PRE_REBOOT_DEXOPT_DIR) + "/snapshot_mapped");
 constexpr mode_t kChrootDefaultMode = 0755;
 constexpr std::chrono::milliseconds kSnapshotCtlTimeout = std::chrono::seconds(60);
+constexpr std::array<const char*, 4> kExternalLibDirs = {
+    "/system/lib", "/system/lib64", "/system_ext/lib", "/system_ext/lib64"};
 
 bool IsOtaUpdate(const std::optional<std::string>& ota_slot) { return ota_slot.has_value(); }
 
@@ -122,13 +130,15 @@ Result<void> CreateDir(const std::string& path) {
   return {};
 }
 
-Result<void> Unmount(const std::string& target) {
+Result<void> Unmount(const std::string& target, bool logging = true) {
   if (umount2(target.c_str(), UMOUNT_NOFOLLOW) == 0) {
+    LOG_IF(INFO, logging) << ART_FORMAT("Unmounted '{}'", target);
     return {};
   }
   LOG(WARNING) << ART_FORMAT(
       "Failed to umount2 '{}': {}. Retrying with MNT_DETACH", target, strerror(errno));
   if (umount2(target.c_str(), UMOUNT_NOFOLLOW | MNT_DETACH) == 0) {
+    LOG_IF(INFO, logging) << ART_FORMAT("Unmounted '{}' with MNT_DETACH", target);
     return {};
   }
   return ErrnoErrorf("Failed to umount2 '{}'", target);
@@ -197,23 +207,37 @@ Result<void> BindMount(const std::string& source, const std::string& target) {
             /*fs_type=*/nullptr,
             MS_BIND,
             /*data=*/nullptr) != 0) {
-    return ErrnoErrorf("Failed to bind-mount '{}' at '{}'", source, *kBindMountTmpDir);
+    return ErrnoErrorf("Failed to bind-mount '{}' at '{}' ('{}' -> '{}')",
+                       source,
+                       *kBindMountTmpDir,
+                       source,
+                       target);
   }
+  auto cleanup = make_scope_guard([&]() {
+    Result<void> result = Unmount(*kBindMountTmpDir, /*logging=*/false);
+    if (!result.ok()) {
+      LOG(ERROR) << result.error().message();
+    }
+  });
   if (mount(/*source=*/nullptr,
             kBindMountTmpDir->c_str(),
             /*fs_type=*/nullptr,
             MS_SLAVE,
             /*data=*/nullptr) != 0) {
-    return ErrnoErrorf("Failed to make mount slave for '{}'", *kBindMountTmpDir);
+    return ErrnoErrorf(
+        "Failed to make mount slave for '{}' ('{}' -> '{}')", *kBindMountTmpDir, source, target);
   }
   if (mount(kBindMountTmpDir->c_str(),
             target.c_str(),
             /*fs_type=*/nullptr,
             MS_BIND,
             /*data=*/nullptr) != 0) {
-    return ErrnoErrorf("Failed to bind-mount '{}' at '{}'", *kBindMountTmpDir, target);
+    return ErrnoErrorf("Failed to bind-mount '{}' at '{}' ('{}' -> '{}')",
+                       *kBindMountTmpDir,
+                       target,
+                       source,
+                       target);
   }
-  OR_RETURN(Unmount(*kBindMountTmpDir));
   LOG(INFO) << ART_FORMAT("Bind-mounted '{}' at '{}'", source, target);
   return {};
 }
@@ -513,10 +537,54 @@ Result<void> DexoptChrootSetup::InitChroot() const {
       .Add("/linkerconfig");
   OR_RETURN(Run("linkerconfig", args.Get()));
 
+  // Platform libraries communicate with things outside of chroot through unstable APIs. Examples
+  // are `libbinder_ndk.so` talking to `servicemanager` and `libcgrouprc.so` reading
+  // `/dev/cgroup_info/cgroup.rc`. To work around incompatibility issues, we bind-mount the old
+  // platform library directories into chroot so that both sides of a communication are old and
+  // therefore align with each other.
+  // After bind-mounting old platform libraries, the chroot environment has a combination of new
+  // modules and old platform libraries. We currently use the new linker config in such an
+  // environment, which is potentially problematic. If we start to see problems, we should consider
+  // generating a more correct linker config in a more complex way.
+  if (IsOtaUpdate(ota_slot)) {
+    std::vector<const char*> existing_lib_dirs;
+    std::copy_if(kExternalLibDirs.begin(),
+                 kExternalLibDirs.end(),
+                 std::back_inserter(existing_lib_dirs),
+                 OS::DirectoryExists);
+    if (existing_lib_dirs.empty()) {
+      return Errorf("Unexpectedly missing platform library directories. Tried '{}'",
+                    android::base::Join(kExternalLibDirs, "', '"));
+    }
+
+    // We should bind-mount all existing lib dirs or none of them. Try the first one to decide what
+    // to do next.
+    Result<void> result = BindMount(existing_lib_dirs[0], PathInChroot(existing_lib_dirs[0]));
+    if (result.ok()) {
+      for (size_t i = 1; i < existing_lib_dirs.size(); i++) {
+        OR_RETURN(BindMount(existing_lib_dirs[i], PathInChroot(existing_lib_dirs[i])));
+      }
+    } else if (result.error().code() == EACCES) {
+      // We don't have the permission to do so on V. We'll have to use new libs.
+      LOG(WARNING) << result.error().message();
+    } else {
+      return result;
+    }
+  }
+
   return {};
 }
 
 Result<void> DexoptChrootSetup::TearDownChroot() const {
+  // Make sure we have unmounted old platform library directories before running apexd, as apexd
+  // expects new libraries.
+  std::vector<FstabEntry> entries = OR_RETURN(GetProcMountsDescendantsOfPath(CHROOT_DIR));
+  for (const FstabEntry entry : entries) {
+    if (ContainsElement(kExternalLibDirs, entry.mount_point.substr(strlen(CHROOT_DIR)))) {
+      OR_RETURN(Unmount(entry.mount_point));
+    }
+  }
+
   std::vector<FstabEntry> apex_entries =
       OR_RETURN(GetProcMountsDescendantsOfPath(PathInChroot("/apex")));
   // If there is only one entry, it's /apex itself.
@@ -542,10 +610,9 @@ Result<void> DexoptChrootSetup::TearDownChroot() const {
   }
 
   // The list is in mount order.
-  std::vector<FstabEntry> entries = OR_RETURN(GetProcMountsDescendantsOfPath(CHROOT_DIR));
+  entries = OR_RETURN(GetProcMountsDescendantsOfPath(CHROOT_DIR));
   for (auto it = entries.rbegin(); it != entries.rend(); it++) {
     OR_RETURN(Unmount(it->mount_point));
-    LOG(INFO) << ART_FORMAT("Unmounted '{}'", it->mount_point);
   }
 
   std::error_code ec;
