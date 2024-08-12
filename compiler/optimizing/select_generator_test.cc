@@ -27,14 +27,6 @@ namespace art HIDDEN {
 
 class SelectGeneratorTest : public OptimizingUnitTest {
  protected:
-  void InitGraphAndParameters() {
-    InitGraph();
-    AddParameter(new (GetAllocator()) HParameterValue(graph_->GetDexFile(),
-                                                      dex::TypeIndex(0),
-                                                      0,
-                                                      DataType::Type::kInt32));
-  }
-
   void ConstructBasicGraphForSelect(HInstruction* instr) {
     HBasicBlock* if_block = AddNewBlock();
     HBasicBlock* then_block = AddNewBlock();
@@ -47,24 +39,17 @@ class SelectGeneratorTest : public OptimizingUnitTest {
     then_block->AddSuccessor(return_block_);
     else_block->AddSuccessor(return_block_);
 
-    HParameterValue* bool_param = new (GetAllocator()) HParameterValue(graph_->GetDexFile(),
-                                                                       dex::TypeIndex(0),
-                                                                       1,
-                                                                       DataType::Type::kBool);
-    entry_block_->AddInstruction(bool_param);
+    HParameterValue* bool_param = MakeParam(DataType::Type::kBool);
     HIntConstant* const1 =  graph_->GetIntConstant(1);
 
-    if_block->AddInstruction(new (GetAllocator()) HIf(bool_param));
+    MakeIf(if_block, bool_param);
 
     then_block->AddInstruction(instr);
-    then_block->AddInstruction(new (GetAllocator()) HGoto());
+    MakeGoto(then_block);
 
-    else_block->AddInstruction(new (GetAllocator()) HGoto());
+    MakeGoto(else_block);
 
-    HPhi* phi = new (GetAllocator()) HPhi(GetAllocator(), 0, 0, DataType::Type::kInt32);
-    return_block_->AddPhi(phi);
-    phi->AddInput(instr);
-    phi->AddInput(const1);
+    HPhi* phi = MakePhi(return_block_, {instr, const1});
   }
 
   bool CheckGraphAndTrySelectGenerator() {
@@ -79,11 +64,12 @@ class SelectGeneratorTest : public OptimizingUnitTest {
 
 // HDivZeroCheck might throw and should not be hoisted from the conditional to an unconditional.
 TEST_F(SelectGeneratorTest, testZeroCheck) {
-  InitGraphAndParameters();
-  HDivZeroCheck* instr = new (GetAllocator()) HDivZeroCheck(parameters_[0], 0);
+  InitGraph();
+  HParameterValue* param = MakeParam(DataType::Type::kInt32);
+  HDivZeroCheck* instr = new (GetAllocator()) HDivZeroCheck(param, 0);
   ConstructBasicGraphForSelect(instr);
 
-  ArenaVector<HInstruction*> current_locals({parameters_[0], graph_->GetIntConstant(1)},
+  ArenaVector<HInstruction*> current_locals({param, graph_->GetIntConstant(1)},
                                             GetAllocator()->Adapter(kArenaAllocInstruction));
   ManuallyBuildEnvFor(instr, &current_locals);
 
@@ -92,10 +78,9 @@ TEST_F(SelectGeneratorTest, testZeroCheck) {
 
 // Test that SelectGenerator succeeds with HAdd.
 TEST_F(SelectGeneratorTest, testAdd) {
-  InitGraphAndParameters();
-  HAdd* instr = new (GetAllocator()) HAdd(DataType::Type::kInt32,
-                                          parameters_[0],
-                                          parameters_[0], 0);
+  InitGraph();
+  HParameterValue* param = MakeParam(DataType::Type::kInt32);
+  HAdd* instr = new (GetAllocator()) HAdd(DataType::Type::kInt32, param, param, /*dex_pc=*/ 0);
   ConstructBasicGraphForSelect(instr);
   EXPECT_TRUE(CheckGraphAndTrySelectGenerator());
 }

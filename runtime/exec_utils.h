@@ -118,7 +118,10 @@ class EXPORT ExecUtils {
   virtual int64_t GetTicksPerSec() const;
 
  private:
-  bool GetStat(pid_t pid, /*out*/ ProcessStat* stat, /*out*/ std::string* error_msg) const;
+  bool GetStat(pid_t pid,
+               int64_t start_time,
+               /*out*/ ProcessStat* stat,
+               /*out*/ std::string* error_msg) const;
 };
 
 inline bool Exec(const std::vector<std::string>& arg_vector, /*out*/ std::string* error_msg) {

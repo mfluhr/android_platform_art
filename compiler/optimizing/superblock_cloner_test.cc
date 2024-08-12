@@ -35,10 +35,7 @@ class SuperblockClonerTest : public OptimizingUnitTest {
  protected:
   void InitGraphAndParameters() {
     InitGraph();
-    AddParameter(new (GetAllocator()) HParameterValue(graph_->GetDexFile(),
-                                                      dex::TypeIndex(0),
-                                                      0,
-                                                      DataType::Type::kInt32));
+    param_ = MakeParam(DataType::Type::kInt32);
   }
 
   void CreateBasicLoopControlFlow(HBasicBlock* position,
@@ -70,48 +67,37 @@ class SuperblockClonerTest : public OptimizingUnitTest {
     HIntConstant* const_128 = graph_->GetIntConstant(128);
 
     // Header block.
-    HPhi* phi = new (GetAllocator()) HPhi(GetAllocator(), 0, 0, DataType::Type::kInt32);
-    HInstruction* suspend_check = new (GetAllocator()) HSuspendCheck();
-    HInstruction* loop_check = new (GetAllocator()) HGreaterThanOrEqual(phi, const_128);
-
-    loop_header->AddPhi(phi);
-    loop_header->AddInstruction(suspend_check);
-    loop_header->AddInstruction(loop_check);
-    loop_header->AddInstruction(new (GetAllocator()) HIf(loop_check));
+    HPhi* phi = MakePhi(loop_header, {const_0, /* placeholder */ const_0});
+    HInstruction* suspend_check = MakeSuspendCheck(loop_header);
+    HInstruction* loop_check = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, const_128);
+    MakeIf(loop_header, loop_check);
 
     // Loop body block.
-    HInstruction* null_check = new (GetAllocator()) HNullCheck(parameters_[0], dex_pc);
-    HInstruction* array_length = new (GetAllocator()) HArrayLength(null_check, dex_pc);
-    HInstruction* bounds_check = new (GetAllocator()) HBoundsCheck(phi, array_length, dex_pc);
+    HInstruction* null_check = MakeNullCheck(loop_body, param_, dex_pc);
+    HInstruction* array_length = MakeArrayLength(loop_body, null_check, dex_pc);
+    HInstruction* bounds_check = MakeBoundsCheck(loop_body, phi, array_length, dex_pc);
     HInstruction* array_get =
-        new (GetAllocator()) HArrayGet(null_check, bounds_check, DataType::Type::kInt32, dex_pc);
-    HInstruction* add =  new (GetAllocator()) HAdd(DataType::Type::kInt32, array_get, const_1);
-    HInstruction* array_set = new (GetAllocator()) HArraySet(
-        null_check, bounds_check, add, DataType::Type::kInt32, dex_pc);
-    HInstruction* induction_inc = new (GetAllocator()) HAdd(DataType::Type::kInt32, phi, const_1);
+        MakeArrayGet(loop_body, null_check, bounds_check, DataType::Type::kInt32, dex_pc);
+    HInstruction* add =  MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, array_get, const_1);
+    HInstruction* array_set =
+        MakeArraySet(loop_body, null_check, bounds_check, add, DataType::Type::kInt32, dex_pc);
+    HInstruction* induction_inc = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, const_1);
+    MakeGoto(loop_body);
 
-    loop_body->AddInstruction(null_check);
-    loop_body->AddInstruction(array_length);
-    loop_body->AddInstruction(bounds_check);
-    loop_body->AddInstruction(array_get);
-    loop_body->AddInstruction(add);
-    loop_body->AddInstruction(array_set);
-    loop_body->AddInstruction(induction_inc);
-    loop_body->AddInstruction(new (GetAllocator()) HGoto());
-
-    phi->AddInput(const_0);
-    phi->AddInput(induction_inc);
+    phi->ReplaceInput(induction_inc, 1u);  // Update back-edge input.
 
     graph_->SetHasBoundsChecks(true);
 
     // Adjust HEnvironment for each instruction which require that.
-    ArenaVector<HInstruction*> current_locals({phi, const_128, parameters_[0]},
+    ArenaVector<HInstruction*> current_locals({phi, const_128, param_},
                                               GetAllocator()->Adapter(kArenaAllocInstruction));
 
     HEnvironment* env = ManuallyBuildEnvFor(suspend_check, &current_locals);
     null_check->CopyEnvironmentFrom(env);
     bounds_check->CopyEnvironmentFrom(env);
   }
+
+  HParameterValue* param_ = nullptr;
 };
 
 TEST_F(SuperblockClonerTest, IndividualInstrCloner) {
@@ -428,16 +414,14 @@ TEST_F(SuperblockClonerTest, LoopPeelingMultipleBackEdges) {
   if_block->AddSuccessor(temp1);
   temp1->AddSuccessor(header);
 
-  if_block->AddInstruction(new (GetAllocator()) HIf(parameters_[0]));
+  MakeIf(if_block, param_);
 
   HInstructionIterator it(header->GetPhis());
   DCHECK(!it.Done());
   HPhi* loop_phi = it.Current()->AsPhi();
-  HInstruction* temp_add = new (GetAllocator()) HAdd(DataType::Type::kInt32,
-                                                     loop_phi,
-                                                     graph_->GetIntConstant(2));
-  temp1->AddInstruction(temp_add);
-  temp1->AddInstruction(new (GetAllocator()) HGoto());
+  HInstruction* temp_add =
+      MakeBinOp<HAdd>(temp1, DataType::Type::kInt32, loop_phi, graph_->GetIntConstant(2));
+  MakeGoto(temp1);
   loop_phi->AddInput(temp_add);
 
   graph_->BuildDominatorTree();
@@ -592,7 +576,7 @@ TEST_F(SuperblockClonerTest, NestedCaseExitToOutermost) {
 
   // Change the loop3 - insert an exit which leads to loop1.
   HBasicBlock* loop3_extra_if_block = AddNewBlock();
-  loop3_extra_if_block->AddInstruction(new (GetAllocator()) HIf(parameters_[0]));
+  MakeIf(loop3_extra_if_block, param_);
 
   loop3_header->ReplaceSuccessor(loop_body3, loop3_extra_if_block);
   loop3_extra_if_block->AddSuccessor(loop_body1);  // Long exit.

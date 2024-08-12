@@ -195,6 +195,7 @@ filegroup {
 cc_library_static {
     name: "standalone_test_lib_check",
     srcs: ["standalone_test_lib_check.cc"],
+    header_libs: ["art_libartbase_headers"],
     static_libs: [
         "libbase",
         "libelf",

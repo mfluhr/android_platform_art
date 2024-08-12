@@ -511,6 +511,7 @@ art_cc_defaults {
         },
         riscv64: {
             srcs: [
+                "optimizing/instruction_simplifier_riscv64_test.cc",
                 "utils/riscv64/managed_register_riscv64_test.cc",
             ],
         },

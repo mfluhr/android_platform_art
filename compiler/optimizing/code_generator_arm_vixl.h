@@ -121,6 +121,10 @@ using VIXLInt32Literal = vixl::aarch32::Literal<int32_t>;
 using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_ARM(V)                                \
+  V(MathSignumFloat)                                                       \
+  V(MathSignumDouble)                                                      \
+  V(MathCopySignFloat)                                                     \
+  V(MathCopySignDouble)                                                    \
   V(MathRoundDouble) /* Could be done by changing rounding mode, maybe? */ \
   V(UnsafeCASLong)   /* High register pressure */                          \
   V(SystemArrayCopyChar)                                                   \

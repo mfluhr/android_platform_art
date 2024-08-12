@@ -125,6 +125,10 @@ const vixl::aarch64::CPURegList callee_saved_fp_registers(vixl::aarch64::CPURegi
 Location ARM64ReturnLocation(DataType::Type return_type);
 
 #define UNIMPLEMENTED_INTRINSIC_LIST_ARM64(V) \
+  V(MathSignumFloat)                          \
+  V(MathSignumDouble)                         \
+  V(MathCopySignFloat)                        \
+  V(MathCopySignDouble)                       \
   V(IntegerRemainderUnsigned)                 \
   V(LongRemainderUnsigned)                    \
   V(StringStringIndexOf)                      \

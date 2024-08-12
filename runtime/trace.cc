@@ -1468,7 +1468,7 @@ void TraceWriter::PreProcessTraceForMethodInfos(
     uintptr_t method_and_action = method_trace_entries[entry_index];
     ArtMethod* method = reinterpret_cast<ArtMethod*>(method_and_action & kMaskTraceAction);
     if (!HasMethodEncoding(method) && method_infos.find(method) == method_infos.end()) {
-      method_infos.emplace(method, std::move(GetMethodInfoLine(method)));
+      method_infos.emplace(method, GetMethodInfoLine(method));
     }
   }
 }

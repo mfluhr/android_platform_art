@@ -67,25 +67,15 @@ TEST_F(LoadStoreAnalysisTest, ArrayHeapLocations) {
   // array_get2    ArrayGet [array, c2]
   // array_set1    ArraySet [array, c1, c3]
   // array_set2    ArraySet [array, index, c3]
-  HInstruction* array = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* index = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kInt32);
+  HInstruction* array = MakeParam(DataType::Type::kReference);
+  HInstruction* index = MakeParam(DataType::Type::kInt32);
   HInstruction* c1 = graph_->GetIntConstant(1);
   HInstruction* c2 = graph_->GetIntConstant(2);
   HInstruction* c3 = graph_->GetIntConstant(3);
-  HInstruction* array_get1 = new (GetAllocator()) HArrayGet(array, c1, DataType::Type::kInt32, 0);
-  HInstruction* array_get2 = new (GetAllocator()) HArrayGet(array, c2, DataType::Type::kInt32, 0);
-  HInstruction* array_set1 =
-      new (GetAllocator()) HArraySet(array, c1, c3, DataType::Type::kInt32, 0);
-  HInstruction* array_set2 =
-      new (GetAllocator()) HArraySet(array, index, c3, DataType::Type::kInt32, 0);
-  entry->AddInstruction(array);
-  entry->AddInstruction(index);
-  entry->AddInstruction(array_get1);
-  entry->AddInstruction(array_get2);
-  entry->AddInstruction(array_set1);
-  entry->AddInstruction(array_set2);
+  HInstruction* array_get1 = MakeArrayGet(entry, array, c1, DataType::Type::kInt32);
+  HInstruction* array_get2 = MakeArrayGet(entry, array, c2, DataType::Type::kInt32);
+  HInstruction* array_set1 = MakeArraySet(entry, array, c1, c3, DataType::Type::kInt32);
+  HInstruction* array_set2 = MakeArraySet(entry, array, index, c3, DataType::Type::kInt32);
 
   // Test HeapLocationCollector initialization.
   // Should be no heap locations, no operations on the heap.
@@ -149,42 +139,12 @@ TEST_F(LoadStoreAnalysisTest, FieldHeapLocations) {
   // get_field20         InstanceFieldGet [object, 20]
 
   HInstruction* c1 = graph_->GetIntConstant(1);
-  HInstruction* object = new (GetAllocator()) HParameterValue(graph_->GetDexFile(),
-                                                              dex::TypeIndex(0),
-                                                              0,
-                                                              DataType::Type::kReference);
-  HInstanceFieldSet* set_field10 = new (GetAllocator()) HInstanceFieldSet(object,
-                                                                          c1,
-                                                                          nullptr,
-                                                                          DataType::Type::kInt32,
-                                                                          MemberOffset(32),
-                                                                          false,
-                                                                          kUnknownFieldIndex,
-                                                                          kUnknownClassDefIndex,
-                                                                          graph_->GetDexFile(),
-                                                                          0);
-  HInstanceFieldGet* get_field10 = new (GetAllocator()) HInstanceFieldGet(object,
-                                                                          nullptr,
-                                                                          DataType::Type::kInt32,
-                                                                          MemberOffset(32),
-                                                                          false,
-                                                                          kUnknownFieldIndex,
-                                                                          kUnknownClassDefIndex,
-                                                                          graph_->GetDexFile(),
-                                                                          0);
-  HInstanceFieldGet* get_field20 = new (GetAllocator()) HInstanceFieldGet(object,
-                                                                          nullptr,
-                                                                          DataType::Type::kInt32,
-                                                                          MemberOffset(20),
-                                                                          false,
-                                                                          kUnknownFieldIndex,
-                                                                          kUnknownClassDefIndex,
-                                                                          graph_->GetDexFile(),
-                                                                          0);
-  entry->AddInstruction(object);
-  entry->AddInstruction(set_field10);
-  entry->AddInstruction(get_field10);
-  entry->AddInstruction(get_field20);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+  HInstanceFieldSet* set_field10 = MakeIFieldSet(entry, object, c1, MemberOffset(10));
+  HInstanceFieldGet* get_field10 =
+      MakeIFieldGet(entry, object, DataType::Type::kInt32, MemberOffset(10));
+  HInstanceFieldGet* get_field20 =
+      MakeIFieldGet(entry, object, DataType::Type::kInt32, MemberOffset(20));
 
   // Test HeapLocationCollector initialization.
   // Should be no heap locations, no operations on the heap.
@@ -222,53 +182,35 @@ TEST_F(LoadStoreAnalysisTest, ArrayIndexAliasingTest) {
       SetupFromAdjacencyList("entry", "exit", {{"entry", "body"}, {"body", "exit"}}));
   HBasicBlock* body = blks.Get("body");
 
-  HInstruction* array = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* index = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kInt32);
+  HInstruction* array = MakeParam(DataType::Type::kReference);
+  HInstruction* index = MakeParam(DataType::Type::kInt32);
   HInstruction* c0 = graph_->GetIntConstant(0);
   HInstruction* c1 = graph_->GetIntConstant(1);
   HInstruction* c_neg1 = graph_->GetIntConstant(-1);
-  HInstruction* add0 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c0);
-  HInstruction* add1 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c1);
-  HInstruction* sub0 = new (GetAllocator()) HSub(DataType::Type::kInt32, index, c0);
-  HInstruction* sub1 = new (GetAllocator()) HSub(DataType::Type::kInt32, index, c1);
-  HInstruction* sub_neg1 = new (GetAllocator()) HSub(DataType::Type::kInt32, index, c_neg1);
-  HInstruction* rev_sub1 = new (GetAllocator()) HSub(DataType::Type::kInt32, c1, index);
-  HInstruction* arr_set1 = new (GetAllocator()) HArraySet(array, c0, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set2 = new (GetAllocator()) HArraySet(array, c1, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set3 =
-      new (GetAllocator()) HArraySet(array, add0, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set4 =
-      new (GetAllocator()) HArraySet(array, add1, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set5 =
-      new (GetAllocator()) HArraySet(array, sub0, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set6 =
-      new (GetAllocator()) HArraySet(array, sub1, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set7 =
-      new (GetAllocator()) HArraySet(array, rev_sub1, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set8 =
-      new (GetAllocator()) HArraySet(array, sub_neg1, c0, DataType::Type::kInt32, 0);
+  HInstruction* add0 = MakeBinOp<HAdd>(body, DataType::Type::kInt32, index, c0);
+  HInstruction* add1 = MakeBinOp<HAdd>(body, DataType::Type::kInt32, index, c1);
+  HInstruction* sub0 = MakeBinOp<HSub>(body, DataType::Type::kInt32, index, c0);
+  HInstruction* sub1 = MakeBinOp<HSub>(body, DataType::Type::kInt32, index, c1);
+  HInstruction* sub_neg1 = MakeBinOp<HSub>(body, DataType::Type::kInt32, index, c_neg1);
+  HInstruction* rev_sub1 = MakeBinOp<HSub>(body, DataType::Type::kInt32, c1, index);
+  // array[0] = c0
+  HInstruction* arr_set1 = MakeArraySet(body, array, c0, c0, DataType::Type::kInt32);
+  // array[1] = c0
+  HInstruction* arr_set2 = MakeArraySet(body, array, c1, c0, DataType::Type::kInt32);
+  // array[i+0] = c0
+  HInstruction* arr_set3 = MakeArraySet(body, array, add0, c0, DataType::Type::kInt32);
+  // array[i+1] = c0
+  HInstruction* arr_set4 = MakeArraySet(body, array, add1, c0, DataType::Type::kInt32);
+  // array[i-0] = c0
+  HInstruction* arr_set5 = MakeArraySet(body, array, sub0, c0, DataType::Type::kInt32);
+  // array[i-1] = c0
+  HInstruction* arr_set6 = MakeArraySet(body, array, sub1, c0, DataType::Type::kInt32);
+  // array[1-i] = c0
+  HInstruction* arr_set7 = MakeArraySet(body, array, rev_sub1, c0, DataType::Type::kInt32);
+  // array[i-(-1)] = c0
+  HInstruction* arr_set8 = MakeArraySet(body, array, sub_neg1, c0, DataType::Type::kInt32);
 
-  body->AddInstruction(array);
-  body->AddInstruction(index);
-  body->AddInstruction(add0);
-  body->AddInstruction(add1);
-  body->AddInstruction(sub0);
-  body->AddInstruction(sub1);
-  body->AddInstruction(sub_neg1);
-  body->AddInstruction(rev_sub1);
-
-  body->AddInstruction(arr_set1);  // array[0] = c0
-  body->AddInstruction(arr_set2);  // array[1] = c0
-  body->AddInstruction(arr_set3);  // array[i+0] = c0
-  body->AddInstruction(arr_set4);  // array[i+1] = c0
-  body->AddInstruction(arr_set5);  // array[i-0] = c0
-  body->AddInstruction(arr_set6);  // array[i-1] = c0
-  body->AddInstruction(arr_set7);  // array[1-i] = c0
-  body->AddInstruction(arr_set8);  // array[i-(-1)] = c0
-
-  body->AddInstruction(new (GetAllocator()) HReturnVoid());
+  MakeReturnVoid(body);
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -318,125 +260,40 @@ TEST_F(LoadStoreAnalysisTest, ArrayAliasingTest) {
   graph_->SetEntryBlock(entry);
   graph_->BuildDominatorTree();
 
-  HInstruction* array = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* index = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kInt32);
+  HInstruction* array = MakeParam(DataType::Type::kReference);
+  HInstruction* index = MakeParam(DataType::Type::kInt32);
   HInstruction* c0 = graph_->GetIntConstant(0);
   HInstruction* c1 = graph_->GetIntConstant(1);
   HInstruction* c6 = graph_->GetIntConstant(6);
   HInstruction* c8 = graph_->GetIntConstant(8);
 
-  HInstruction* arr_set_0 = new (GetAllocator()) HArraySet(array,
-                                                           c0,
-                                                           c0,
-                                                           DataType::Type::kInt32,
-                                                           0);
-  HInstruction* arr_set_1 = new (GetAllocator()) HArraySet(array,
-                                                           c1,
-                                                           c0,
-                                                           DataType::Type::kInt32,
-                                                           0);
-  HInstruction* arr_set_i = new (GetAllocator()) HArraySet(array,
-                                                           index,
-                                                           c0,
-                                                           DataType::Type::kInt32,
-                                                           0);
+  HInstruction* arr_set_0 = MakeArraySet(entry, array, c0, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_1 = MakeArraySet(entry, array, c1, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_i = MakeArraySet(entry, array, index, c0, DataType::Type::kInt32);
 
   HVecOperation* v1 = new (GetAllocator()) HVecReplicateScalar(GetAllocator(),
                                                                c1,
                                                                DataType::Type::kInt32,
                                                                4,
                                                                kNoDexPc);
+  entry->AddInstruction(v1);
   HVecOperation* v2 = new (GetAllocator()) HVecReplicateScalar(GetAllocator(),
                                                                c1,
                                                                DataType::Type::kInt32,
                                                                2,
                                                                kNoDexPc);
-  HInstruction* i_add6 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c6);
-  HInstruction* i_add8 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c8);
-
-  HInstruction* vstore_0 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      c0,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_1 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      c1,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_8 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      c8,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_i = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      index,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_i_add6 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      i_add6,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_i_add8 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      i_add8,
-      v1,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      4,
-      kNoDexPc);
-  HInstruction* vstore_i_add6_vlen2 = new (GetAllocator()) HVecStore(
-      GetAllocator(),
-      array,
-      i_add6,
-      v2,
-      DataType::Type::kInt32,
-      SideEffects::ArrayWriteOfType(DataType::Type::kInt32),
-      2,
-      kNoDexPc);
-
-  entry->AddInstruction(array);
-  entry->AddInstruction(index);
-
-  entry->AddInstruction(arr_set_0);
-  entry->AddInstruction(arr_set_1);
-  entry->AddInstruction(arr_set_i);
-  entry->AddInstruction(v1);
   entry->AddInstruction(v2);
-  entry->AddInstruction(i_add6);
-  entry->AddInstruction(i_add8);
-  entry->AddInstruction(vstore_0);
-  entry->AddInstruction(vstore_1);
-  entry->AddInstruction(vstore_8);
-  entry->AddInstruction(vstore_i);
-  entry->AddInstruction(vstore_i_add6);
-  entry->AddInstruction(vstore_i_add8);
-  entry->AddInstruction(vstore_i_add6_vlen2);
+  HInstruction* i_add6 = MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c6);
+  HInstruction* i_add8 = MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c8);
+
+  HInstruction* vstore_0 = MakeVecStore(entry, array, c0, v1, DataType::Type::kInt32);
+  HInstruction* vstore_1 = MakeVecStore(entry, array, c1, v1, DataType::Type::kInt32);
+  HInstruction* vstore_8 = MakeVecStore(entry, array, c8, v1, DataType::Type::kInt32);
+  HInstruction* vstore_i = MakeVecStore(entry, array, index, v1, DataType::Type::kInt32);
+  HInstruction* vstore_i_add6 = MakeVecStore(entry, array, i_add6, v1, DataType::Type::kInt32);
+  HInstruction* vstore_i_add8 = MakeVecStore(entry, array, i_add8, v1, DataType::Type::kInt32);
+  HInstruction* vstore_i_add6_vlen2 =
+      MakeVecStore(entry, array, i_add6, v2, DataType::Type::kInt32, /*vector_lengt=*/ 2);
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -530,10 +387,8 @@ TEST_F(LoadStoreAnalysisTest, ArrayIndexCalculationOverflowTest) {
   graph_->SetEntryBlock(entry);
   graph_->BuildDominatorTree();
 
-  HInstruction* array = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* index = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kInt32);
+  HInstruction* array = MakeParam(DataType::Type::kReference);
+  HInstruction* index = MakeParam(DataType::Type::kInt32);
 
   HInstruction* c0 = graph_->GetIntConstant(0);
   HInstruction* c_0x80000000 = graph_->GetIntConstant(0x80000000);
@@ -543,60 +398,33 @@ TEST_F(LoadStoreAnalysisTest, ArrayIndexCalculationOverflowTest) {
   HInstruction* c_0x80000001 = graph_->GetIntConstant(0x80000001);
 
   // `index+0x80000000` and `index-0x80000000` array indices MAY alias.
-  HInstruction* add_0x80000000 = new (GetAllocator()) HAdd(
-      DataType::Type::kInt32, index, c_0x80000000);
-  HInstruction* sub_0x80000000 = new (GetAllocator()) HSub(
-      DataType::Type::kInt32, index, c_0x80000000);
-  HInstruction* arr_set_1 = new (GetAllocator()) HArraySet(
-      array, add_0x80000000, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set_2 = new (GetAllocator()) HArraySet(
-      array, sub_0x80000000, c0, DataType::Type::kInt32, 0);
+  HInstruction* add_0x80000000 =
+      MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c_0x80000000);
+  HInstruction* sub_0x80000000 =
+      MakeBinOp<HSub>(entry, DataType::Type::kInt32, index, c_0x80000000);
+  HInstruction* arr_set_1 = MakeArraySet(entry, array, add_0x80000000, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_2 = MakeArraySet(entry, array, sub_0x80000000, c0, DataType::Type::kInt32);
 
   // `index+0x10` and `index-0xFFFFFFF0` array indices MAY alias.
-  HInstruction* add_0x10 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c_0x10);
-  HInstruction* sub_0xFFFFFFF0 = new (GetAllocator()) HSub(
-      DataType::Type::kInt32, index, c_0xFFFFFFF0);
-  HInstruction* arr_set_3 = new (GetAllocator()) HArraySet(
-      array, add_0x10, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set_4 = new (GetAllocator()) HArraySet(
-      array, sub_0xFFFFFFF0, c0, DataType::Type::kInt32, 0);
+  HInstruction* add_0x10 = MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c_0x10);
+  HInstruction* sub_0xFFFFFFF0 =
+      MakeBinOp<HSub>(entry, DataType::Type::kInt32, index, c_0xFFFFFFF0);
+  HInstruction* arr_set_3 = MakeArraySet(entry, array, add_0x10, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_4 = MakeArraySet(entry, array, sub_0xFFFFFFF0, c0, DataType::Type::kInt32);
 
   // `index+0x7FFFFFFF` and `index-0x80000001` array indices MAY alias.
-  HInstruction* add_0x7FFFFFFF = new (GetAllocator()) HAdd(
-      DataType::Type::kInt32, index, c_0x7FFFFFFF);
-  HInstruction* sub_0x80000001 = new (GetAllocator()) HSub(
-      DataType::Type::kInt32, index, c_0x80000001);
-  HInstruction* arr_set_5 = new (GetAllocator()) HArraySet(
-      array, add_0x7FFFFFFF, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set_6 = new (GetAllocator()) HArraySet(
-      array, sub_0x80000001, c0, DataType::Type::kInt32, 0);
+  HInstruction* add_0x7FFFFFFF =
+      MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c_0x7FFFFFFF);
+  HInstruction* sub_0x80000001 =
+      MakeBinOp<HSub>(entry, DataType::Type::kInt32, index, c_0x80000001);
+  HInstruction* arr_set_5 = MakeArraySet(entry, array, add_0x7FFFFFFF, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_6 = MakeArraySet(entry, array, sub_0x80000001, c0, DataType::Type::kInt32);
 
   // `index+0` and `index-0` array indices MAY alias.
-  HInstruction* add_0 = new (GetAllocator()) HAdd(DataType::Type::kInt32, index, c0);
-  HInstruction* sub_0 = new (GetAllocator()) HSub(DataType::Type::kInt32, index, c0);
-  HInstruction* arr_set_7 = new (GetAllocator()) HArraySet(
-      array, add_0, c0, DataType::Type::kInt32, 0);
-  HInstruction* arr_set_8 = new (GetAllocator()) HArraySet(
-      array, sub_0, c0, DataType::Type::kInt32, 0);
-
-  entry->AddInstruction(array);
-  entry->AddInstruction(index);
-  entry->AddInstruction(add_0x80000000);
-  entry->AddInstruction(sub_0x80000000);
-  entry->AddInstruction(add_0x10);
-  entry->AddInstruction(sub_0xFFFFFFF0);
-  entry->AddInstruction(add_0x7FFFFFFF);
-  entry->AddInstruction(sub_0x80000001);
-  entry->AddInstruction(add_0);
-  entry->AddInstruction(sub_0);
-  entry->AddInstruction(arr_set_1);
-  entry->AddInstruction(arr_set_2);
-  entry->AddInstruction(arr_set_3);
-  entry->AddInstruction(arr_set_4);
-  entry->AddInstruction(arr_set_5);
-  entry->AddInstruction(arr_set_6);
-  entry->AddInstruction(arr_set_7);
-  entry->AddInstruction(arr_set_8);
+  HInstruction* add_0 = MakeBinOp<HAdd>(entry, DataType::Type::kInt32, index, c0);
+  HInstruction* sub_0 = MakeBinOp<HSub>(entry, DataType::Type::kInt32, index, c0);
+  HInstruction* arr_set_7 = MakeArraySet(entry, array, add_0, c0, DataType::Type::kInt32);
+  HInstruction* arr_set_8 = MakeArraySet(entry, array, sub_0, c0, DataType::Type::kInt32);
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -654,40 +482,19 @@ TEST_F(LoadStoreAnalysisTest, TestHuntOriginalRef) {
   // ParameterValue --> BoundType --> NullCheck --> ArrayGet
   // ParameterValue --> BoundType --> NullCheck --> IntermediateAddress --> ArrayGet
   HInstruction* c1 = graph_->GetIntConstant(1);
-  HInstruction* array = new (GetAllocator()) HParameterValue(graph_->GetDexFile(),
-                                                             dex::TypeIndex(0),
-                                                             0,
-                                                             DataType::Type::kReference);
-  HInstruction* array_get1 = new (GetAllocator()) HArrayGet(array,
-                                                            c1,
-                                                            DataType::Type::kInt32,
-                                                            0);
+  HInstruction* array = MakeParam(DataType::Type::kReference);
+  HInstruction* array_get1 = MakeArrayGet(entry, array, c1, DataType::Type::kInt32);
 
   HInstruction* bound_type = new (GetAllocator()) HBoundType(array);
-  HInstruction* array_get2 = new (GetAllocator()) HArrayGet(bound_type,
-                                                            c1,
-                                                            DataType::Type::kInt32,
-                                                            0);
+  entry->AddInstruction(bound_type);
+  HInstruction* array_get2 = MakeArrayGet(entry, bound_type, c1, DataType::Type::kInt32);
 
-  HInstruction* null_check = new (GetAllocator()) HNullCheck(bound_type, 0);
-  HInstruction* array_get3 = new (GetAllocator()) HArrayGet(null_check,
-                                                            c1,
-                                                            DataType::Type::kInt32,
-                                                            0);
+  HInstruction* null_check = MakeNullCheck(entry, bound_type);
+  HInstruction* array_get3 = MakeArrayGet(entry, null_check, c1, DataType::Type::kInt32);
 
   HInstruction* inter_addr = new (GetAllocator()) HIntermediateAddress(null_check, c1, 0);
-  HInstruction* array_get4 = new (GetAllocator()) HArrayGet(inter_addr,
-                                                            c1,
-                                                            DataType::Type::kInt32,
-                                                            0);
-  entry->AddInstruction(array);
-  entry->AddInstruction(array_get1);
-  entry->AddInstruction(bound_type);
-  entry->AddInstruction(array_get2);
-  entry->AddInstruction(null_check);
-  entry->AddInstruction(array_get3);
   entry->AddInstruction(inter_addr);
-  entry->AddInstruction(array_get4);
+  HInstruction* array_get4 = MakeArrayGet(entry, inter_addr, c1, DataType::Type::kInt32);
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   HeapLocationCollector heap_location_collector(graph_, &allocator);
@@ -731,84 +538,21 @@ TEST_F(LoadStoreAnalysisTest, TotalEscape) {
   HBasicBlock* right = blks.Get("right");
   HBasicBlock* exit = blks.Get("exit");
 
-  HInstruction* bool_value = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kBool);
+  HInstruction* bool_value = MakeParam(DataType::Type::kBool);
   HInstruction* c0 = graph_->GetIntConstant(0);
-  HInstruction* cls = new (GetAllocator()) HLoadClass(graph_->GetCurrentMethod(),
-                                                      dex::TypeIndex(10),
-                                                      graph_->GetDexFile(),
-                                                      ScopedNullHandle<mirror::Class>(),
-                                                      false,
-                                                      0,
-                                                      false);
-  HInstruction* new_inst =
-      new (GetAllocator()) HNewInstance(cls,
-                                        0,
-                                        dex::TypeIndex(10),
-                                        graph_->GetDexFile(),
-                                        false,
-                                        QuickEntrypointEnum::kQuickAllocObjectInitialized);
-  HInstruction* if_inst = new (GetAllocator()) HIf(bool_value);
-  entry->AddInstruction(bool_value);
-  entry->AddInstruction(cls);
-  entry->AddInstruction(new_inst);
-  entry->AddInstruction(if_inst);
+  HInstruction* cls = MakeLoadClass(entry);
+  HInstruction* new_inst = MakeNewInstance(entry, cls);
+  MakeIf(entry, bool_value);
 
-  HInstruction* call_left = new (GetAllocator())
-      HInvokeStaticOrDirect(GetAllocator(),
-                            1,
-                            DataType::Type::kVoid,
-                            0,
-                            { nullptr, 0 },
-                            nullptr,
-                            {},
-                            InvokeType::kStatic,
-                            { nullptr, 0 },
-                            HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
-                            !graph_->IsDebuggable());
-  HInstruction* goto_left = new (GetAllocator()) HGoto();
-  call_left->SetRawInputAt(0, new_inst);
-  left->AddInstruction(call_left);
-  left->AddInstruction(goto_left);
+  HInstruction* call_left = MakeInvokeStatic(left, DataType::Type::kVoid, {new_inst});
+  MakeGoto(left);
 
-  HInstruction* call_right = new (GetAllocator())
-      HInvokeStaticOrDirect(GetAllocator(),
-                            1,
-                            DataType::Type::kVoid,
-                            0,
-                            { nullptr, 0 },
-                            nullptr,
-                            {},
-                            InvokeType::kStatic,
-                            { nullptr, 0 },
-                            HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
-                            !graph_->IsDebuggable());
-  HInstruction* write_right = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                                     c0,
-                                                                     nullptr,
-                                                                     DataType::Type::kInt32,
-                                                                     MemberOffset(32),
-                                                                     false,
-                                                                     0,
-                                                                     0,
-                                                                     graph_->GetDexFile(),
-                                                                     0);
-  HInstruction* goto_right = new (GetAllocator()) HGoto();
-  call_right->SetRawInputAt(0, new_inst);
-  right->AddInstruction(write_right);
-  right->AddInstruction(call_right);
-  right->AddInstruction(goto_right);
+  HInstruction* call_right = MakeInvokeStatic(right, DataType::Type::kVoid, {new_inst});
+  HInstruction* write_right = MakeIFieldSet(right, new_inst, c0, MemberOffset(32));
+  MakeGoto(right);
 
-  HInstruction* read_final = new (GetAllocator()) HInstanceFieldGet(new_inst,
-                                                                    nullptr,
-                                                                    DataType::Type::kInt32,
-                                                                    MemberOffset(32),
-                                                                    false,
-                                                                    0,
-                                                                    0,
-                                                                    graph_->GetDexFile(),
-                                                                    0);
-  exit->AddInstruction(read_final);
+  HInstruction* read_final =
+      MakeIFieldGet(exit, new_inst, DataType::Type::kInt32, MemberOffset(32));
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -831,39 +575,12 @@ TEST_F(LoadStoreAnalysisTest, TotalEscape2) {
   HBasicBlock* exit = blks.Get("exit");
 
   HInstruction* c0 = graph_->GetIntConstant(0);
-  HInstruction* cls = new (GetAllocator()) HLoadClass(graph_->GetCurrentMethod(),
-                                                      dex::TypeIndex(10),
-                                                      graph_->GetDexFile(),
-                                                      ScopedNullHandle<mirror::Class>(),
-                                                      false,
-                                                      0,
-                                                      false);
-  HInstruction* new_inst =
-      new (GetAllocator()) HNewInstance(cls,
-                                        0,
-                                        dex::TypeIndex(10),
-                                        graph_->GetDexFile(),
-                                        false,
-                                        QuickEntrypointEnum::kQuickAllocObjectInitialized);
+  HInstruction* cls = MakeLoadClass(entry);
+  HInstruction* new_inst = MakeNewInstance(entry, cls);
+  HInstruction* write_start = MakeIFieldSet(entry, new_inst, c0, MemberOffset(32));
+  MakeGoto(entry);
 
-  HInstruction* write_start = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                                     c0,
-                                                                     nullptr,
-                                                                     DataType::Type::kInt32,
-                                                                     MemberOffset(32),
-                                                                     false,
-                                                                     0,
-                                                                     0,
-                                                                     graph_->GetDexFile(),
-                                                                     0);
-  HInstruction* goto_inst = new (GetAllocator()) HGoto();
-  entry->AddInstruction(cls);
-  entry->AddInstruction(new_inst);
-  entry->AddInstruction(write_start);
-  entry->AddInstruction(goto_inst);
-
-  HInstruction* return_final = new (GetAllocator()) HReturn(new_inst);
-  exit->AddInstruction(return_final);
+  MakeReturn(exit, new_inst);
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -914,131 +631,33 @@ TEST_F(LoadStoreAnalysisTest, DoubleDiamondEscape) {
   HBasicBlock* low_right = blks.Get("low_right");
   HBasicBlock* exit = blks.Get("exit");
 
-  HInstruction* bool_value1 = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kBool);
-  HInstruction* bool_value2 = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(1), 2, DataType::Type::kBool);
+  HInstruction* bool_value1 = MakeParam(DataType::Type::kBool);
+  HInstruction* bool_value2 = MakeParam(DataType::Type::kBool);
   HInstruction* c0 = graph_->GetIntConstant(0);
   HInstruction* c2 = graph_->GetIntConstant(2);
-  HInstruction* cls = new (GetAllocator()) HLoadClass(graph_->GetCurrentMethod(),
-                                                      dex::TypeIndex(10),
-                                                      graph_->GetDexFile(),
-                                                      ScopedNullHandle<mirror::Class>(),
-                                                      false,
-                                                      0,
-                                                      false);
-  HInstruction* new_inst =
-      new (GetAllocator()) HNewInstance(cls,
-                                        0,
-                                        dex::TypeIndex(10),
-                                        graph_->GetDexFile(),
-                                        false,
-                                        QuickEntrypointEnum::kQuickAllocObjectInitialized);
-  HInstruction* if_inst = new (GetAllocator()) HIf(bool_value1);
-  entry->AddInstruction(bool_value1);
-  entry->AddInstruction(bool_value2);
-  entry->AddInstruction(cls);
-  entry->AddInstruction(new_inst);
-  entry->AddInstruction(if_inst);
+  HInstruction* cls = MakeLoadClass(entry);
+  HInstruction* new_inst = MakeNewInstance(entry, cls);
+  MakeIf(entry, bool_value1);
 
-  HInstruction* call_left = new (GetAllocator())
-      HInvokeStaticOrDirect(GetAllocator(),
-                            1,
-                            DataType::Type::kVoid,
-                            0,
-                            { nullptr, 0 },
-                            nullptr,
-                            {},
-                            InvokeType::kStatic,
-                            { nullptr, 0 },
-                            HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
-                            !graph_->IsDebuggable());
-  HInstruction* goto_left = new (GetAllocator()) HGoto();
-  call_left->SetRawInputAt(0, new_inst);
-  high_left->AddInstruction(call_left);
-  high_left->AddInstruction(goto_left);
+  HInstruction* call_left = MakeInvokeStatic(high_left, DataType::Type::kVoid, {new_inst});
+  MakeGoto(high_left);
 
-  HInstruction* write_right = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                                     c0,
-                                                                     nullptr,
-                                                                     DataType::Type::kInt32,
-                                                                     MemberOffset(32),
-                                                                     false,
-                                                                     0,
-                                                                     0,
-                                                                     graph_->GetDexFile(),
-                                                                     0);
-  HInstruction* goto_right = new (GetAllocator()) HGoto();
-  high_right->AddInstruction(write_right);
-  high_right->AddInstruction(goto_right);
+  HInstruction* write_right = MakeIFieldSet(high_right, new_inst, c0, MemberOffset(32));
+  MakeGoto(high_right);
 
-  HInstruction* read_mid = new (GetAllocator()) HInstanceFieldGet(new_inst,
-                                                                  nullptr,
-                                                                  DataType::Type::kInt32,
-                                                                  MemberOffset(32),
-                                                                  false,
-                                                                  0,
-                                                                  0,
-                                                                  graph_->GetDexFile(),
-                                                                  0);
-  HInstruction* mul_mid = new (GetAllocator()) HMul(DataType::Type::kInt32, read_mid, c2);
-  HInstruction* write_mid = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                                   mul_mid,
-                                                                   nullptr,
-                                                                   DataType::Type::kInt32,
-                                                                   MemberOffset(32),
-                                                                   false,
-                                                                   0,
-                                                                   0,
-                                                                   graph_->GetDexFile(),
-                                                                   0);
-  HInstruction* if_mid = new (GetAllocator()) HIf(bool_value2);
-  mid->AddInstruction(read_mid);
-  mid->AddInstruction(mul_mid);
-  mid->AddInstruction(write_mid);
-  mid->AddInstruction(if_mid);
+  HInstruction* read_mid = MakeIFieldGet(mid, new_inst, DataType::Type::kInt32, MemberOffset(32));
+  HInstruction* mul_mid = MakeBinOp<HMul>(mid, DataType::Type::kInt32, read_mid, c2);
+  HInstruction* write_mid = MakeIFieldSet(mid, new_inst, mul_mid, MemberOffset(32));
+  MakeIf(mid, bool_value2);
 
-  HInstruction* call_low_left = new (GetAllocator())
-      HInvokeStaticOrDirect(GetAllocator(),
-                            1,
-                            DataType::Type::kVoid,
-                            0,
-                            { nullptr, 0 },
-                            nullptr,
-                            {},
-                            InvokeType::kStatic,
-                            { nullptr, 0 },
-                            HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
-                            !graph_->IsDebuggable());
-  HInstruction* goto_low_left = new (GetAllocator()) HGoto();
-  call_low_left->SetRawInputAt(0, new_inst);
-  low_left->AddInstruction(call_low_left);
-  low_left->AddInstruction(goto_low_left);
+  HInstruction* call_low_left = MakeInvokeStatic(low_left, DataType::Type::kVoid, {new_inst});
+  MakeGoto(low_left);
 
-  HInstruction* write_low_right = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                                         c0,
-                                                                         nullptr,
-                                                                         DataType::Type::kInt32,
-                                                                         MemberOffset(32),
-                                                                         false,
-                                                                         0,
-                                                                         0,
-                                                                         graph_->GetDexFile(),
-                                                                         0);
-  HInstruction* goto_low_right = new (GetAllocator()) HGoto();
-  low_right->AddInstruction(write_low_right);
-  low_right->AddInstruction(goto_low_right);
+  HInstruction* write_low_right = MakeIFieldSet(low_right, new_inst, c0, MemberOffset(32));
+  MakeGoto(low_right);
 
-  HInstruction* read_final = new (GetAllocator()) HInstanceFieldGet(new_inst,
-                                                                    nullptr,
-                                                                    DataType::Type::kInt32,
-                                                                    MemberOffset(32),
-                                                                    false,
-                                                                    0,
-                                                                    0,
-                                                                    graph_->GetDexFile(),
-                                                                    0);
-  exit->AddInstruction(read_final);
+  HInstruction* read_final =
+      MakeIFieldGet(exit, new_inst, DataType::Type::kInt32, MemberOffset(32));
 
   ScopedArenaAllocator allocator(graph_->GetArenaStack());
   LoadStoreAnalysis lsa(graph_, nullptr, &allocator);
@@ -1102,105 +721,38 @@ TEST_F(LoadStoreAnalysisTest, PartialPhiPropagation1) {
 #undef GET_BLOCK
   EnsurePredecessorOrder(breturn, {left_merge, right});
   EnsurePredecessorOrder(left_merge, {left_left, left_right});
-  HInstruction* param1 = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(1), 1, DataType::Type::kBool);
-  HInstruction* param2 = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(1), 2, DataType::Type::kBool);
-  HInstruction* obj_param = new (GetAllocator())
-      HParameterValue(graph_->GetDexFile(), dex::TypeIndex(10), 3, DataType::Type::kReference);
+  HInstruction* param1 = MakeParam(DataType::Type::kBool);
+  HInstruction* param2 = MakeParam(DataType::Type::kBool);
+  HInstruction* obj_param = MakeParam(DataType::Type::kReference);
   HInstruction* c12 = graph_->GetIntConstant(12);
-  HInstruction* cls = new (GetAllocator()) HLoadClass(graph_->GetCurrentMethod(),
-                                                      dex::TypeIndex(10),
-                                                      graph_->GetDexFile(),
-                                                      ScopedNullHandle<mirror::Class>(),
-                                                      false,
-                                                      0,
-                                                      false);
-  HInstruction* new_inst =
-      new (GetAllocator()) HNewInstance(cls,
-                                        0,
-                                        dex::TypeIndex(10),
-                                        graph_->GetDexFile(),
-                                        false,
-                                        QuickEntrypointEnum::kQuickAllocObjectInitialized);
-  HInstruction* store = new (GetAllocator()) HInstanceFieldSet(new_inst,
-                                                               c12,
-                                                               nullptr,
-                                                               DataType::Type::kInt32,
-                                                               MemberOffset(32),
-                                                               false,
-                                                               0,
-                                                               0,
-                                                               graph_->GetDexFile(),
-                                                               0);
-  HInstruction* if_param1 = new (GetAllocator()) HIf(param1);
-  entry->AddInstruction(param1);
-  entry->AddInstruction(param2);
-  entry->AddInstruction(obj_param);
-  entry->AddInstruction(cls);
-  entry->AddInstruction(new_inst);
-  entry->AddInstruction(store);
-  entry->AddInstruction(if_param1);
+  HInstruction* cls = MakeLoadClass(entry);
+  HInstruction* new_inst = MakeNewInstance(entry, cls);
+  HInstruction* store = MakeIFieldSet(entry, new_inst, c12, MemberOffset(32));
+  MakeIf(entry, param1);
   ArenaVector<HInstruction*> current_locals({}, GetAllocator()->Adapter(kArenaAllocInstruction));
   ManuallyBuildEnvFor(cls, &current_locals);
   new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
-  HInstruction* if_left = new (GetAllocator()) HIf(param2);
-  left->AddInstruction(if_left);
+  MakeIf(left, param2);
 
-  HInstruction* goto_left_left = new (GetAllocator()) HGoto();
-  left_left->AddInstruction(goto_left_left);
+  MakeGoto(left_left);
 
-  HInstruction* goto_left_right = new (GetAllocator()) HGoto();
-  left_right->AddInstruction(goto_left_right);
+  MakeGoto(left_right);
 
-  HPhi* left_phi =
-      new (GetAllocator()) HPhi(GetAllocator(), kNoRegNumber, 2, DataType::Type::kReference);
-  HInstruction* call_left = new (GetAllocator())
-      HInvokeStaticOrDirect(GetAllocator(),
-                            1,
-                            DataType::Type::kVoid,
-                            0,
-                            {nullptr, 0},
-                            nullptr,
-                            {},
-                            InvokeType::kStatic,
-                            {nullptr, 0},
-                            HInvokeStaticOrDirect::ClinitCheckRequirement::kNone,
-                            !graph_->IsDebuggable());
-  HInstruction* goto_left_merge = new (GetAllocator()) HGoto();
-  left_phi->SetRawInputAt(0, obj_param);
-  left_phi->SetRawInputAt(1, new_inst);
-  call_left->SetRawInputAt(0, left_phi);
-  left_merge->AddPhi(left_phi);
-  left_merge->AddInstruction(call_left);
-  left_merge->AddInstruction(goto_left_merge);
+  HPhi* left_phi = MakePhi(left_merge, {obj_param, new_inst});
+  HInstruction* call_left = MakeInvokeStatic(left_merge, DataType::Type::kVoid, {left_phi});
+  MakeGoto(left_merge);
   left_phi->SetCanBeNull(true);
   call_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
-  HInstruction* goto_right = new (GetAllocator()) HGoto();
-  right->AddInstruction(goto_right);
+  MakeGoto(right);
 
-  HPhi* return_phi =
-      new (GetAllocator()) HPhi(GetAllocator(), kNoRegNumber, 2, DataType::Type::kReference);
-  HInstruction* read_exit = new (GetAllocator()) HInstanceFieldGet(return_phi,
-                                                                   nullptr,
-                                                                   DataType::Type::kReference,
-                                                                   MemberOffset(32),
-                                                                   false,
-                                                                   0,
-                                                                   0,
-                                                                   graph_->GetDexFile(),
-                                                                   0);
-  HInstruction* return_exit = new (GetAllocator()) HReturn(read_exit);
-  return_phi->SetRawInputAt(0, left_phi);
-  return_phi->SetRawInputAt(1, obj_param);
-  breturn->AddPhi(return_phi);
-  breturn->AddInstruction(read_exit);
-  breturn->AddInstruction(return_exit);
+  HPhi* return_phi = MakePhi(breturn, {left_phi, obj_param});
+  HInstruction* read_exit =
+      MakeIFieldGet(breturn, return_phi, DataType::Type::kReference, MemberOffset(32));
+  MakeReturn(breturn, read_exit);
 
-  HInstruction* exit_instruction = new (GetAllocator()) HExit();
-  exit->AddInstruction(exit_instruction);
+  MakeExit(exit);
 
   graph_->ClearDominanceInformation();
   graph_->BuildDominatorTree();

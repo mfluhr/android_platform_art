@@ -748,10 +748,8 @@ TEST_F(ConstantFoldingTest, UnsignedComparisonsWithZero) {
   block->AddSuccessor(exit_block);
 
   // Make various unsigned comparisons with zero against a parameter.
-  HInstruction* parameter = new (GetAllocator()) HParameterValue(
-      graph_->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kInt32, true);
-  entry_block->AddInstruction(parameter);
-  entry_block->AddInstruction(new (GetAllocator()) HGoto());
+  HInstruction* parameter = MakeParam(DataType::Type::kInt32);
+  MakeGoto(entry_block);
 
   HInstruction* zero = graph_->GetIntConstant(0);
 
@@ -772,9 +770,9 @@ TEST_F(ConstantFoldingTest, UnsignedComparisonsWithZero) {
   block->AddInstruction(new (GetAllocator()) HSelect(last, parameter, parameter, 0));
   block->AddInstruction(last = new (GetAllocator()) HBelowOrEqual(parameter, zero));
   block->AddInstruction(new (GetAllocator()) HSelect(last, parameter, parameter, 0));
-  block->AddInstruction(new (GetAllocator()) HReturn(zero));
+  MakeReturn(block, zero);
 
-  exit_block->AddInstruction(new (GetAllocator()) HExit());
+  MakeExit(exit_block);
 
   graph_->BuildDominatorTree();
 

@@ -417,16 +417,15 @@ TEST_F(CodegenTest, NonMaterializedCondition) {
     HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
     graph->AddBlock(entry);
     graph->SetEntryBlock(entry);
-    entry->AddInstruction(new (GetAllocator()) HGoto());
+    MakeGoto(entry);
 
     HBasicBlock* first_block = new (GetAllocator()) HBasicBlock(graph);
     graph->AddBlock(first_block);
     entry->AddSuccessor(first_block);
     HIntConstant* constant0 = graph->GetIntConstant(0);
     HIntConstant* constant1 = graph->GetIntConstant(1);
-    HEqual* equal = new (GetAllocator()) HEqual(constant0, constant0);
-    first_block->AddInstruction(equal);
-    first_block->AddInstruction(new (GetAllocator()) HIf(equal));
+    HEqual* equal = MakeCondition<HEqual>(first_block, constant0, constant0);
+    MakeIf(first_block, equal);
 
     HBasicBlock* then_block = new (GetAllocator()) HBasicBlock(graph);
     HBasicBlock* else_block = new (GetAllocator()) HBasicBlock(graph);
@@ -441,9 +440,9 @@ TEST_F(CodegenTest, NonMaterializedCondition) {
     then_block->AddSuccessor(exit_block);
     else_block->AddSuccessor(exit_block);
 
-    exit_block->AddInstruction(new (GetAllocator()) HExit());
-    then_block->AddInstruction(new (GetAllocator()) HReturn(constant0));
-    else_block->AddInstruction(new (GetAllocator()) HReturn(constant1));
+    MakeExit(exit_block);
+    MakeReturn(then_block, constant0);
+    MakeReturn(else_block, constant1);
 
     ASSERT_FALSE(equal->IsEmittedAtUseSite());
     graph->BuildDominatorTree();
@@ -479,12 +478,12 @@ TEST_F(CodegenTest, MaterializedCondition1) {
       HBasicBlock* entry_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(entry_block);
       graph->SetEntryBlock(entry_block);
-      entry_block->AddInstruction(new (GetAllocator()) HGoto());
+      MakeGoto(entry_block);
       HBasicBlock* code_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(code_block);
       HBasicBlock* exit_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(exit_block);
-      exit_block->AddInstruction(new (GetAllocator()) HExit());
+      MakeExit(exit_block);
 
       entry_block->AddSuccessor(code_block);
       code_block->AddSuccessor(exit_block);
@@ -492,10 +491,8 @@ TEST_F(CodegenTest, MaterializedCondition1) {
 
       HIntConstant* cst_lhs = graph->GetIntConstant(lhs[i]);
       HIntConstant* cst_rhs = graph->GetIntConstant(rhs[i]);
-      HLessThan cmp_lt(cst_lhs, cst_rhs);
-      code_block->AddInstruction(&cmp_lt);
-      HReturn ret(&cmp_lt);
-      code_block->AddInstruction(&ret);
+      HInstruction* cmp_lt = MakeCondition<HLessThan>(code_block, cst_lhs, cst_rhs);
+      MakeReturn(code_block, cmp_lt);
 
       graph->BuildDominatorTree();
       auto hook_before_codegen = [](HGraph* graph_in) {
@@ -528,7 +525,7 @@ TEST_F(CodegenTest, MaterializedCondition2) {
       HBasicBlock* entry_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(entry_block);
       graph->SetEntryBlock(entry_block);
-      entry_block->AddInstruction(new (GetAllocator()) HGoto());
+      MakeGoto(entry_block);
 
       HBasicBlock* if_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(if_block);
@@ -538,7 +535,7 @@ TEST_F(CodegenTest, MaterializedCondition2) {
       graph->AddBlock(if_false_block);
       HBasicBlock* exit_block = new (GetAllocator()) HBasicBlock(graph);
       graph->AddBlock(exit_block);
-      exit_block->AddInstruction(new (GetAllocator()) HExit());
+      MakeExit(exit_block);
 
       graph->SetEntryBlock(entry_block);
       entry_block->AddSuccessor(if_block);
@@ -550,21 +547,18 @@ TEST_F(CodegenTest, MaterializedCondition2) {
 
       HIntConstant* cst_lhs = graph->GetIntConstant(lhs[i]);
       HIntConstant* cst_rhs = graph->GetIntConstant(rhs[i]);
-      HLessThan cmp_lt(cst_lhs, cst_rhs);
-      if_block->AddInstruction(&cmp_lt);
+      HInstruction* cmp_lt = MakeCondition<HLessThan>(if_block, cst_lhs, cst_rhs);
       // We insert a fake instruction to separate the HIf from the HLessThan
       // and force the materialization of the condition.
-      HMemoryBarrier force_materialization(MemBarrierKind::kAnyAny, 0);
-      if_block->AddInstruction(&force_materialization);
-      HIf if_lt(&cmp_lt);
-      if_block->AddInstruction(&if_lt);
+      HInstruction* force_materialization =
+          new (GetAllocator()) HMemoryBarrier(MemBarrierKind::kAnyAny, 0);
+      if_block->AddInstruction(force_materialization);
+      MakeIf(if_block, cmp_lt);
 
       HIntConstant* cst_lt = graph->GetIntConstant(1);
-      HReturn ret_lt(cst_lt);
-      if_true_block->AddInstruction(&ret_lt);
+      MakeReturn(if_true_block, cst_lt);
       HIntConstant* cst_ge = graph->GetIntConstant(0);
-      HReturn ret_ge(cst_ge);
-      if_false_block->AddInstruction(&ret_ge);
+      MakeReturn(if_false_block, cst_ge);
 
       graph->BuildDominatorTree();
       auto hook_before_codegen = [](HGraph* graph_in) {
@@ -610,7 +604,7 @@ void CodegenTest::TestComparison(IfCondition condition,
   HBasicBlock* entry_block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(entry_block);
   graph->SetEntryBlock(entry_block);
-  entry_block->AddInstruction(new (GetAllocator()) HGoto());
+  MakeGoto(entry_block);
 
   HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(block);
@@ -618,7 +612,7 @@ void CodegenTest::TestComparison(IfCondition condition,
   HBasicBlock* exit_block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(exit_block);
   graph->SetExitBlock(exit_block);
-  exit_block->AddInstruction(new (GetAllocator()) HExit());
+  MakeExit(exit_block);
 
   entry_block->AddSuccessor(block);
   block->AddSuccessor(exit_block);
@@ -640,48 +634,47 @@ void CodegenTest::TestComparison(IfCondition condition,
   const uint64_t y = j;
   switch (condition) {
     case kCondEQ:
-      comparison = new (GetAllocator()) HEqual(op1, op2);
+      comparison = MakeCondition<HEqual>(block, op1, op2);
       expected_result = (i == j);
       break;
     case kCondNE:
-      comparison = new (GetAllocator()) HNotEqual(op1, op2);
+      comparison = MakeCondition<HNotEqual>(block, op1, op2);
       expected_result = (i != j);
       break;
     case kCondLT:
-      comparison = new (GetAllocator()) HLessThan(op1, op2);
+      comparison = MakeCondition<HLessThan>(block, op1, op2);
       expected_result = (i < j);
       break;
     case kCondLE:
-      comparison = new (GetAllocator()) HLessThanOrEqual(op1, op2);
+      comparison = MakeCondition<HLessThanOrEqual>(block, op1, op2);
       expected_result = (i <= j);
       break;
     case kCondGT:
-      comparison = new (GetAllocator()) HGreaterThan(op1, op2);
+      comparison = MakeCondition<HGreaterThan>(block, op1, op2);
       expected_result = (i > j);
       break;
     case kCondGE:
-      comparison = new (GetAllocator()) HGreaterThanOrEqual(op1, op2);
+      comparison = MakeCondition<HGreaterThanOrEqual>(block, op1, op2);
       expected_result = (i >= j);
       break;
     case kCondB:
-      comparison = new (GetAllocator()) HBelow(op1, op2);
+      comparison = MakeCondition<HBelow>(block, op1, op2);
       expected_result = (x < y);
       break;
     case kCondBE:
-      comparison = new (GetAllocator()) HBelowOrEqual(op1, op2);
+      comparison = MakeCondition<HBelowOrEqual>(block, op1, op2);
       expected_result = (x <= y);
       break;
     case kCondA:
-      comparison = new (GetAllocator()) HAbove(op1, op2);
+      comparison = MakeCondition<HAbove>(block, op1, op2);
       expected_result = (x > y);
       break;
     case kCondAE:
-      comparison = new (GetAllocator()) HAboveOrEqual(op1, op2);
+      comparison = MakeCondition<HAboveOrEqual>(block, op1, op2);
       expected_result = (x >= y);
       break;
   }
-  block->AddInstruction(comparison);
-  block->AddInstruction(new (GetAllocator()) HReturn(comparison));
+  MakeReturn(block, comparison);
 
   graph->BuildDominatorTree();
   std::unique_ptr<CompilerOptions> compiler_options =

@@ -147,22 +147,19 @@ TEST_F(NodeTest, RemoveInstruction) {
   HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(entry);
   graph->SetEntryBlock(entry);
-  HInstruction* parameter = new (GetAllocator()) HParameterValue(
-      graph->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  entry->AddInstruction(parameter);
-  entry->AddInstruction(new (GetAllocator()) HGoto());
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  MakeGoto(entry);
 
   HBasicBlock* first_block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(first_block);
   entry->AddSuccessor(first_block);
-  HInstruction* null_check = new (GetAllocator()) HNullCheck(parameter, 0);
-  first_block->AddInstruction(null_check);
-  first_block->AddInstruction(new (GetAllocator()) HReturnVoid());
+  HInstruction* null_check = MakeNullCheck(first_block, parameter);
+  MakeReturnVoid(first_block);
 
   HBasicBlock* exit_block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(exit_block);
   first_block->AddSuccessor(exit_block);
-  exit_block->AddInstruction(new (GetAllocator()) HExit());
+  MakeExit(exit_block);
 
   HEnvironment* environment = new (GetAllocator()) HEnvironment(
       GetAllocator(), 1, graph->GetArtMethod(), 0, null_check);
@@ -187,13 +184,9 @@ TEST_F(NodeTest, InsertInstruction) {
   HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(entry);
   graph->SetEntryBlock(entry);
-  HInstruction* parameter1 = new (GetAllocator()) HParameterValue(
-      graph->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* parameter2 = new (GetAllocator()) HParameterValue(
-      graph->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  entry->AddInstruction(parameter1);
-  entry->AddInstruction(parameter2);
-  entry->AddInstruction(new (GetAllocator()) HExit());
+  HInstruction* parameter1 = MakeParam(DataType::Type::kReference);
+  HInstruction* parameter2 = MakeParam(DataType::Type::kReference);
+  MakeExit(entry);
 
   ASSERT_FALSE(parameter1->HasUses());
 
@@ -212,14 +205,11 @@ TEST_F(NodeTest, AddInstruction) {
   HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(entry);
   graph->SetEntryBlock(entry);
-  HInstruction* parameter = new (GetAllocator()) HParameterValue(
-      graph->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  entry->AddInstruction(parameter);
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
 
   ASSERT_FALSE(parameter->HasUses());
 
-  HInstruction* to_add = new (GetAllocator()) HNullCheck(parameter, 0);
-  entry->AddInstruction(to_add);
+  MakeNullCheck(entry, parameter);
 
   ASSERT_TRUE(parameter->HasUses());
   ASSERT_TRUE(parameter->GetUses().HasExactlyOneElement());
@@ -230,12 +220,9 @@ TEST_F(NodeTest, ParentEnvironment) {
   HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(entry);
   graph->SetEntryBlock(entry);
-  HInstruction* parameter1 = new (GetAllocator()) HParameterValue(
-      graph->GetDexFile(), dex::TypeIndex(0), 0, DataType::Type::kReference);
-  HInstruction* with_environment = new (GetAllocator()) HNullCheck(parameter1, 0);
-  entry->AddInstruction(parameter1);
-  entry->AddInstruction(with_environment);
-  entry->AddInstruction(new (GetAllocator()) HExit());
+  HInstruction* parameter1 = MakeParam(DataType::Type::kReference);
+  HInstruction* with_environment = MakeNullCheck(entry, parameter1);
+  MakeExit(entry);
 
   ASSERT_TRUE(parameter1->HasUses());
   ASSERT_TRUE(parameter1->GetUses().HasExactlyOneElement());

@@ -57,7 +57,7 @@ class InstructionSimplifierRiscv64Visitor final : public HGraphVisitor {
     DCHECK(shl->GetRight()->IsIntConstant());
 
     const int32_t distance = shl->GetRight()->AsIntConstant()->GetValue();
-    if ((distance & ~0x3) != 0) {
+    if (distance < 1 || distance > 3) {
       return false;
     }
 

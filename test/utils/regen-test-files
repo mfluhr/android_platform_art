@@ -238,8 +238,6 @@ known_failing_tests = frozenset([
 # removing them from this set (in order to promote them to
 # presubmits).
 postsubmit_only_tests = frozenset([
-  "2279-aconfig-flags",
-  "2279-second-inner-loop-references-first",
 ])
 
 known_failing_on_hwasan_tests = frozenset([
@@ -254,6 +252,7 @@ art_gtest_user_module_names = [
     "art_standalone_artd_tests",
     "art_standalone_cmdline_tests",
     "art_standalone_compiler_tests",
+    "art_standalone_dex2oat_cts_tests",
     "art_standalone_dex2oat_tests",
     "art_standalone_dexdump_tests",
     "art_standalone_dexlist_tests",
@@ -288,6 +287,7 @@ art_gtest_module_names = sorted(art_gtest_user_module_names + art_gtest_eng_only
 # removing them from this set (in order to promote them to
 # presubmits).
 art_gtest_postsubmit_only_module_names = [
+    "art_standalone_dex2oat_cts_tests",
 ]
 
 # ART gtests not supported in MTS.
