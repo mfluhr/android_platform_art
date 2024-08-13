@@ -38,6 +38,7 @@
 //
 // Note: adding a new intrinsic requires an art image version change,
 // as the modifiers flag for some ArtMethods will need to be changed.
+// The image version is located in runtime/oat/image.cc
 //
 // Note: j.l.Integer.valueOf says kNoThrow even though it could throw an
 // OOME. The kNoThrow should be renamed to kNoVisibleThrow, as it is ok to

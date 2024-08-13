@@ -2789,7 +2789,7 @@ static bool NoEscapeForStringBufferReference(HInstruction* reference, HInstructi
   return false;
 }
 
-static bool TryReplaceStringBuilderAppend(HInvoke* invoke) {
+static bool TryReplaceStringBuilderAppend(CodeGenerator* codegen, HInvoke* invoke) {
   DCHECK_EQ(invoke->GetIntrinsic(), Intrinsics::kStringBuilderToString);
   if (invoke->CanThrowIntoCatchBlock()) {
     return false;
@@ -2946,11 +2946,25 @@ static bool TryReplaceStringBuilderAppend(HInvoke* invoke) {
     }
   }
 
+  // Calculate outgoing vregs, including padding for 64-bit arg alignment.
+  const PointerSize pointer_size = InstructionSetPointerSize(codegen->GetInstructionSet());
+  const size_t method_vregs = static_cast<size_t>(pointer_size) / kVRegSize;
+  uint32_t number_of_out_vregs = method_vregs;  // For correct alignment padding; subtracted below.
+  for (uint32_t f = format; f != 0u; f >>= StringBuilderAppend::kBitsPerArg) {
+    auto a = enum_cast<StringBuilderAppend::Argument>(f & StringBuilderAppend::kArgMask);
+    if (a == StringBuilderAppend::Argument::kLong || a == StringBuilderAppend::Argument::kDouble) {
+      number_of_out_vregs += /* alignment */ ((number_of_out_vregs) & 1u) + /* vregs */ 2u;
+    } else {
+      number_of_out_vregs += /* vregs */ 1u;
+    }
+  }
+  number_of_out_vregs -= method_vregs;
+
   // Create replacement instruction.
   HIntConstant* fmt = block->GetGraph()->GetIntConstant(static_cast<int32_t>(format));
   ArenaAllocator* allocator = block->GetGraph()->GetAllocator();
   HStringBuilderAppend* append = new (allocator) HStringBuilderAppend(
-      fmt, num_args, has_fp_args, allocator, invoke->GetDexPc());
+      fmt, num_args, number_of_out_vregs, has_fp_args, allocator, invoke->GetDexPc());
   append->SetReferenceTypeInfoIfValid(invoke->GetReferenceTypeInfo());
   for (size_t i = 0; i != num_args; ++i) {
     append->SetArgumentAt(i, args[num_args - 1u - i]);
@@ -2995,7 +3009,7 @@ void InstructionSimplifierVisitor::SimplifyAllocationIntrinsic(HInvoke* invoke) 
       RecordSimplification();
     }
   } else if (invoke->GetIntrinsic() == Intrinsics::kStringBuilderToString &&
-             TryReplaceStringBuilderAppend(invoke)) {
+             TryReplaceStringBuilderAppend(codegen_, invoke)) {
     RecordSimplification();
   }
 }

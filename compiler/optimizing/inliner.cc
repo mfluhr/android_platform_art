@@ -1378,6 +1378,7 @@ bool HInliner::TryDevirtualize(HInvoke* invoke_instruction,
   HInvokeStaticOrDirect* new_invoke = new (graph_->GetAllocator()) HInvokeStaticOrDirect(
       graph_->GetAllocator(),
       invoke_instruction->GetNumberOfArguments(),
+      invoke_instruction->GetNumberOfOutVRegs(),
       invoke_instruction->GetType(),
       invoke_instruction->GetDexPc(),
       MethodReference(invoke_instruction->GetMethodReference().dex_file, dex_method_index),
@@ -1597,6 +1598,7 @@ bool HInliner::TryBuildAndInline(HInvoke* invoke_instruction,
     HInvokeVirtual* new_invoke = new (graph_->GetAllocator()) HInvokeVirtual(
         graph_->GetAllocator(),
         invoke_instruction->GetNumberOfArguments(),
+        invoke_instruction->GetNumberOfOutVRegs(),
         invoke_instruction->GetType(),
         invoke_instruction->GetDexPc(),
         invoke_instruction->GetMethodReference(),  // Use existing invoke's method's reference.
