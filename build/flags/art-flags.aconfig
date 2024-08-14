@@ -28,7 +28,7 @@ flag {
 # Flag for the experimental feature of on-demand method tracing
 flag {
   name: "always_enable_profile_code"
-  namespace: "art_mainline"
+  namespace: "art_performance"
   description: "Flag to control on-demand method tracing feature"
   bug: "352518093"
   is_fixed_read_only: true

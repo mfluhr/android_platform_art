@@ -5288,14 +5288,16 @@ void InstructionCodeGeneratorX86::VisitBooleanNot(HBooleanNot* bool_not) {
 void LocationsBuilderX86::VisitCompare(HCompare* compare) {
   LocationSummary* locations =
       new (GetGraph()->GetAllocator()) LocationSummary(compare, LocationSummary::kNoCall);
-  switch (compare->InputAt(0)->GetType()) {
+  switch (compare->GetComparisonType()) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
-    case DataType::Type::kInt64: {
+    case DataType::Type::kUint32:
+    case DataType::Type::kInt64:
+    case DataType::Type::kUint64: {
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, Location::Any());
       locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
@@ -5327,8 +5329,13 @@ void InstructionCodeGeneratorX86::VisitCompare(HCompare* compare) {
 
   NearLabel less, greater, done;
   Condition less_cond = kLess;
+  Condition greater_cond = kGreater;
 
-  switch (compare->InputAt(0)->GetType()) {
+  switch (compare->GetComparisonType()) {
+    case DataType::Type::kUint32:
+      less_cond = kBelow;
+      // greater_cond - is not needed below
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
@@ -5338,6 +5345,10 @@ void InstructionCodeGeneratorX86::VisitCompare(HCompare* compare) {
       codegen_->GenerateIntCompare(left, right);
       break;
     }
+    case DataType::Type::kUint64:
+      less_cond = kBelow;
+      greater_cond = kAbove;
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kInt64: {
       Register left_low = left.AsRegisterPairLow<Register>();
       Register left_high = left.AsRegisterPairHigh<Register>();
@@ -5361,8 +5372,8 @@ void InstructionCodeGeneratorX86::VisitCompare(HCompare* compare) {
         DCHECK(right_is_const) << right;
         codegen_->Compare32BitValue(left_high, val_high);
       }
-      __ j(kLess, &less);  // Signed compare.
-      __ j(kGreater, &greater);  // Signed compare.
+      __ j(less_cond, &less);        // High part compare.
+      __ j(greater_cond, &greater);  // High part compare.
       if (right.IsRegisterPair()) {
         __ cmpl(left_low, right.AsRegisterPairLow<Register>());
       } else if (right.IsDoubleStackSlot()) {
@@ -5372,6 +5383,7 @@ void InstructionCodeGeneratorX86::VisitCompare(HCompare* compare) {
         codegen_->Compare32BitValue(left_low, val_low);
       }
       less_cond = kBelow;  // for CF (unsigned).
+      // greater_cond - is not needed below
       break;
     }
     case DataType::Type::kFloat32: {

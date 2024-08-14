@@ -27,29 +27,15 @@ namespace art HIDDEN {
 
 class SelectGeneratorTest : public OptimizingUnitTest {
  protected:
-  void ConstructBasicGraphForSelect(HInstruction* instr) {
-    HBasicBlock* if_block = AddNewBlock();
-    HBasicBlock* then_block = AddNewBlock();
-    HBasicBlock* else_block = AddNewBlock();
-
-    entry_block_->ReplaceSuccessor(return_block_, if_block);
-
-    if_block->AddSuccessor(then_block);
-    if_block->AddSuccessor(else_block);
-    then_block->AddSuccessor(return_block_);
-    else_block->AddSuccessor(return_block_);
-
+  HPhi* ConstructBasicGraphForSelect(HBasicBlock* return_block, HInstruction* instr) {
     HParameterValue* bool_param = MakeParam(DataType::Type::kBool);
     HIntConstant* const1 =  graph_->GetIntConstant(1);
 
-    MakeIf(if_block, bool_param);
+    auto [if_block, then_block, else_block] = CreateDiamondPattern(return_block, bool_param);
 
-    then_block->AddInstruction(instr);
-    MakeGoto(then_block);
-
-    MakeGoto(else_block);
-
-    HPhi* phi = MakePhi(return_block_, {instr, const1});
+    AddOrInsertInstruction(then_block, instr);
+    HPhi* phi = MakePhi(return_block, {instr, const1});
+    return phi;
   }
 
   bool CheckGraphAndTrySelectGenerator() {
@@ -64,25 +50,27 @@ class SelectGeneratorTest : public OptimizingUnitTest {
 
 // HDivZeroCheck might throw and should not be hoisted from the conditional to an unconditional.
 TEST_F(SelectGeneratorTest, testZeroCheck) {
-  InitGraph();
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
   HParameterValue* param = MakeParam(DataType::Type::kInt32);
   HDivZeroCheck* instr = new (GetAllocator()) HDivZeroCheck(param, 0);
-  ConstructBasicGraphForSelect(instr);
+  HPhi* phi = ConstructBasicGraphForSelect(return_block, instr);
 
   ArenaVector<HInstruction*> current_locals({param, graph_->GetIntConstant(1)},
                                             GetAllocator()->Adapter(kArenaAllocInstruction));
   ManuallyBuildEnvFor(instr, &current_locals);
 
   EXPECT_FALSE(CheckGraphAndTrySelectGenerator());
+  EXPECT_FALSE(phi->GetBlock() == nullptr);
 }
 
 // Test that SelectGenerator succeeds with HAdd.
 TEST_F(SelectGeneratorTest, testAdd) {
-  InitGraph();
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
   HParameterValue* param = MakeParam(DataType::Type::kInt32);
   HAdd* instr = new (GetAllocator()) HAdd(DataType::Type::kInt32, param, param, /*dex_pc=*/ 0);
-  ConstructBasicGraphForSelect(instr);
+  HPhi* phi = ConstructBasicGraphForSelect(return_block, instr);
   EXPECT_TRUE(CheckGraphAndTrySelectGenerator());
+  EXPECT_TRUE(phi->GetBlock() == nullptr);
 }
 
 }  // namespace art

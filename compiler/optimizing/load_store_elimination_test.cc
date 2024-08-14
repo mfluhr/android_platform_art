@@ -158,21 +158,10 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
     InitGraphAndParameters();
     CreateEntryBlockInstructions();
 
-    HBasicBlock* upper = AddNewBlock();
-    HBasicBlock* left = AddNewBlock();
-    HBasicBlock* right = AddNewBlock();
-
-    entry_block_->ReplaceSuccessor(return_block_, upper);
-    upper->AddSuccessor(left);
-    upper->AddSuccessor(right);
-    left->AddSuccessor(return_block_);
-    right->AddSuccessor(return_block_);
+    auto [upper, left, right] = CreateDiamondPattern(return_block_);
 
     HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(upper, i_, j_);
     MakeIf(upper, cmp);
-
-    MakeGoto(left);
-    MakeGoto(right);
 
     return std::make_tuple(upper, left, right, return_block_);
   }
@@ -260,12 +249,13 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
   }
 
   void InitGraphAndParameters() {
-    InitGraph();
+    return_block_ = InitEntryMainExitGraphWithReturnVoid();
     array_ = MakeParam(DataType::Type::kInt32);
     i_ = MakeParam(DataType::Type::kInt32);
     j_ = MakeParam(DataType::Type::kInt32);
   }
 
+  HBasicBlock* return_block_;
   HBasicBlock* pre_header_;
   HBasicBlock* loop_;
 
@@ -553,11 +543,7 @@ TEST_F(LoadStoreEliminationTest, LoadAfterSIMDLoopWithSideEffects) {
 //   'vstore3' is not removed.
 //   'vstore4' is not removed. Such cases are not supported at the moment.
 TEST_F(LoadStoreEliminationTest, MergePredecessorVecStores) {
-  HBasicBlock* upper;
-  HBasicBlock* left;
-  HBasicBlock* right;
-  HBasicBlock* down;
-  std::tie(upper, left, right, down) = CreateDiamondShapedCFG();
+  auto [upper, left, right, down] = CreateDiamondShapedCFG();
 
   // upper: a[i,... i + 3] = [1,...1]
   HInstruction* vstore1 = AddVecStore(upper, array_, i_);
@@ -596,11 +582,7 @@ TEST_F(LoadStoreEliminationTest, MergePredecessorVecStores) {
 //   'store2' is not removed.
 //   'store3' is removed.
 TEST_F(LoadStoreEliminationTest, MergePredecessorStores) {
-  HBasicBlock* upper;
-  HBasicBlock* left;
-  HBasicBlock* right;
-  HBasicBlock* down;
-  std::tie(upper, left, right, down) = CreateDiamondShapedCFG();
+  auto [upper, left, right, down] = CreateDiamondShapedCFG();
 
   // upper: a[i,... i + 3] = [1,...1]
   AddArraySet(upper, array_, i_);

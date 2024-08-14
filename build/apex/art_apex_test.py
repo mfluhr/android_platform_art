@@ -793,7 +793,8 @@ class TestingTargetChecker:
     self._checker.check_art_test_data('art-gtest-jars-SuperWithAccessChecks.dex')
 
     # Fuzzer cases
-    self._checker.check_art_test_data('fuzzer_corpus.zip')
+    self._checker.check_art_test_data('dex_verification_fuzzer_corpus.zip')
+    self._checker.check_art_test_data('class_verification_fuzzer_corpus.zip')
 
 
 class NoSuperfluousFilesChecker:

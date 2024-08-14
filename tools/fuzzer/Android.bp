@@ -100,7 +100,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     corpus: [
         ":art_runtest_corpus",
-        "corpus/*",
+        "dex-verifier-corpus/*",
     ],
 }
 
@@ -113,7 +113,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     corpus: [
         ":art_runtest_corpus",
-        "corpus/*",
+        "dex-verifier-corpus/*",
     ],
 }
 
@@ -127,7 +127,7 @@ cc_fuzz {
     // Can not be in defaults due to soong limitations.
     corpus: [
         ":art_runtest_corpus",
-        "corpus/*",
+        "class-verifier-corpus/*",
     ],
 }
 
@@ -1319,12 +1319,23 @@ genrule {
 }
 
 genrule {
-    name: "art-gtest-jars-DexFuzzerFolder",
-    // Zip the corpus folder. To get the folder, we grab the first file
+    name: "art-gtest-jars-DexVerificationFuzzerFolder",
+    // Zip the dex-verifier-corpus folder. To get the folder, we grab the first file
     // from `in` and use its directory.
     cmd: "FILES=($(in)) &&" +
         "$(location soong_zip) -j -L 0 -o $(out) -D $$(dirname $${FILES[0]})",
-    srcs: ["corpus/*"],
-    out: ["fuzzer_corpus.zip"],
+    srcs: ["dex-verifier-corpus/*"],
+    out: ["dex_verification_fuzzer_corpus.zip"],
+    tools: ["soong_zip"],
+}
+
+genrule {
+    name: "art-gtest-jars-ClassVerificationFuzzerFolder",
+    // Zip the class-verifier-corpus folder. To get the folder, we grab the first file
+    // from `in` and use its directory.
+    cmd: "FILES=($(in)) &&" +
+        "$(location soong_zip) -j -L 0 -o $(out) -D $$(dirname $${FILES[0]})",
+    srcs: ["class-verifier-corpus/*"],
+    out: ["class_verification_fuzzer_corpus.zip"],
     tools: ["soong_zip"],
 }

@@ -28,6 +28,11 @@ aconfig_declarations {
     container: "com.android.art",
     exportable: true,
     srcs: ["art-flags.aconfig"],
+    visibility: [
+        "//art:__subpackages__",
+        "//libcore:__subpackages__",
+        "//frameworks/base", // Needed for exporting flags.
+    ],
 }
 
 cc_aconfig_library {

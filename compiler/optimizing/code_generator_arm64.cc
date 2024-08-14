@@ -3270,16 +3270,18 @@ void InstructionCodeGeneratorARM64::GenerateFcmp(HInstruction* instruction) {
 void LocationsBuilderARM64::VisitCompare(HCompare* compare) {
   LocationSummary* locations =
       new (GetGraph()->GetAllocator()) LocationSummary(compare, LocationSummary::kNoCall);
-  DataType::Type in_type = compare->InputAt(0)->GetType();
+  DataType::Type compare_type = compare->GetComparisonType();
   HInstruction* rhs = compare->InputAt(1);
-  switch (in_type) {
+  switch (compare_type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
-    case DataType::Type::kInt64: {
+    case DataType::Type::kUint32:
+    case DataType::Type::kInt64:
+    case DataType::Type::kUint64: {
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, ARM64EncodableConstantOrRegister(rhs, compare));
       locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
@@ -3296,17 +3298,22 @@ void LocationsBuilderARM64::VisitCompare(HCompare* compare) {
       break;
     }
     default:
-      LOG(FATAL) << "Unexpected type for compare operation " << in_type;
+      LOG(FATAL) << "Unexpected type for compare operation " << compare_type;
   }
 }
 
 void InstructionCodeGeneratorARM64::VisitCompare(HCompare* compare) {
-  DataType::Type in_type = compare->InputAt(0)->GetType();
+  DataType::Type compare_type = compare->GetComparisonType();
 
   //  0 if: left == right
   //  1 if: left  > right
   // -1 if: left  < right
-  switch (in_type) {
+  Condition less_cond = lt;
+  switch (compare_type) {
+    case DataType::Type::kUint32:
+    case DataType::Type::kUint64:
+      less_cond = lo;
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
@@ -3318,8 +3325,8 @@ void InstructionCodeGeneratorARM64::VisitCompare(HCompare* compare) {
       Register left = InputRegisterAt(compare, 0);
       Operand right = InputOperandAt(compare, 1);
       __ Cmp(left, right);
-      __ Cset(result, ne);          // result == +1 if NE or 0 otherwise
-      __ Cneg(result, result, lt);  // result == -1 if LT or unchanged otherwise
+      __ Cset(result, ne);                 // result == +1 if NE or 0 otherwise
+      __ Cneg(result, result, less_cond);  // result == -1 if LT or unchanged otherwise
       break;
     }
     case DataType::Type::kFloat32:
@@ -3331,7 +3338,7 @@ void InstructionCodeGeneratorARM64::VisitCompare(HCompare* compare) {
       break;
     }
     default:
-      LOG(FATAL) << "Unimplemented compare type " << in_type;
+      LOG(FATAL) << "Unimplemented compare type " << compare_type;
   }
 }
 

@@ -2727,14 +2727,16 @@ void InstructionCodeGeneratorX86_64::VisitAboveOrEqual(HAboveOrEqual* comp) {
 void LocationsBuilderX86_64::VisitCompare(HCompare* compare) {
   LocationSummary* locations =
       new (GetGraph()->GetAllocator()) LocationSummary(compare, LocationSummary::kNoCall);
-  switch (compare->InputAt(0)->GetType()) {
+  switch (compare->GetComparisonType()) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
-    case DataType::Type::kInt64: {
+    case DataType::Type::kUint32:
+    case DataType::Type::kInt64:
+    case DataType::Type::kUint64: {
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, Location::Any());
       locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
@@ -2759,10 +2761,13 @@ void InstructionCodeGeneratorX86_64::VisitCompare(HCompare* compare) {
   Location right = locations->InAt(1);
 
   NearLabel less, greater, done;
-  DataType::Type type = compare->InputAt(0)->GetType();
+  DataType::Type type = compare->GetComparisonType();
   Condition less_cond = kLess;
 
   switch (type) {
+    case DataType::Type::kUint32:
+      less_cond = kBelow;
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
@@ -2772,6 +2777,9 @@ void InstructionCodeGeneratorX86_64::VisitCompare(HCompare* compare) {
       codegen_->GenerateIntCompare(left, right);
       break;
     }
+    case DataType::Type::kUint64:
+      less_cond = kBelow;
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kInt64: {
       codegen_->GenerateLongCompare(left, right);
       break;

@@ -5756,14 +5756,16 @@ void InstructionCodeGeneratorARMVIXL::VisitBooleanNot(HBooleanNot* bool_not) {
 void LocationsBuilderARMVIXL::VisitCompare(HCompare* compare) {
   LocationSummary* locations =
       new (GetGraph()->GetAllocator()) LocationSummary(compare, LocationSummary::kNoCall);
-  switch (compare->InputAt(0)->GetType()) {
+  switch (compare->GetComparisonType()) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
-    case DataType::Type::kInt64: {
+    case DataType::Type::kUint32:
+    case DataType::Type::kInt64:
+    case DataType::Type::kUint64: {
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, Location::RequiresRegister());
       // Output overlaps because it is written before doing the low comparison.
@@ -5790,9 +5792,14 @@ void InstructionCodeGeneratorARMVIXL::VisitCompare(HCompare* compare) {
 
   vixl32::Label less, greater, done;
   vixl32::Label* final_label = codegen_->GetFinalLabel(compare, &done);
-  DataType::Type type = compare->InputAt(0)->GetType();
-  vixl32::Condition less_cond = vixl32::Condition::None();
+  DataType::Type type = compare->GetComparisonType();
+  vixl32::Condition less_cond = vixl32::ConditionType::lt;
+  vixl32::Condition greater_cond = vixl32::ConditionType::gt;
   switch (type) {
+    case DataType::Type::kUint32:
+      less_cond = vixl32::ConditionType::lo;
+      // greater_cond - is not needed below
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
@@ -5801,18 +5808,22 @@ void InstructionCodeGeneratorARMVIXL::VisitCompare(HCompare* compare) {
     case DataType::Type::kInt32: {
       // Emit move to `out` before the `Cmp`, as `Mov` might affect the status flags.
       __ Mov(out, 0);
-      __ Cmp(RegisterFrom(left), RegisterFrom(right));  // Signed compare.
-      less_cond = lt;
+      __ Cmp(RegisterFrom(left), RegisterFrom(right));
       break;
     }
+    case DataType::Type::kUint64:
+      less_cond = vixl32::ConditionType::lo;
+      greater_cond = vixl32::ConditionType::hi;
+      FALLTHROUGH_INTENDED;
     case DataType::Type::kInt64: {
-      __ Cmp(HighRegisterFrom(left), HighRegisterFrom(right));  // Signed compare.
-      __ B(lt, &less, /* is_far_target= */ false);
-      __ B(gt, &greater, /* is_far_target= */ false);
+      __ Cmp(HighRegisterFrom(left), HighRegisterFrom(right));  // High part compare.
+      __ B(less_cond, &less, /* is_far_target= */ false);
+      __ B(greater_cond, &greater, /* is_far_target= */ false);
       // Emit move to `out` before the last `Cmp`, as `Mov` might affect the status flags.
       __ Mov(out, 0);
       __ Cmp(LowRegisterFrom(left), LowRegisterFrom(right));  // Unsigned compare.
-      less_cond = lo;
+      less_cond = vixl32::ConditionType::lo;
+      // greater_cond - is not needed below
       break;
     }
     case DataType::Type::kFloat32:

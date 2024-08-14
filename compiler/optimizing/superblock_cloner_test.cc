@@ -33,9 +33,10 @@ using HEdgeSet = SuperblockCloner::HEdgeSet;
 // individual instruction cloning and cloning of the more coarse-grain structures.
 class SuperblockClonerTest : public OptimizingUnitTest {
  protected:
-  void InitGraphAndParameters() {
-    InitGraph();
+  HBasicBlock* InitGraphAndParameters() {
+    HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
     param_ = MakeParam(DataType::Type::kInt32);
+    return return_block;
   }
 
   void CreateBasicLoopControlFlow(HBasicBlock* position,
@@ -104,8 +105,8 @@ TEST_F(SuperblockClonerTest, IndividualInstrCloner) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   EXPECT_TRUE(CheckGraph());
@@ -116,12 +117,12 @@ TEST_F(SuperblockClonerTest, IndividualInstrCloner) {
 
   visitor.VisitInsertionOrder();
   size_t instr_replaced_by_clones_count = visitor.GetInstrReplacedByClonesCount();
-  EXPECT_EQ(instr_replaced_by_clones_count, 12u);
+  EXPECT_EQ(instr_replaced_by_clones_count, 13u);
   EXPECT_TRUE(CheckGraph());
 
   visitor.VisitReversePostOrder();
   instr_replaced_by_clones_count = visitor.GetInstrReplacedByClonesCount();
-  EXPECT_EQ(instr_replaced_by_clones_count, 24u);
+  EXPECT_EQ(instr_replaced_by_clones_count, 26u);
   EXPECT_TRUE(CheckGraph());
 
   HSuspendCheck* new_suspend_check = header->GetLoopInformation()->GetSuspendCheck();
@@ -136,8 +137,8 @@ TEST_F(SuperblockClonerTest, CloneBasicBlocks) {
   HBasicBlock* loop_body = nullptr;
   ArenaAllocator* arena = GetAllocator();
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   ASSERT_TRUE(CheckGraph());
@@ -217,8 +218,8 @@ TEST_F(SuperblockClonerTest, AdjustControlFlowInfo) {
   HBasicBlock* loop_body = nullptr;
   ArenaAllocator* arena = GetAllocator();
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   ASSERT_TRUE(CheckGraph());
@@ -256,8 +257,8 @@ TEST_F(SuperblockClonerTest, IsGraphConnected) {
   HBasicBlock* loop_body = nullptr;
   ArenaAllocator* arena = GetAllocator();
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* unreachable_block = AddNewBlock();
 
@@ -279,8 +280,8 @@ TEST_F(SuperblockClonerTest, LoopPeeling) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   EXPECT_TRUE(CheckGraph());
@@ -316,8 +317,8 @@ TEST_F(SuperblockClonerTest, LoopUnrolling) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   EXPECT_TRUE(CheckGraph());
@@ -353,8 +354,8 @@ TEST_F(SuperblockClonerTest, LoopVersioning) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
   EXPECT_TRUE(CheckGraph());
@@ -401,8 +402,8 @@ TEST_F(SuperblockClonerTest, LoopPeelingMultipleBackEdges) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
 
   // Transform a basic loop to have multiple back edges.
@@ -452,16 +453,16 @@ TEST_F(SuperblockClonerTest, LoopPeelingNested) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
+  HBasicBlock* return_block = InitGraphAndParameters();
 
   // Create the following nested structure of loops
   //   Headers:  1    2 3
   //             [ ], [ [ ] ]
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop1_header = header;
 
-  CreateBasicLoopControlFlow(header, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(header, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop2_header = header;
 
@@ -499,12 +500,12 @@ TEST_F(SuperblockClonerTest, OuterLoopPopulationAfterInnerPeeled) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
+  HBasicBlock* return_block = InitGraphAndParameters();
 
   // Create the following nested structure of loops
   //   Headers:  1 2 3        4
   //             [ [ [ ] ] ], [ ]
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop1_header = header;
 
@@ -516,7 +517,7 @@ TEST_F(SuperblockClonerTest, OuterLoopPopulationAfterInnerPeeled) {
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop3_header = header;
 
-  CreateBasicLoopControlFlow(loop1_header, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(loop1_header, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop4_header = header;
 
@@ -556,12 +557,12 @@ TEST_F(SuperblockClonerTest, NestedCaseExitToOutermost) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
+  HBasicBlock* return_block = InitGraphAndParameters();
 
   // Create the following nested structure of loops then peel loop3.
   //   Headers:  1 2 3
   //             [ [ [ ] ] ]
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop1_header = header;
   HBasicBlock* loop_body1 = loop_body;
@@ -610,8 +611,8 @@ TEST_F(SuperblockClonerTest, FastCaseCheck) {
   HBasicBlock* loop_body = nullptr;
   ArenaAllocator* arena = GetAllocator();
 
-  InitGraphAndParameters();
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  HBasicBlock* return_block = InitGraphAndParameters();
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   graph_->BuildDominatorTree();
 
@@ -665,12 +666,12 @@ TEST_F(SuperblockClonerTest, FindCommonLoop) {
   HBasicBlock* header = nullptr;
   HBasicBlock* loop_body = nullptr;
 
-  InitGraphAndParameters();
+  HBasicBlock* return_block = InitGraphAndParameters();
 
   // Create the following nested structure of loops
   //   Headers:  1 2 3      4      5
   //             [ [ [ ] ], [ ] ], [ ]
-  CreateBasicLoopControlFlow(entry_block_, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(entry_block_, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop1_header = header;
 
@@ -686,7 +687,7 @@ TEST_F(SuperblockClonerTest, FindCommonLoop) {
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop4_header = header;
 
-  CreateBasicLoopControlFlow(loop1_header, return_block_, &header, &loop_body);
+  CreateBasicLoopControlFlow(loop1_header, return_block, &header, &loop_body);
   CreateBasicLoopDataFlow(header, loop_body);
   HBasicBlock* loop5_header = header;
 

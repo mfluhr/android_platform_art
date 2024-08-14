@@ -3470,18 +3470,20 @@ void InstructionCodeGeneratorRISCV64::VisitClinitCheck(HClinitCheck* instruction
 }
 
 void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
-  DataType::Type in_type = instruction->InputAt(0)->GetType();
+  DataType::Type compare_type = instruction->GetComparisonType();
 
   LocationSummary* locations = new (GetGraph()->GetAllocator()) LocationSummary(instruction);
 
-  switch (in_type) {
+  switch (compare_type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
     case DataType::Type::kUint16:
     case DataType::Type::kInt16:
     case DataType::Type::kInt32:
+    case DataType::Type::kUint32:
     case DataType::Type::kInt64:
+    case DataType::Type::kUint64:
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, RegisterOrZeroBitPatternLocation(instruction->InputAt(1)));
       locations->SetOut(Location::RequiresRegister(), Location::kNoOutputOverlap);
@@ -3495,7 +3497,7 @@ void LocationsBuilderRISCV64::VisitCompare(HCompare* instruction) {
       break;
 
     default:
-      LOG(FATAL) << "Unexpected type for compare operation " << in_type;
+      LOG(FATAL) << "Unexpected type for compare operation " << compare_type;
       UNREACHABLE();
   }
 }
@@ -3504,11 +3506,12 @@ void InstructionCodeGeneratorRISCV64::VisitCompare(HCompare* instruction) {
   LocationSummary* locations = instruction->GetLocations();
   XRegister result = locations->Out().AsRegister<XRegister>();
   DataType::Type in_type = instruction->InputAt(0)->GetType();
+  DataType::Type compare_type = instruction->GetComparisonType();
 
   //  0 if: left == right
   //  1 if: left  > right
   // -1 if: left  < right
-  switch (in_type) {
+  switch (compare_type) {
     case DataType::Type::kBool:
     case DataType::Type::kUint8:
     case DataType::Type::kInt8:
@@ -3522,6 +3525,18 @@ void InstructionCodeGeneratorRISCV64::VisitCompare(HCompare* instruction) {
       XRegister tmp = srs.AllocateXRegister();
       __ Slt(tmp, left, right);
       __ Slt(result, right, left);
+      __ Sub(result, result, tmp);
+      break;
+    }
+
+    case DataType::Type::kUint32:
+    case DataType::Type::kUint64: {
+      XRegister left = locations->InAt(0).AsRegister<XRegister>();
+      XRegister right = InputXRegisterOrZero(locations->InAt(1));
+      ScratchRegisterScope srs(GetAssembler());
+      XRegister tmp = srs.AllocateXRegister();
+      __ Sltu(tmp, left, right);
+      __ Sltu(result, right, left);
       __ Sub(result, result, tmp);
       break;
     }

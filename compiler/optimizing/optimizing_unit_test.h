@@ -219,7 +219,6 @@ class OptimizingUnitTestHelper {
       : pool_and_allocator_(new ArenaPoolAndAllocator()),
         graph_(nullptr),
         entry_block_(nullptr),
-        return_block_(nullptr),
         exit_block_(nullptr) { }
 
   ArenaAllocator* GetAllocator() { return pool_and_allocator_->GetAllocator(); }
@@ -290,20 +289,57 @@ class OptimizingUnitTestHelper {
     }
   }
 
-  void InitGraph(VariableSizedHandleScope* handles = nullptr) {
+  // Create simple graph with "entry", "main" and "exit" blocks, return the "main" block.
+  // Adds `HGoto` to the "entry" block and `HExit` to the "exit block. Leaves "main" block empty.
+  HBasicBlock* InitEntryMainExitGraph(VariableSizedHandleScope* handles = nullptr) {
     CreateGraph(handles);
     entry_block_ = AddNewBlock();
-    return_block_ = AddNewBlock();
+    HBasicBlock* main_block = AddNewBlock();
     exit_block_ = AddNewBlock();
 
     graph_->SetEntryBlock(entry_block_);
     graph_->SetExitBlock(exit_block_);
 
-    entry_block_->AddSuccessor(return_block_);
-    return_block_->AddSuccessor(exit_block_);
+    entry_block_->AddSuccessor(main_block);
+    main_block->AddSuccessor(exit_block_);
 
-    return_block_->AddInstruction(new (GetAllocator()) HReturnVoid());
-    exit_block_->AddInstruction(new (GetAllocator()) HExit());
+    MakeGoto(entry_block_);
+    MakeExit(exit_block_);
+
+    return main_block;
+  }
+
+  // Creates a graph identical to `InitEntryMainExitGraph()` and adds `HReturnVoid`.
+  HBasicBlock* InitEntryMainExitGraphWithReturnVoid(VariableSizedHandleScope* handles = nullptr) {
+    HBasicBlock* return_block = InitEntryMainExitGraph(handles);
+    MakeReturnVoid(return_block);
+    return return_block;
+  }
+
+  // Insert "if_block", "then_block" and "else_block" before a given `merge_block`. Return the
+  // new blocks. Adds `HGoto` to "then_block" and "else_block". Adds `HIf` to the "if_block"
+  // if the caller provides a `condition`.
+  std::tuple<HBasicBlock*, HBasicBlock*, HBasicBlock*> CreateDiamondPattern(
+      HBasicBlock* merge_block, HInstruction* condition = nullptr) {
+    HBasicBlock* if_block = AddNewBlock();
+    HBasicBlock* then_block = AddNewBlock();
+    HBasicBlock* else_block = AddNewBlock();
+
+    HBasicBlock* predecessor = merge_block->GetSinglePredecessor();
+    predecessor->ReplaceSuccessor(merge_block, if_block);
+
+    if_block->AddSuccessor(then_block);
+    if_block->AddSuccessor(else_block);
+    then_block->AddSuccessor(merge_block);
+    else_block->AddSuccessor(merge_block);
+
+    if (condition != nullptr) {
+      MakeIf(if_block, condition);
+    }
+    MakeGoto(then_block);
+    MakeGoto(else_block);
+
+    return {if_block, then_block, else_block};
   }
 
   HBasicBlock* AddNewBlock() {
@@ -676,7 +712,7 @@ class OptimizingUnitTestHelper {
   HParameterValue* MakeParam(DataType::Type type, std::optional<dex::TypeIndex> ti = std::nullopt) {
     HParameterValue* val = new (GetAllocator()) HParameterValue(
         graph_->GetDexFile(), ti ? *ti : DefaultTypeIndexForType(type), param_count_++, type);
-    graph_->GetEntryBlock()->AddInstruction(val);
+    AddOrInsertInstruction(graph_->GetEntryBlock(), val);
     return val;
   }
 
@@ -693,7 +729,6 @@ class OptimizingUnitTestHelper {
 
   HGraph* graph_;
   HBasicBlock* entry_block_;
-  HBasicBlock* return_block_;
   HBasicBlock* exit_block_;
 
   size_t param_count_ = 0;
