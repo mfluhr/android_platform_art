@@ -162,9 +162,11 @@ ObjPtr<Object> Object::Clone(Handle<Object> h_this, Thread* self) {
   gc::Heap* heap = Runtime::Current()->GetHeap();
   size_t num_bytes = h_this->SizeOf();
   CopyObjectVisitor visitor(&h_this, num_bytes);
-  ObjPtr<Object> copy = heap->IsMovableObject(h_this.Get())
-      ? heap->AllocObject(self, h_this->GetClass(), num_bytes, visitor)
-      : heap->AllocNonMovableObject(self, h_this->GetClass(), num_bytes, visitor);
+  // Unclear whether this should ever allocate a nonmovable object. This is conservative.
+  ObjPtr<Object> copy =
+      heap->IsNonMovable(h_this.Get()) ?
+          heap->AllocNonMovableObject(self, h_this->GetClass(), num_bytes, visitor) :
+          heap->AllocObject(self, h_this->GetClass(), num_bytes, visitor);
   if (h_this->GetClass()->IsFinalizable()) {
     heap->AddFinalizerReference(self, &copy);
   }

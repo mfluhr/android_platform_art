@@ -1208,8 +1208,8 @@ class Runtime {
   // for differentiating between unfilled imt slots vs conflict slots in superclasses.
   ArtMethod* imt_unimplemented_method_;
 
-  // Special sentinel object used to invalid conditions in JNI (cleared weak references) and
-  // JDWP (invalid references).
+  // Special sentinel object used to indicate invalid conditions in JNI (cleared weak references)
+  // and JDWP (invalid references).
   GcRoot<mirror::Object> sentinel_;
 
   InstructionSet instruction_set_;

@@ -31,9 +31,9 @@ class ArenaBitVector;
 
 /*
  * Expanding bitmap. Bits are numbered starting from zero. All operations on a BitVector are
- * unsynchronized. New BitVectors are not necessarily zeroed out. If the used allocator doesn't do
- * clear the vector (e.g. ScopedArenaAllocator), the responsibility of clearing it relies on the
- * caller (e.g. ArenaBitVector).
+ * unsynchronized. New BitVectors are not necessarily zeroed out. If the used allocator doesn't
+ * clear the vector (e.g. ScopedArenaAllocator), the caller is responsible for clearing it (e.g.
+ * ArenaBitVector).
  */
 class BitVector {
  public:

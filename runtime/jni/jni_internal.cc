@@ -2126,7 +2126,7 @@ class JNI {
     ScopedObjectAccess soa(env);
     ObjPtr<mirror::String> s = soa.Decode<mirror::String>(java_string);
     gc::Heap* heap = Runtime::Current()->GetHeap();
-    if (heap->IsMovableObject(s) || s->IsCompressed()) {
+    if (heap->ObjectMayMove(s) || s->IsCompressed()) {
       jchar* chars = new jchar[s->GetLength()];
       if (s->IsCompressed()) {
         int32_t length = s->GetLength();
@@ -2174,7 +2174,7 @@ class JNI {
       }
       return chars;
     } else {
-      if (heap->IsMovableObject(s)) {
+      if (heap->ObjectMayMove(s)) {
         StackHandleScope<1> hs(soa.Self());
         HandleWrapperObjPtr<mirror::String> h(hs.NewHandleWrapper(&s));
         if (!gUseReadBarrier && !gUseUserfaultfd) {
@@ -2202,7 +2202,7 @@ class JNI {
     ScopedObjectAccess soa(env);
     gc::Heap* heap = Runtime::Current()->GetHeap();
     ObjPtr<mirror::String> s = soa.Decode<mirror::String>(java_string);
-    if (!s->IsCompressed() && heap->IsMovableObject(s)) {
+    if (!s->IsCompressed() && heap->ObjectMayMove(s)) {
       if (!gUseReadBarrier && !gUseUserfaultfd) {
         heap->DecrementDisableMovingGC(soa.Self());
       } else {
@@ -2369,7 +2369,7 @@ class JNI {
       return nullptr;
     }
     gc::Heap* heap = Runtime::Current()->GetHeap();
-    if (heap->IsMovableObject(array)) {
+    if (heap->ObjectMayMove(array)) {
       if (!gUseReadBarrier && !gUseUserfaultfd) {
         heap->IncrementDisableMovingGC(soa.Self());
       } else {
@@ -2965,7 +2965,7 @@ class JNI {
       return nullptr;
     }
     // Only make a copy if necessary.
-    if (Runtime::Current()->GetHeap()->IsMovableObject(array)) {
+    if (Runtime::Current()->GetHeap()->ObjectMayMove(array)) {
       if (is_copy != nullptr) {
         *is_copy = JNI_TRUE;
       }
@@ -3025,7 +3025,7 @@ class JNI {
     if (mode != JNI_COMMIT) {
       if (is_copy) {
         delete[] reinterpret_cast<uint64_t*>(elements);
-      } else if (heap->IsMovableObject(array)) {
+      } else if (heap->ObjectMayMove(array)) {
         // Non copy to a movable object must means that we had disabled the moving GC.
         if (!gUseReadBarrier && !gUseUserfaultfd) {
           heap->DecrementDisableMovingGC(soa.Self());

@@ -1404,7 +1404,8 @@ static size_t OpenBootDexFiles(ArrayRef<const std::string> dex_filenames,
 void Runtime::SetSentinel(ObjPtr<mirror::Object> sentinel) {
   CHECK(sentinel_.Read() == nullptr);
   CHECK(sentinel != nullptr);
-  CHECK(!heap_->IsMovableObject(sentinel));
+  // IsNonMovable(sentinel) doesn't hold if it came from an image.
+  CHECK(!heap_->ObjectMayMove(sentinel));
   sentinel_ = GcRoot<mirror::Object>(sentinel);
 }
 
