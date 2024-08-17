@@ -255,6 +255,8 @@ class MarkCompact final : public GarbageCollector {
                                              + from_space_slide_diff_);
   }
 
+  inline bool IsOnAllocStack(mirror::Object* ref)
+      REQUIRES_SHARED(Locks::mutator_lock_, Locks::heap_bitmap_lock_);
   // Verifies that that given object reference refers to a valid object.
   // Otherwise fataly dumps logs, including those from callback.
   template <typename Callback>
@@ -774,6 +776,9 @@ class MarkCompact final : public GarbageCollector {
   std::atomic<uint16_t> compaction_buffer_counter_;
   // True while compacting.
   bool compacting_;
+  // Set to true in MarkingPause() to indicate when allocation_stack_ should be
+  // checked in IsMarked() for black allocations.
+  bool marking_done_;
   // Flag indicating whether one-time uffd initialization has been done. It will
   // be false on the first GC for non-zygote processes, and always for zygote.
   // Its purpose is to minimize the userfaultfd overhead to the minimal in

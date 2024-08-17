@@ -192,6 +192,13 @@ uint32_t MarkCompact::LiveWordsBitmap<kAlignment>::FindNthLiveWordOffset(size_t 
   UNREACHABLE();
 }
 
+inline bool MarkCompact::IsOnAllocStack(mirror::Object* ref) {
+  // TODO: Explain why this is here. What release operation does it pair with?
+  std::atomic_thread_fence(std::memory_order_acquire);
+  accounting::ObjectStack* stack = heap_->GetAllocationStack();
+  return stack->Contains(ref);
+}
+
 inline void MarkCompact::UpdateRef(mirror::Object* obj,
                                    MemberOffset offset,
                                    uint8_t* begin,
