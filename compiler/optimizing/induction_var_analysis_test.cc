@@ -32,9 +32,6 @@ class InductionVarAnalysisTest : public OptimizingUnitTest {
  public:
   InductionVarAnalysisTest()
       : iva_(nullptr),
-        entry_(nullptr),
-        return_(nullptr),
-        exit_(nullptr),
         parameter_(nullptr),
         constant0_(nullptr),
         constant1_(nullptr),
@@ -43,55 +40,27 @@ class InductionVarAnalysisTest : public OptimizingUnitTest {
         constant100_(nullptr),
         constantm1_(nullptr),
         float_constant0_(nullptr) {
-    graph_ = CreateGraph();
   }
 
   ~InductionVarAnalysisTest() { }
 
-  // Builds single for-loop at depth d.
-  void BuildForLoop(int d, int n) {
-    ASSERT_LT(d, n);
-    loop_preheader_[d] = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_preheader_[d]);
-    loop_header_[d] = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_header_[d]);
-    loop_preheader_[d]->AddSuccessor(loop_header_[d]);
-    if (d < (n - 1)) {
-      BuildForLoop(d + 1, n);
-    }
-    loop_body_[d] = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_body_[d]);
-    loop_body_[d]->AddSuccessor(loop_header_[d]);
-    if (d < (n - 1)) {
-      loop_header_[d]->AddSuccessor(loop_preheader_[d + 1]);
-      loop_header_[d + 1]->AddSuccessor(loop_body_[d]);
-    } else {
-      loop_header_[d]->AddSuccessor(loop_body_[d]);
-    }
-  }
-
   // Builds a n-nested loop in CFG where each loop at depth 0 <= d < n
   // is defined as "for (int i_d = 0; i_d < 100; i_d++)". Tests can further
   // populate the loop with instructions to set up interesting scenarios.
-  void BuildLoopNest(int n) {
+  void BuildLoopNest(size_t n) {
     ASSERT_LE(n, 10);
+    HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
     graph_->SetNumberOfVRegs(n + 3);
 
-    // Build basic blocks with entry, nested loop, exit.
-    entry_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(entry_);
-    BuildForLoop(0, n);
-    return_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(return_);
-    exit_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(exit_);
-    entry_->AddSuccessor(loop_preheader_[0]);
-    loop_header_[0]->AddSuccessor(return_);
-    return_->AddSuccessor(exit_);
-    graph_->SetEntryBlock(entry_);
-    graph_->SetExitBlock(exit_);
+    // Build nested loops.
+    HBasicBlock* loop_pos = return_block;
+    for (size_t d = 0; d < n; ++d) {
+      std::tie(loop_preheader_[d], loop_header_[d], loop_body_[d]) = CreateWhileLoop(loop_pos);
+      loop_header_[d]->SwapSuccessors();  // Move the loop exit to the "else" successor.
+      loop_pos = loop_body_[d];
+    }
 
-    // Provide entry and exit instructions.
+    // Provide entry instructions.
     parameter_ = MakeParam(DataType::Type::kReference);
     constant0_ = graph_->GetIntConstant(0);
     constant1_ = graph_->GetIntConstant(1);
@@ -100,32 +69,21 @@ class InductionVarAnalysisTest : public OptimizingUnitTest {
     constant100_ = graph_->GetIntConstant(100);
     constantm1_ = graph_->GetIntConstant(-1);
     float_constant0_ = graph_->GetFloatConstant(0.0f);
-    MakeReturnVoid(return_);
-    MakeExit(exit_);
 
     // Provide loop instructions.
     for (int d = 0; d < n; d++) {
-      MakeGoto(loop_preheader_[d]);
-
-      basic_[d] = MakePhi(loop_header_[d], {constant0_, /* placeholder */ constant0_});
+      std::tie(basic_[d], increment_[d]) =
+          MakeLinearLoopVar(loop_header_[d], loop_body_[d], constant0_, constant1_);
       HInstruction* compare = MakeCondition<HLessThan>(loop_header_[d], basic_[d], constant100_);
       MakeIf(loop_header_[d], compare);
-
-      increment_[d] = MakeBinOp<HAdd>(loop_body_[d], DataType::Type::kInt32, basic_[d], constant1_);
-      MakeGoto(loop_body_[d]);
-
-      basic_[d]->ReplaceInput(increment_[d], 1u);  // Update back-edge input.
     }
   }
 
   // Builds if-statement at depth d.
   HPhi* BuildIf(int d, HBasicBlock** ifT, HBasicBlock** ifF) {
-    HBasicBlock* cond = new (GetAllocator()) HBasicBlock(graph_);
-    HBasicBlock* ifTrue = new (GetAllocator()) HBasicBlock(graph_);
-    HBasicBlock* ifFalse = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(cond);
-    graph_->AddBlock(ifTrue);
-    graph_->AddBlock(ifFalse);
+    HBasicBlock* cond = AddNewBlock();
+    HBasicBlock* ifTrue = AddNewBlock();
+    HBasicBlock* ifFalse = AddNewBlock();
     // Conditional split.
     loop_header_[d]->ReplaceSuccessor(loop_body_[d], cond);
     cond->AddSuccessor(ifTrue);
@@ -197,13 +155,9 @@ class InductionVarAnalysisTest : public OptimizingUnitTest {
   }
 
   // General building fields.
-  HGraph* graph_;
   HInductionVarAnalysis* iva_;
 
   // Fixed basic blocks and instructions.
-  HBasicBlock* entry_;
-  HBasicBlock* return_;
-  HBasicBlock* exit_;
   HInstruction* parameter_;  // "this"
   HInstruction* constant0_;
   HInstruction* constant1_;
@@ -236,7 +190,7 @@ TEST_F(InductionVarAnalysisTest, ProperLoopSetup) {
   BuildLoopNest(10);
   graph_->BuildDominatorTree();
 
-  ASSERT_EQ(entry_->GetLoopInformation(), nullptr);
+  ASSERT_EQ(entry_block_->GetLoopInformation(), nullptr);
   for (int d = 0; d < 1; d++) {
     ASSERT_EQ(loop_preheader_[d]->GetLoopInformation(),
               (d == 0) ? nullptr
@@ -246,7 +200,7 @@ TEST_F(InductionVarAnalysisTest, ProperLoopSetup) {
     ASSERT_EQ(loop_header_[d]->GetLoopInformation(),
               loop_body_[d]->GetLoopInformation());
   }
-  ASSERT_EQ(exit_->GetLoopInformation(), nullptr);
+  ASSERT_EQ(exit_block_->GetLoopInformation(), nullptr);
 }
 
 TEST_F(InductionVarAnalysisTest, FindBasicInduction) {

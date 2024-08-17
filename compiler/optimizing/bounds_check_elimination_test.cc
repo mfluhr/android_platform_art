@@ -35,13 +35,8 @@ namespace art HIDDEN {
  */
 class BoundsCheckEliminationTest : public OptimizingUnitTest {
  public:
-  BoundsCheckEliminationTest()  : graph_(CreateGraph()) {
-    graph_->SetHasBoundsChecks(true);
-  }
-
-  ~BoundsCheckEliminationTest() { }
-
   void RunBCE() {
+    graph_->SetHasBoundsChecks(true);
     graph_->BuildDominatorTree();
 
     InstructionSimplifier(graph_, /* codegen= */ nullptr).Run();
@@ -61,8 +56,6 @@ class BoundsCheckEliminationTest : public OptimizingUnitTest {
   HInstruction* BuildSSAGraph2(int initial, int increment = -1, IfCondition cond = kCondLE);
   HInstruction* BuildSSAGraph3(int initial, int increment, IfCondition cond);
   HInstruction* BuildSSAGraph4(int initial, IfCondition cond = kCondGE);
-
-  HGraph* graph_;
 };
 
 
@@ -70,8 +63,8 @@ class BoundsCheckEliminationTest : public OptimizingUnitTest {
 // else if (i >= array.length) { array[i] = 1; // Can't eliminate. }
 // else { array[i] = 1; // Can eliminate. }
 TEST_F(BoundsCheckEliminationTest, NarrowingRangeArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
+  CreateGraph();
+  HBasicBlock* entry = AddNewBlock();
   graph_->SetEntryBlock(entry);
   HInstruction* parameter1 = MakeParam(DataType::Type::kReference);  // array
   HInstruction* parameter2 = MakeParam(DataType::Type::kInt32);  // i
@@ -79,42 +72,36 @@ TEST_F(BoundsCheckEliminationTest, NarrowingRangeArrayBoundsElimination) {
   HInstruction* constant_1 = graph_->GetIntConstant(1);
   HInstruction* constant_0 = graph_->GetIntConstant(0);
 
-  HBasicBlock* block1 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block1);
+  HBasicBlock* block1 = AddNewBlock();
   HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(block1, parameter2, constant_0);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
-  HBasicBlock* block2 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block2);
+  HBasicBlock* block2 = AddNewBlock();
   HNullCheck* null_check = MakeNullCheck(block2, parameter1);
   HArrayLength* array_length = MakeArrayLength(block2, null_check);
   HBoundsCheck* bounds_check2 = MakeBoundsCheck(block2, parameter2, array_length);
   MakeArraySet(block2, null_check, bounds_check2, constant_1, DataType::Type::kInt32);
 
-  HBasicBlock* block3 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block3);
+  HBasicBlock* block3 = AddNewBlock();
   null_check = MakeNullCheck(block3, parameter1);
   array_length = MakeArrayLength(block3, null_check);
   cmp = MakeCondition<HLessThan>(block3, parameter2, array_length);
   MakeIf(block3, cmp);
 
-  HBasicBlock* block4 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block4);
+  HBasicBlock* block4 = AddNewBlock();
   null_check = MakeNullCheck(block4, parameter1);
   array_length = MakeArrayLength(block4, null_check);
   HBoundsCheck* bounds_check4 = MakeBoundsCheck(block4, parameter2, array_length);
   MakeArraySet(block4, null_check, bounds_check4, constant_1, DataType::Type::kInt32);
 
-  HBasicBlock* block5 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block5);
+  HBasicBlock* block5 = AddNewBlock();
   null_check = MakeNullCheck(block5, parameter1);
   array_length = MakeArrayLength(block5, null_check);
   HBoundsCheck* bounds_check5 = MakeBoundsCheck(block5, parameter2, array_length);
   MakeArraySet(block5, null_check, bounds_check5, constant_1, DataType::Type::kInt32);
 
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(exit);
+  HBasicBlock* exit = AddNewBlock();
   block2->AddSuccessor(exit);
   block4->AddSuccessor(exit);
   block5->AddSuccessor(exit);
@@ -139,8 +126,8 @@ TEST_F(BoundsCheckEliminationTest, NarrowingRangeArrayBoundsElimination) {
 //   if (j < array.length) array[j] = 1;  // Can't eliminate.
 // }
 TEST_F(BoundsCheckEliminationTest, OverflowArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
+  CreateGraph();
+  HBasicBlock* entry = AddNewBlock();
   graph_->SetEntryBlock(entry);
   HInstruction* parameter1 = MakeParam(DataType::Type::kReference);  // array
   HInstruction* parameter2 = MakeParam(DataType::Type::kInt32);  // i
@@ -149,27 +136,23 @@ TEST_F(BoundsCheckEliminationTest, OverflowArrayBoundsElimination) {
   HInstruction* constant_0 = graph_->GetIntConstant(0);
   HInstruction* constant_max_int = graph_->GetIntConstant(INT_MAX);
 
-  HBasicBlock* block1 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block1);
+  HBasicBlock* block1 = AddNewBlock();
   HInstruction* cmp = MakeCondition<HLessThanOrEqual>(block1, parameter2, constant_0);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
-  HBasicBlock* block2 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block2);
+  HBasicBlock* block2 = AddNewBlock();
   HInstruction* add = MakeBinOp<HAdd>(block2, DataType::Type::kInt32, parameter2, constant_max_int);
   HNullCheck* null_check = MakeNullCheck(block2, parameter1);
   HArrayLength* array_length = MakeArrayLength(block2, null_check);
   HInstruction* cmp2 = MakeCondition<HGreaterThanOrEqual>(block2, add, array_length);
   MakeIf(block2, cmp2);
 
-  HBasicBlock* block3 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block3);
+  HBasicBlock* block3 = AddNewBlock();
   HBoundsCheck* bounds_check = MakeBoundsCheck(block3, add, array_length);
   MakeArraySet(block3, null_check, bounds_check, constant_1, DataType::Type::kInt32);
 
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(exit);
+  HBasicBlock* exit = AddNewBlock();
   MakeExit(exit);
   block1->AddSuccessor(exit);    // true successor
   block1->AddSuccessor(block2);  // false successor
@@ -188,8 +171,8 @@ TEST_F(BoundsCheckEliminationTest, OverflowArrayBoundsElimination) {
 //   if (j > 0) array[j] = 1;    // Can't eliminate.
 // }
 TEST_F(BoundsCheckEliminationTest, UnderflowArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
+  CreateGraph();
+  HBasicBlock* entry = AddNewBlock();
   graph_->SetEntryBlock(entry);
   HInstruction* parameter1 = MakeParam(DataType::Type::kReference);  // array
   HInstruction* parameter2 = MakeParam(DataType::Type::kInt32);  // i
@@ -198,29 +181,25 @@ TEST_F(BoundsCheckEliminationTest, UnderflowArrayBoundsElimination) {
   HInstruction* constant_0 = graph_->GetIntConstant(0);
   HInstruction* constant_max_int = graph_->GetIntConstant(INT_MAX);
 
-  HBasicBlock* block1 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block1);
+  HBasicBlock* block1 = AddNewBlock();
   HNullCheck* null_check = MakeNullCheck(block1, parameter1);
   HArrayLength* array_length = MakeArrayLength(block1, null_check);
   HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(block1, parameter2, array_length);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
-  HBasicBlock* block2 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block2);
+  HBasicBlock* block2 = AddNewBlock();
   HInstruction* sub1 =
       MakeBinOp<HSub>(block2, DataType::Type::kInt32, parameter2, constant_max_int);
   HInstruction* sub2 = MakeBinOp<HSub>(block2, DataType::Type::kInt32, sub1, constant_max_int);
   HInstruction* cmp2 = MakeCondition<HLessThanOrEqual>(block2, sub2, constant_0);
   MakeIf(block2, cmp2);
 
-  HBasicBlock* block3 = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block3);
+  HBasicBlock* block3 = AddNewBlock();
   HBoundsCheck* bounds_check = MakeBoundsCheck(block3, sub2, array_length);
   MakeArraySet(block3, null_check, bounds_check, constant_1, DataType::Type::kInt32);
 
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(exit);
+  HBasicBlock* exit = AddNewBlock();
   MakeExit(exit);
   block1->AddSuccessor(exit);    // true successor
   block1->AddSuccessor(block2);  // false successor
@@ -237,19 +216,13 @@ TEST_F(BoundsCheckEliminationTest, UnderflowArrayBoundsElimination) {
 // array[5] = 1; // Can eliminate.
 // array[4] = 1; // Can eliminate.
 TEST_F(BoundsCheckEliminationTest, ConstantArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  HBasicBlock* block = InitEntryMainExitGraphWithReturnVoid();
 
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
   HInstruction* constant_5 = graph_->GetIntConstant(5);
   HInstruction* constant_4 = graph_->GetIntConstant(4);
   HInstruction* constant_6 = graph_->GetIntConstant(6);
   HInstruction* constant_1 = graph_->GetIntConstant(1);
-
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
 
   HNullCheck* null_check = MakeNullCheck(block, parameter);
   HArrayLength* array_length = MakeArrayLength(block, null_check);
@@ -266,13 +239,6 @@ TEST_F(BoundsCheckEliminationTest, ConstantArrayBoundsElimination) {
   HBoundsCheck* bounds_check4 = MakeBoundsCheck(block, constant_4, array_length);
   MakeArraySet(block, null_check, bounds_check4, constant_1, DataType::Type::kInt32);
 
-  MakeGoto(block);
-
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(exit);
-  MakeExit(exit);
-
   RunBCE();
 
   ASSERT_FALSE(IsRemoved(bounds_check6));
@@ -284,33 +250,13 @@ TEST_F(BoundsCheckEliminationTest, ConstantArrayBoundsElimination) {
 HInstruction* BoundsCheckEliminationTest::BuildSSAGraph1(int initial,
                                                          int increment,
                                                          IfCondition cond) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [pre_header, loop_header, loop_body] = CreateWhileLoop(return_block);
 
-  HInstruction* constant_initial = graph_->GetIntConstant(initial);
-  HInstruction* constant_increment = graph_->GetIntConstant(increment);
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
   HInstruction* constant_10 = graph_->GetIntConstant(10);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
-  MakeGoto(block);
-
-  HBasicBlock* loop_header = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* loop_body = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-
-  graph_->AddBlock(loop_header);
-  graph_->AddBlock(loop_body);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(loop_header);
-  loop_header->AddSuccessor(exit);       // true successor
-  loop_header->AddSuccessor(loop_body);  // false successor
-  loop_body->AddSuccessor(loop_header);
-
-  HPhi* phi = MakePhi(loop_header, {constant_initial, /* placeholder */ constant_initial});
+  auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, increment);
   HInstruction* null_check = MakeNullCheck(loop_header, parameter);
   HInstruction* array_length = MakeArrayLength(loop_header, null_check);
   HInstruction* cmp = nullptr;
@@ -326,12 +272,6 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph1(int initial,
   array_length = MakeArrayLength(loop_body, null_check);
   HInstruction* bounds_check = MakeBoundsCheck(loop_body, phi, array_length);
   MakeArraySet(loop_body, null_check, bounds_check, constant_10, DataType::Type::kInt32);
-  HInstruction* add = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_increment);
-  MakeGoto(loop_body);
-
-  phi->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  MakeExit(exit);
 
   return bounds_check;
 }
@@ -383,36 +323,19 @@ TEST_F(BoundsCheckEliminationTest, LoopArrayBoundsElimination1f) {
 HInstruction* BoundsCheckEliminationTest::BuildSSAGraph2(int initial,
                                                          int increment,
                                                          IfCondition cond) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [pre_header, loop_header, loop_body] = CreateWhileLoop(return_block);
 
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
   HInstruction* constant_initial = graph_->GetIntConstant(initial);
   HInstruction* constant_increment = graph_->GetIntConstant(increment);
   HInstruction* constant_minus_1 = graph_->GetIntConstant(-1);
   HInstruction* constant_10 = graph_->GetIntConstant(10);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
-  HInstruction* null_check = MakeNullCheck(block, parameter);
-  HInstruction* array_length = MakeArrayLength(block, null_check);
-  MakeGoto(block);
+  HInstruction* null_check = MakeNullCheck(pre_header, parameter);
+  HInstruction* array_length = MakeArrayLength(pre_header, null_check);
 
-  HBasicBlock* loop_header = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* loop_body = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-
-  graph_->AddBlock(loop_header);
-  graph_->AddBlock(loop_body);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(loop_header);
-  loop_header->AddSuccessor(exit);       // true successor
-  loop_header->AddSuccessor(loop_body);  // false successor
-  loop_body->AddSuccessor(loop_header);
-
-  HPhi* phi = MakePhi(loop_header, {array_length, /* placeholder */ array_length});
+  auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, array_length, constant_minus_1);
   HInstruction* cmp = nullptr;
   if (cond == kCondLE) {
     cmp = MakeCondition<HLessThanOrEqual>(loop_header, phi, constant_initial);
@@ -422,17 +345,10 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph2(int initial,
   }
   MakeIf(loop_header, cmp);
 
-  HInstruction* add = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_minus_1);
   null_check = MakeNullCheck(loop_body, parameter);
   array_length = MakeArrayLength(loop_body, null_check);
   HInstruction* bounds_check = MakeBoundsCheck(loop_body, add, array_length);
   MakeArraySet(loop_body, null_check, bounds_check, constant_10, DataType::Type::kInt32);
-  MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_increment);
-  MakeGoto(loop_body);
-
-  phi->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  MakeExit(exit);
 
   return bounds_check;
 }
@@ -477,34 +393,16 @@ TEST_F(BoundsCheckEliminationTest, LoopArrayBoundsElimination2e) {
 HInstruction* BoundsCheckEliminationTest::BuildSSAGraph3(int initial,
                                                          int increment,
                                                          IfCondition cond) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [pre_header, loop_header, loop_body] = CreateWhileLoop(return_block);
 
   HInstruction* constant_10 = graph_->GetIntConstant(10);
-  HInstruction* constant_initial = graph_->GetIntConstant(initial);
-  HInstruction* constant_increment = graph_->GetIntConstant(increment);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
   // We pass a bogus constant for the class to avoid mocking one.
-  HInstruction* new_array = MakeNewArray(block, /* cls= */ constant_10, /* length= */ constant_10);
-  MakeGoto(block);
+  HInstruction* new_array =
+      MakeNewArray(pre_header, /* cls= */ constant_10, /* length= */ constant_10);
 
-  HBasicBlock* loop_header = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* loop_body = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-
-  graph_->AddBlock(loop_header);
-  graph_->AddBlock(loop_body);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(loop_header);
-  loop_header->AddSuccessor(exit);       // true successor
-  loop_header->AddSuccessor(loop_body);  // false successor
-  loop_body->AddSuccessor(loop_header);
-
-  HPhi* phi = MakePhi(loop_header, {constant_initial, /* placeholder */ constant_initial});
+  auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, increment);
   HInstruction* cmp = nullptr;
   if (cond == kCondGE) {
     cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, constant_10);
@@ -518,12 +416,6 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph3(int initial,
   HArrayLength* array_length = MakeArrayLength(loop_body, null_check);
   HInstruction* bounds_check = MakeBoundsCheck(loop_body, phi, array_length);
   MakeArraySet(loop_body, null_check, bounds_check, constant_10, DataType::Type::kInt32);
-  HInstruction* add = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_increment);
-  MakeGoto(loop_body);
-
-  phi->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  MakeExit(exit);
 
   return bounds_check;
 }
@@ -562,34 +454,14 @@ TEST_F(BoundsCheckEliminationTest, LoopArrayBoundsElimination3d) {
 
 // for (int i=initial; i<array.length; i++) { array[array.length-i-1] = 10; }
 HInstruction* BoundsCheckEliminationTest::BuildSSAGraph4(int initial, IfCondition cond) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [pre_header, loop_header, loop_body] = CreateWhileLoop(return_block);
 
-  HInstruction* constant_initial = graph_->GetIntConstant(initial);
-  HInstruction* constant_1 = graph_->GetIntConstant(1);
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
   HInstruction* constant_10 = graph_->GetIntConstant(10);
   HInstruction* constant_minus_1 = graph_->GetIntConstant(-1);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
-  MakeGoto(block);
-
-  HBasicBlock* loop_header = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* loop_body = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-
-  graph_->AddBlock(loop_header);
-  graph_->AddBlock(loop_body);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(loop_header);
-  loop_header->AddSuccessor(exit);       // true successor
-  loop_header->AddSuccessor(loop_body);  // false successor
-  loop_body->AddSuccessor(loop_header);
-
-  HPhi* phi = MakePhi(loop_header, {constant_initial, /* placeholder */ constant_initial});
+  auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, /*increment=*/ 1);
   HInstruction* null_check = MakeNullCheck(loop_header, parameter);
   HInstruction* array_length = MakeArrayLength(loop_header, null_check);
   HInstruction* cmp = nullptr;
@@ -608,12 +480,6 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph4(int initial, IfConditio
       MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, sub, constant_minus_1);
   HInstruction* bounds_check = MakeBoundsCheck(loop_body, add_minus_1, array_length);
   MakeArraySet(loop_body, null_check, bounds_check, constant_10, DataType::Type::kInt32);
-  HInstruction* add = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_1);
-  MakeGoto(loop_body);
-
-  phi->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  MakeExit(exit);
 
   return bounds_check;
 }
@@ -642,45 +508,35 @@ TEST_F(BoundsCheckEliminationTest, LoopArrayBoundsElimination4c) {
 // Bubble sort:
 // (Every array access bounds-check can be eliminated.)
 // for (int i=0; i<array.length-1; i++) {
-//  for (int j=0; j<array.length-i-1; j++) {
+//   for (int j=0; j<array.length-i-1; j++) {
 //     if (array[j] > array[j+1]) {
 //       int temp = array[j+1];
 //       array[j+1] = array[j];
 //       array[j] = temp;
 //     }
-//  }
+//   }
 // }
 TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* parameter = MakeParam(DataType::Type::kReference);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [outer_pre_header, outer_header, outer_body_add] = CreateWhileLoop(return_block);
+  auto [inner_pre_header, inner_header, inner_body_add] = CreateWhileLoop(outer_body_add);
+  auto [inner_body_compare, inner_body_swap, skip_swap] = CreateDiamondPattern(inner_body_add);
 
+  HInstruction* parameter = MakeParam(DataType::Type::kReference);
   HInstruction* constant_0 = graph_->GetIntConstant(0);
   HInstruction* constant_minus_1 = graph_->GetIntConstant(-1);
   HInstruction* constant_1 = graph_->GetIntConstant(1);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
-  MakeGoto(block);
-
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(exit);
-  MakeExit(exit);
-
-  HBasicBlock* outer_header = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(outer_header);
-  HPhi* phi_i = MakePhi(outer_header, {constant_0, /* placeholder */ constant_0});
+  auto [phi_i, add_i] =
+      MakeLinearLoopVar(outer_header, outer_body_add, /*initial=*/ 0, /*increment=*/ 1);
   HNullCheck* null_check = MakeNullCheck(outer_header, parameter);
   HArrayLength* array_length = MakeArrayLength(outer_header, null_check);
   HAdd* add = MakeBinOp<HAdd>(outer_header, DataType::Type::kInt32, array_length, constant_minus_1);
   HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(outer_header, phi_i, add);
   MakeIf(outer_header, cmp);
 
-  HBasicBlock* inner_header = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(inner_header);
-  HPhi* phi_j = MakePhi(inner_header, {constant_0, /* placeholder */ constant_0});
+  auto [phi_j, add_j] =
+      MakeLinearLoopVar(inner_header, inner_body_add, /*initial=*/ 0, /*increment=*/ 1);
   null_check = MakeNullCheck(inner_header, parameter);
   array_length = MakeArrayLength(inner_header, null_check);
   HSub* sub = MakeBinOp<HSub>(inner_header, DataType::Type::kInt32, array_length, phi_i);
@@ -688,8 +544,6 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   cmp = MakeCondition<HGreaterThanOrEqual>(inner_header, phi_j, add);
   MakeIf(inner_header, cmp);
 
-  HBasicBlock* inner_body_compare = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(inner_body_compare);
   null_check = MakeNullCheck(inner_body_compare, parameter);
   array_length = MakeArrayLength(inner_body_compare, null_check);
   HBoundsCheck* bounds_check1 = MakeBoundsCheck(inner_body_compare, phi_j, array_length);
@@ -705,8 +559,6 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   cmp = MakeCondition<HGreaterThanOrEqual>(inner_body_compare, array_get_j, array_get_j_plus_1);
   MakeIf(inner_body_compare, cmp);
 
-  HBasicBlock* inner_body_swap = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(inner_body_swap);
   j_plus_1 = MakeBinOp<HAdd>(inner_body_swap, DataType::Type::kInt32, phi_j, constant_1);
   // temp = array[j+1]
   null_check = MakeNullCheck(inner_body_swap, parameter);
@@ -729,32 +581,6 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   HInstruction* bounds_check6 = MakeBoundsCheck(inner_body_swap, phi_j, array_length);
   MakeArraySet(
       inner_body_swap, null_check, bounds_check6, array_get_j_plus_1, DataType::Type::kInt32);
-  MakeGoto(inner_body_swap);
-
-  HBasicBlock* inner_body_add = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(inner_body_add);
-  add = MakeBinOp<HAdd>(inner_body_add, DataType::Type::kInt32, phi_j, constant_1);
-  MakeGoto(inner_body_add);
-
-  phi_j->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  HBasicBlock* outer_body_add = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(outer_body_add);
-  add = MakeBinOp<HAdd>(outer_body_add, DataType::Type::kInt32, phi_i, constant_1);
-  MakeGoto(outer_body_add);
-
-  phi_i->ReplaceInput(add, 1u);  // Update back-edge input.
-
-  block->AddSuccessor(outer_header);
-  outer_header->AddSuccessor(exit);
-  outer_header->AddSuccessor(inner_header);
-  inner_header->AddSuccessor(outer_body_add);
-  inner_header->AddSuccessor(inner_body_compare);
-  inner_body_compare->AddSuccessor(inner_body_add);
-  inner_body_compare->AddSuccessor(inner_body_swap);
-  inner_body_swap->AddSuccessor(inner_body_add);
-  inner_body_add->AddSuccessor(inner_header);
-  outer_body_add->AddSuccessor(outer_header);
 
   RunBCE();  // gvn removes same bounds check already
 
@@ -776,37 +602,20 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
 //   array[param_i%10] = 10;      // Can't eliminate, when param_i < 0
 // }
 TEST_F(BoundsCheckEliminationTest, ModArrayBoundsElimination) {
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(entry);
-  graph_->SetEntryBlock(entry);
-  HInstruction* param_i = MakeParam(DataType::Type::kInt32);
+  HBasicBlock* return_block = InitEntryMainExitGraphWithReturnVoid();
+  auto [pre_header, loop_header, loop_body] = CreateWhileLoop(return_block);
 
-  HInstruction* constant_0 = graph_->GetIntConstant(0);
+  HInstruction* param_i = MakeParam(DataType::Type::kInt32);
   HInstruction* constant_1 = graph_->GetIntConstant(1);
   HInstruction* constant_10 = graph_->GetIntConstant(10);
   HInstruction* constant_200 = graph_->GetIntConstant(200);
   HInstruction* constant_minus_10 = graph_->GetIntConstant(-10);
 
-  HBasicBlock* block = new (GetAllocator()) HBasicBlock(graph_);
-  graph_->AddBlock(block);
-  entry->AddSuccessor(block);
   // We pass a bogus constant for the class to avoid mocking one.
-  HInstruction* new_array = MakeNewArray(block, /* cls= */ constant_10, /* length= */ constant_10);
-  MakeGoto(block);
+  HInstruction* new_array =
+      MakeNewArray(pre_header, /* cls= */ constant_10, /* length= */ constant_10);
 
-  HBasicBlock* loop_header = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* loop_body = new (GetAllocator()) HBasicBlock(graph_);
-  HBasicBlock* exit = new (GetAllocator()) HBasicBlock(graph_);
-
-  graph_->AddBlock(loop_header);
-  graph_->AddBlock(loop_body);
-  graph_->AddBlock(exit);
-  block->AddSuccessor(loop_header);
-  loop_header->AddSuccessor(exit);       // true successor
-  loop_header->AddSuccessor(loop_body);  // false successor
-  loop_body->AddSuccessor(loop_header);
-
-  HPhi* phi = MakePhi(loop_header, {constant_0, /* placeholder */ constant_0});
+  auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, /*initial=*/ 0, /*increment=*/ 1);
   HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, constant_200);
   MakeIf(loop_header, cmp);
 
@@ -823,7 +632,7 @@ TEST_F(BoundsCheckEliminationTest, ModArrayBoundsElimination) {
   MakeArraySet(loop_body, new_array, bounds_check_i_mod_1, constant_10, DataType::Type::kInt32);
 
   // array[i % 200] = 10;
-  HRem* i_mod_200 = MakeBinOp<HRem>(loop_body, DataType::Type::kInt32, phi, constant_1);
+  HRem* i_mod_200 = MakeBinOp<HRem>(loop_body, DataType::Type::kInt32, phi, constant_200);
   HBoundsCheck* bounds_check_i_mod_200 = MakeBoundsCheck(loop_body, i_mod_200, constant_10);
   MakeArraySet(loop_body, new_array, bounds_check_i_mod_200, constant_10, DataType::Type::kInt32);
 
@@ -863,21 +672,13 @@ TEST_F(BoundsCheckEliminationTest, ModArrayBoundsElimination) {
                constant_10,
                DataType::Type::kInt32);
 
-  // i++;
-  HInstruction* add = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, constant_1);
-  MakeGoto(loop_body);
-
-  phi->ReplaceInput(add, 1u);  // Update back-edge input.
-
   //////////////////////////////////////////////////////////////////////////////////
-
-  MakeExit(exit);
 
   RunBCE();
 
   ASSERT_TRUE(IsRemoved(bounds_check_i_mod_10));
   ASSERT_TRUE(IsRemoved(bounds_check_i_mod_1));
-  ASSERT_TRUE(IsRemoved(bounds_check_i_mod_200));
+  ASSERT_FALSE(IsRemoved(bounds_check_i_mod_200));
   ASSERT_TRUE(IsRemoved(bounds_check_i_mod_minus_10));
   ASSERT_TRUE(IsRemoved(bounds_check_i_mod_array_len));
   ASSERT_FALSE(IsRemoved(bounds_check_param_i_mod_10));

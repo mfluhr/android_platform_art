@@ -27,4 +27,5 @@ GENERATED_SRC=src2
 mkdir -p src2
 
 # Generate tests and Main that covers both the generated tests and manual tests
-python3 ./util-src/generate_java.py "${GENERATED_SRC}"
+python3 ${ANDROID_BUILD_TOP}/art/test/utils/python/generate_java_varhandle_perf.py \
+"${GENERATED_SRC}" 16

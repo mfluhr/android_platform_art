@@ -33,10 +33,10 @@ using Value = InductionVarRange::Value;
 class InductionVarRangeTest : public OptimizingUnitTest {
  public:
   InductionVarRangeTest()
-      : graph_(CreateGraph()),
-        iva_(new (GetAllocator()) HInductionVarAnalysis(graph_)),
+      : iva_(new (GetAllocator()) HInductionVarAnalysis(BuildGraph())),
         range_(iva_) {
-    BuildGraph();
+    // Set arbitrary range analysis hint while testing private methods.
+    SetHint(x_);
   }
 
   ~InductionVarRangeTest() { }
@@ -58,54 +58,30 @@ class InductionVarRangeTest : public OptimizingUnitTest {
   //
 
   /** Constructs bare minimum graph. */
-  void BuildGraph() {
+  HGraph* BuildGraph() {
+    return_block_ = InitEntryMainExitGraphWithReturnVoid();
     graph_->SetNumberOfVRegs(1);
-    entry_block_ = new (GetAllocator()) HBasicBlock(graph_);
-    exit_block_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(entry_block_);
-    graph_->AddBlock(exit_block_);
-    graph_->SetEntryBlock(entry_block_);
-    graph_->SetExitBlock(exit_block_);
     // Two parameters.
     x_ = MakeParam(DataType::Type::kInt32);
     y_ = MakeParam(DataType::Type::kInt32);
-    // Set arbitrary range analysis hint while testing private methods.
-    SetHint(x_);
+    return graph_;
   }
 
   /** Constructs loop with given upper bound. */
   void BuildLoop(int32_t lower, HInstruction* upper, int32_t stride) {
     // Control flow.
-    loop_preheader_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_preheader_);
-    loop_header_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_header_);
-    loop_body_ = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(loop_body_);
-    HBasicBlock* return_block = new (GetAllocator()) HBasicBlock(graph_);
-    graph_->AddBlock(return_block);
-    entry_block_->AddSuccessor(loop_preheader_);
-    loop_preheader_->AddSuccessor(loop_header_);
-    loop_header_->AddSuccessor(loop_body_);
-    loop_header_->AddSuccessor(return_block);
-    loop_body_->AddSuccessor(loop_header_);
-    return_block->AddSuccessor(exit_block_);
+    std::tie(loop_preheader_, loop_header_, loop_body_) = CreateWhileLoop(return_block_);
+    loop_header_->SwapSuccessors();  // Move the loop exit to the "else" successor.
     // Instructions.
-    MakeGoto(loop_preheader_);
     HInstruction* lower_const = graph_->GetIntConstant(lower);
-    HPhi* phi = MakePhi(loop_header_, {lower_const, /* placeholder */ lower_const});  // i = l
+    HPhi* phi;
+    std::tie(phi, increment_) = MakeLinearLoopVar(loop_header_, loop_body_, lower, stride);
     if (stride > 0) {
       condition_ = MakeCondition<HLessThan>(loop_header_, phi, upper);  // i < u
     } else {
       condition_ = MakeCondition<HGreaterThan>(loop_header_, phi, upper);  // i > u
     }
     MakeIf(loop_header_, condition_);
-    increment_ = MakeBinOp<HAdd>(
-        loop_body_, DataType::Type::kInt32, phi, graph_->GetIntConstant(stride));  // i += s
-    phi->ReplaceInput(increment_, 1u);  // Update back-edge input.
-    MakeGoto(loop_body_);
-    MakeReturnVoid(return_block);
-    MakeExit(exit_block_);
   }
 
   /** Constructs SSA and performs induction variable analysis. */
@@ -339,9 +315,7 @@ class InductionVarRangeTest : public OptimizingUnitTest {
   Value MaxValue(Value v1, Value v2) { return range_.MergeVal(v1, v2, false); }
 
   // General building fields.
-  HGraph* graph_;
-  HBasicBlock* entry_block_;
-  HBasicBlock* exit_block_;
+  HBasicBlock* return_block_;
   HBasicBlock* loop_preheader_;
   HBasicBlock* loop_header_;
   HBasicBlock* loop_body_;

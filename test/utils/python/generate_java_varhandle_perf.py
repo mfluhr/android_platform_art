@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """
-Generate java benchmarks for 2238-varhandle-perf
+Generate java benchmarks for 2239-varhandle-perf
 """
 # TODO: fix constants when converting the test to a Golem benchmark
 
@@ -397,98 +397,132 @@ UNSAFE_CAS = UNSAFE_START + """
       theUnsafe.{method}({this_comma}offset, {value1}, {value2});
       theUnsafe.{method}({this_comma}offset, {value2}, {value1});""" * REPEAT_HALF + END
 
-
-ALL_BENCHMARKS = (
-    [BenchVHField(VH_GET, static, vartype, flavour, "get")
-        for flavour in ["", "Acquire", "Opaque", "Volatile"]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_SET, static, vartype, flavour, "set")
-        for flavour in ["", "Volatile", "Opaque", "Release"]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_CAS, static, vartype, flavour, "compareAndSet")
-        for flavour in [""]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_CAS, static, vartype, flavour, "weakCompareAndSet")
-        for flavour in ["", "Plain", "Acquire", "Release"]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_CAE, static, vartype, flavour, "compareAndExchange")
-        for flavour in ["", "Acquire", "Release"]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_GAS, static, vartype, flavour, "getAndSet")
-        for flavour in ["", "Acquire", "Release"]
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchVHField(VH_GAA, static, vartype, flavour, "getAndAdd")
-        for flavour in ["", "Acquire", "Release"]
-        for static in [True, False]
-        for vartype in ["int", "float"]] +
-    [BenchVHField(VH_GAB, static, vartype, flavour, "getAndBitwise")
-        for flavour in [oper + mode
-            for oper in ["Or", "Xor", "And"]
-            for mode in ["", "Acquire", "Release"]]
-        for static in [True, False]
-        for vartype in ["int"]] +
-    [BenchVHArray(VH_GET_A, vartype, flavour, "get")
-        for flavour in [""]
-        for vartype in ["int", "String"]] +
-    [BenchVHArray(VH_SET_A, vartype, flavour, "set")
-        for flavour in [""]
-        for vartype in ["int", "String"]] +
-    [BenchVHByteArrayView(VH_GET_BAV, byteorder, vartype, flavour, "get")
-        for flavour in [""]
-        for byteorder in ["BIG_ENDIAN", "LITTLE_ENDIAN"]
-        for vartype in ["int"]] +
-    [BenchVHByteArrayView(VH_SET_BAV, byteorder, vartype, flavour, "set")
-        for flavour in [""]
-        for byteorder in ["BIG_ENDIAN", "LITTLE_ENDIAN"]
-        for vartype in ["int"]] +
-    [BenchReflect(REFLECT_GET, static, vartype, "get")
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchReflect(REFLECT_SET, static, vartype, "set")
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchUnsafe(UNSAFE_GET, static, vartype, "get")
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchUnsafe(UNSAFE_PUT, static, vartype, "put")
-        for static in [True, False]
-        for vartype in ["int", "String"]] +
-    [BenchUnsafe(UNSAFE_CAS, static, vartype, method)
-        for method in ["compareAndSwap", "compareAndSet"]
-        for static in [True, False]
-        for vartype in ["int", "String"]])
-
-
-MAIN = BANNER + """
-public class Main {
-  static MicroBenchmark[] benchmarks;
-
-  private static void initialize() throws Throwable {
-    benchmarks = new MicroBenchmark[] {""" + "".join(["""
-      new {}(),""".format(b.fullname()) for b in ALL_BENCHMARKS]) + """
-    };
-  }
-
-  public static void main(String[] args) throws Throwable {
-    initialize();
-    for (MicroBenchmark benchmark : benchmarks) {
-      benchmark.report();
-    }
-  }
-}"""
-
+def benchmark_selector(benchmark_to_run):
+  if benchmark_to_run == '0':
+    return (
+        [BenchVHField(VH_GET, static, vartype, flavour, "get")
+            for flavour in ["", "Acquire", "Opaque", "Volatile"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '1':
+    return (
+        [BenchVHField(VH_SET, static, vartype, flavour, "set")
+            for flavour in ["", "Volatile", "Opaque", "Release"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '2':
+    return (
+        [BenchVHField(VH_CAS, static, vartype, flavour, "compareAndSet")
+            for flavour in [""]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '3':
+    return (
+        [BenchVHField(VH_CAS, static, vartype, flavour, "weakCompareAndSet")
+            for flavour in ["", "Plain", "Acquire", "Release"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '4':
+    return (
+        [BenchVHField(VH_CAE, static, vartype, flavour, "compareAndExchange")
+            for flavour in ["", "Acquire", "Release"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '5':
+    return (
+        [BenchVHField(VH_GAS, static, vartype, flavour, "getAndSet")
+            for flavour in ["", "Acquire", "Release"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '6':
+    return (
+        [BenchVHField(VH_GAA, static, vartype, flavour, "getAndAdd")
+            for flavour in ["", "Acquire", "Release"]
+            for static in [True, False]
+            for vartype in ["int", "float"]])
+  elif benchmark_to_run == '7':
+    return (
+        [BenchVHField(VH_GAB, static, vartype, flavour, "getAndBitwise")
+            for flavour in [oper + mode
+                for oper in ["Or", "Xor", "And"]
+                for mode in ["", "Acquire", "Release"]]
+            for static in [True, False]
+            for vartype in ["int"]])
+  elif benchmark_to_run == '8':
+    return (
+        [BenchVHArray(VH_GET_A, vartype, flavour, "get")
+            for flavour in [""]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '9':
+    return (
+        [BenchVHArray(VH_SET_A, vartype, flavour, "set")
+            for flavour in [""]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '10':
+    return (
+        [BenchVHByteArrayView(VH_GET_BAV, byteorder, vartype, flavour, "get")
+            for flavour in [""]
+            for byteorder in ["BIG_ENDIAN", "LITTLE_ENDIAN"]
+            for vartype in ["int"]])
+  elif benchmark_to_run == '11':
+    return (
+        [BenchVHByteArrayView(VH_SET_BAV, byteorder, vartype, flavour, "set")
+            for flavour in [""]
+            for byteorder in ["BIG_ENDIAN", "LITTLE_ENDIAN"]
+            for vartype in ["int"]])
+  elif benchmark_to_run == '12':
+    return (
+        [BenchReflect(REFLECT_GET, static, vartype, "get")
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '13':
+    return (
+        [BenchReflect(REFLECT_SET, static, vartype, "set")
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '14':
+    return (
+        [BenchUnsafe(UNSAFE_GET, static, vartype, "get")
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  elif benchmark_to_run == '15':
+    return (
+        [BenchUnsafe(UNSAFE_PUT, static, vartype, "put")
+            for static in [True, False]
+            for vartype in ["int", "String"]])
+  else:
+    return (
+        [BenchUnsafe(UNSAFE_CAS, static, vartype, method)
+            for method in ["compareAndSwap", "compareAndSet"]
+            for static in [True, False]
+            for vartype in ["int", "String"]])
 
 def main(argv):
     final_java_dir = Path(argv[1])
     if not final_java_dir.exists() or not final_java_dir.is_dir():
         print("{} is not a valid java dir".format(final_java_dir), file=sys.stderr)
         sys.exit(1)
+
+    benchmark_to_run = argv[2]
+    ALL_BENCHMARKS = benchmark_selector(benchmark_to_run)
+
+    MAIN = BANNER + """
+    public class Main {
+      static MicroBenchmark[] benchmarks;
+
+      private static void initialize() throws Throwable {
+        benchmarks = new MicroBenchmark[] {""" + "".join(["""
+          new {}(),""".format(b.fullname()) for b in ALL_BENCHMARKS]) + """
+        };
+      }
+
+      public static void main(String[] args) throws Throwable {
+        initialize();
+        for (MicroBenchmark benchmark : benchmarks) {
+          benchmark.report();
+        }
+      }
+    }"""
 
     for bench in ALL_BENCHMARKS:
         file_path = final_java_dir / "{}.java".format(bench.fullname())
