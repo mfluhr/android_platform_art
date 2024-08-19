@@ -66,8 +66,9 @@ inline ObjPtr<ObjectArray<T>> ObjectArray<T>::CopyOf(Handle<ObjectArray<T>> h_th
                                                      int32_t new_length) {
   DCHECK_GE(new_length, 0);
   gc::Heap* heap = Runtime::Current()->GetHeap();
-  DCHECK(heap->PossiblyAllocatedMovable(h_this.Get()));
-  gc::AllocatorType allocator_type = heap->GetCurrentAllocator();
+  gc::AllocatorType allocator_type = heap->IsMovableObject(h_this.Get())
+      ? heap->GetCurrentAllocator()
+      : heap->GetCurrentNonMovingAllocator();
   ObjPtr<ObjectArray<T>> new_array = Alloc(self, h_this->GetClass(), new_length, allocator_type);
   if (LIKELY(new_array != nullptr)) {
     new_array->AssignableMemcpy(0, h_this.Get(), 0, std::min(h_this->GetLength(), new_length));
