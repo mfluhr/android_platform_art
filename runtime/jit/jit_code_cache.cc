@@ -397,7 +397,7 @@ static void DCheckRootsAreValid(const std::vector<Handle<mirror::Object>>& roots
     }
     // Ensure that we don't put movable objects in the shared region.
     if (is_shared_region) {
-      CHECK(!Runtime::Current()->GetHeap()->IsMovableObject(object.Get()));
+      CHECK(Runtime::Current()->GetHeap()->IsNonMovable(object.Get()));
     }
   }
 }

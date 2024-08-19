@@ -1829,7 +1829,7 @@ TEST_F(JniInternalTest, GetStringChars_ReleaseStringChars) {
 
   jboolean is_copy = JNI_FALSE;
   chars = env_->GetStringChars(s, &is_copy);
-  if (Runtime::Current()->GetHeap()->IsMovableObject(s_m)) {
+  if (Runtime::Current()->GetHeap()->ObjectMayMove(s_m)) {
     EXPECT_EQ(JNI_TRUE, is_copy);
   } else {
     EXPECT_EQ(JNI_FALSE, is_copy);

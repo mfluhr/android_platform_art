@@ -120,8 +120,8 @@ static_assert(ProfileCompilationInfo::kIndividualInlineCacheSize < kIsMegamorphi
 static_assert(ProfileCompilationInfo::kIndividualInlineCacheSize < kIsMissingTypesEncoding,
               "InlineCache::kIndividualInlineCacheSize is larger than expected");
 
-static constexpr uint32_t kSizeWarningThresholdBytes = 500000U;
-static constexpr uint32_t kSizeErrorThresholdBytes = 1500000U;
+static constexpr uint32_t kSizeWarningThresholdBytes = 5000000U;
+static constexpr uint32_t kSizeErrorThresholdBytes = 15000000U;
 
 static constexpr uint32_t kSizeWarningThresholdBootBytes = 25000000U;
 static constexpr uint32_t kSizeErrorThresholdBootBytes = 100000000U;

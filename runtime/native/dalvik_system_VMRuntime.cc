@@ -116,11 +116,11 @@ static jobject VMRuntime_newNonMovableArray(JNIEnv* env, jobject, jclass javaEle
     return nullptr;
   }
   gc::AllocatorType allocator = runtime->GetHeap()->GetCurrentNonMovingAllocator();
-  ObjPtr<mirror::Array> result = mirror::Array::Alloc(soa.Self(),
-                                                      array_class,
-                                                      length,
-                                                      array_class->GetComponentSizeShift(),
-                                                      allocator);
+  // To keep these allocations distinguishable, do not fall back to LargeObjectsSpace:
+  ObjPtr<mirror::Array> result = mirror::Array::Alloc</* kIsInstrumented= */ true,
+                                                      /* kfillUsable= */ false,
+                                                      /* kCheckLargeObject= */ false>(
+      soa.Self(), array_class, length, array_class->GetComponentSizeShift(), allocator);
   return soa.AddLocalReference<jobject>(result);
 }
 
@@ -167,10 +167,11 @@ static jlong VMRuntime_addressOf(JNIEnv* env, jobject, jobject javaArray) {
     ThrowIllegalArgumentException("not a primitive array");
     return 0;
   }
-  if (Runtime::Current()->GetHeap()->IsMovableObject(array)) {
+  if (!Runtime::Current()->GetHeap()->IsNonMovable(array)) {
     ThrowRuntimeException("Trying to get address of movable array object");
     return 0;
   }
+  DCHECK(!Runtime::Current()->GetHeap()->ObjectMayMove(array));
   return reinterpret_cast<uintptr_t>(array->GetRawData(array->GetClass()->GetComponentSize(), 0));
 }
 

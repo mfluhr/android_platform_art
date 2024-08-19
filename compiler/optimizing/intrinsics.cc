@@ -218,7 +218,7 @@ void IntrinsicVisitor::AssertNonMovableStringClass() {
   if (kIsDebugBuild) {
     ScopedObjectAccess soa(Thread::Current());
     ObjPtr<mirror::Class> string_class = GetClassRoot<mirror::String>();
-    CHECK(!art::Runtime::Current()->GetHeap()->IsMovableObject(string_class));
+    CHECK(!art::Runtime::Current()->GetHeap()->ObjectMayMove(string_class));
   }
 }
 

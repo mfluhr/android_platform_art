@@ -2126,7 +2126,7 @@ class JNI {
     ScopedObjectAccess soa(env);
     ObjPtr<mirror::String> s = soa.Decode<mirror::String>(java_string);
     gc::Heap* heap = Runtime::Current()->GetHeap();
-    if (heap->IsMovableObject(s) || s->IsCompressed()) {
+    if (heap->ObjectMayMove(s) || s->IsCompressed()) {
       jchar* chars = new jchar[s->GetLength()];
       if (s->IsCompressed()) {
         int32_t length = s->GetLength();
@@ -2174,7 +2174,7 @@ class JNI {
       }
       return chars;
     } else {
-      if (heap->IsMovableObject(s)) {
+      if (heap->ObjectMayMove(s)) {
         StackHandleScope<1> hs(soa.Self());
         HandleWrapperObjPtr<mirror::String> h(hs.NewHandleWrapper(&s));
         if (!gUseReadBarrier && !gUseUserfaultfd) {
@@ -2202,7 +2202,7 @@ class JNI {
     ScopedObjectAccess soa(env);
     gc::Heap* heap = Runtime::Current()->GetHeap();
     ObjPtr<mirror::String> s = soa.Decode<mirror::String>(java_string);
-    if (!s->IsCompressed() && heap->IsMovableObject(s)) {
+    if (!s->IsCompressed() && heap->ObjectMayMove(s)) {
       if (!gUseReadBarrier && !gUseUserfaultfd) {
         heap->DecrementDisableMovingGC(soa.Self());
       } else {
@@ -2369,7 +2369,7 @@ class JNI {
       return nullptr;
     }
     gc::Heap* heap = Runtime::Current()->GetHeap();
-    if (heap->IsMovableObject(array)) {
+    if (heap->ObjectMayMove(array)) {
       if (!gUseReadBarrier && !gUseUserfaultfd) {
         heap->IncrementDisableMovingGC(soa.Self());
       } else {
@@ -2570,32 +2570,33 @@ class JNI {
     }
     CHECK_NON_NULL_ARGUMENT_FN_NAME("RegisterNatives", java_class, JNI_ERR);
     ClassLinker* class_linker = Runtime::Current()->GetClassLinker();
+    ScopedObjectAccess soa(env);
+    StackHandleScope<1> hs(soa.Self());
+    Handle<mirror::Class> c = hs.NewHandle(soa.Decode<mirror::Class>(java_class));
+    if (UNLIKELY(method_count == 0)) {
+      LOG(WARNING) << "JNI RegisterNativeMethods: attempt to register 0 native methods for "
+                   << c->PrettyDescriptor();
+      return JNI_OK;
+    }
     ScopedLocalRef<jobject> jclass_loader(env, nullptr);
+    if (c->GetClassLoader() != nullptr) {
+      jclass_loader.reset(soa.Env()->AddLocalReference<jobject>(c->GetClassLoader()));
+    }
+
+    bool is_class_loader_namespace_natively_bridged = false;
     {
-      ScopedObjectAccess soa(env);
-      ObjPtr<mirror::Class> c = soa.Decode<mirror::Class>(java_class);
-      if (UNLIKELY(method_count == 0)) {
-        LOG(WARNING) << "JNI RegisterNativeMethods: attempt to register 0 native methods for "
-                     << c->PrettyDescriptor();
-        return JNI_OK;
-      }
-      if (c->GetClassLoader() != nullptr) {
-        jclass_loader.reset(soa.Env()->AddLocalReference<jobject>(c->GetClassLoader()));
-      }
       // Making sure to release mutator_lock_ before proceeding.
       // FindNativeLoaderNamespaceByClassLoader eventually acquires lock on g_namespaces_mutex
       // which may cause a deadlock if another thread is waiting for mutator_lock_
       // for IsSameObject call in libnativeloader's CreateClassLoaderNamespace (which happens
       // under g_namespace_mutex lock)
+      ScopedThreadSuspension sts(soa.Self(), ThreadState::kNative);
+
+      is_class_loader_namespace_natively_bridged =
+          IsClassLoaderNamespaceNativelyBridged(env, jclass_loader.get());
     }
 
-    bool is_class_loader_namespace_natively_bridged =
-        IsClassLoaderNamespaceNativelyBridged(env, jclass_loader.get());
-
     CHECK_NON_NULL_ARGUMENT_FN_NAME("RegisterNatives", methods, JNI_ERR);
-    ScopedObjectAccess soa(env);
-    StackHandleScope<1> hs(soa.Self());
-    Handle<mirror::Class> c = hs.NewHandle(soa.Decode<mirror::Class>(java_class));
     for (jint i = 0; i < method_count; ++i) {
       const char* name = methods[i].name;
       const char* sig = methods[i].signature;
@@ -2965,7 +2966,7 @@ class JNI {
       return nullptr;
     }
     // Only make a copy if necessary.
-    if (Runtime::Current()->GetHeap()->IsMovableObject(array)) {
+    if (Runtime::Current()->GetHeap()->ObjectMayMove(array)) {
       if (is_copy != nullptr) {
         *is_copy = JNI_TRUE;
       }
@@ -3025,7 +3026,7 @@ class JNI {
     if (mode != JNI_COMMIT) {
       if (is_copy) {
         delete[] reinterpret_cast<uint64_t*>(elements);
-      } else if (heap->IsMovableObject(array)) {
+      } else if (heap->ObjectMayMove(array)) {
         // Non copy to a movable object must means that we had disabled the moving GC.
         if (!gUseReadBarrier && !gUseUserfaultfd) {
           heap->DecrementDisableMovingGC(soa.Self());

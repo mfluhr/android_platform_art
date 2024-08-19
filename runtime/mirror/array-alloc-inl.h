@@ -115,7 +115,7 @@ class SetLengthToUsableSizeVisitor {
   DISALLOW_COPY_AND_ASSIGN(SetLengthToUsableSizeVisitor);
 };
 
-template <bool kIsInstrumented, bool kFillUsable>
+template <bool kIsInstrumented, bool kFillUsable, bool kCheckLargeObject>
 inline ObjPtr<Array> Array::Alloc(Thread* self,
                                   ObjPtr<Class> array_class,
                                   int32_t component_count,
@@ -143,15 +143,15 @@ inline ObjPtr<Array> Array::Alloc(Thread* self,
   ObjPtr<Array> result;
   if (!kFillUsable) {
     SetLengthVisitor visitor(component_count);
-    result = ObjPtr<Array>::DownCast(
-        heap->AllocObjectWithAllocator<kIsInstrumented>(
+    result =
+        ObjPtr<Array>::DownCast(heap->AllocObjectWithAllocator<kIsInstrumented, kCheckLargeObject>(
             self, array_class, size, allocator_type, visitor));
   } else {
     SetLengthToUsableSizeVisitor visitor(component_count,
                                          DataOffset(1U << component_size_shift).SizeValue(),
                                          component_size_shift);
-    result = ObjPtr<Array>::DownCast(
-        heap->AllocObjectWithAllocator<kIsInstrumented>(
+    result =
+        ObjPtr<Array>::DownCast(heap->AllocObjectWithAllocator<kIsInstrumented, kCheckLargeObject>(
             self, array_class, size, allocator_type, visitor));
   }
   if (kIsDebugBuild && result != nullptr && Runtime::Current()->IsStarted()) {
