@@ -453,7 +453,6 @@ MarkCompact::MarkCompact(Heap* heap)
       uffd_(kFdUnused),
       sigbus_in_progress_count_{kSigbusCounterCompactionDoneMask, kSigbusCounterCompactionDoneMask},
       compacting_(false),
-      marking_done_(false),
       uffd_initialized_(false),
       clamp_info_map_status_(ClampInfoStatus::kClampInfoNotDone) {
   if (kIsDebugBuild) {
@@ -1108,7 +1107,6 @@ void MarkCompact::MarkingPause() {
   // Enable the reference processing slow path, needs to be done with mutators
   // paused since there is no lock in the GetReferent fast path.
   heap_->GetReferenceProcessor()->EnableSlowPath();
-  marking_done_ = true;
 }
 
 void MarkCompact::SweepSystemWeaks(Thread* self, Runtime* runtime, const bool paused) {
@@ -4043,9 +4041,7 @@ mirror::Object* MarkCompact::IsMarked(mirror::Object* obj) {
     }
     return (is_black || moving_space_bitmap_->Test(obj)) ? obj : nullptr;
   } else if (non_moving_space_bitmap_->HasAddress(obj)) {
-    if (non_moving_space_bitmap_->Test(obj)) {
-      return obj;
-    }
+    return non_moving_space_bitmap_->Test(obj) ? obj : nullptr;
   } else if (immune_spaces_.ContainsObject(obj)) {
     return obj;
   } else {
@@ -4055,9 +4051,7 @@ mirror::Object* MarkCompact::IsMarked(mirror::Object* obj) {
     accounting::LargeObjectBitmap* los_bitmap = heap_->GetLargeObjectsSpace()->GetMarkBitmap();
     if (los_bitmap->HasAddress(obj)) {
       DCHECK(IsAlignedParam(obj, space::LargeObjectSpace::ObjectAlignment()));
-      if (los_bitmap->Test(obj)) {
-        return obj;
-      }
+      return los_bitmap->Test(obj) ? obj : nullptr;
     } else {
       // The given obj is not in any of the known spaces, so return null. This could
       // happen for instance in interpreter caches wherein a concurrent updation
@@ -4067,7 +4061,6 @@ mirror::Object* MarkCompact::IsMarked(mirror::Object* obj) {
       return nullptr;
     }
   }
-  return marking_done_ && IsOnAllocStack(obj) ? obj : nullptr;
 }
 
 bool MarkCompact::IsNullOrMarkedHeapReference(mirror::HeapReference<mirror::Object>* obj,
@@ -4091,7 +4084,6 @@ void MarkCompact::FinishPhase() {
   GetCurrentIteration()->SetScannedBytes(bytes_scanned_);
   bool is_zygote = Runtime::Current()->IsZygote();
   compacting_ = false;
-  marking_done_ = false;
 
   ZeroAndReleaseMemory(compaction_buffers_map_.Begin(), compaction_buffers_map_.Size());
   info_map_.MadviseDontNeedAndZero();

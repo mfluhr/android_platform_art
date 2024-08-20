@@ -84,8 +84,7 @@ cc_defaults {
         ":okhttp",
         ":bouncycastle",
         ":apache-xml",
-        // TODO: Figure out how to enable core-icu4j
-        // ":core-icu4j",
+        ":core-icu4j",
         // TODO: Figure out how to enable conscrypt
         // ":conscrypt",
     ],

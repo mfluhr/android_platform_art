@@ -94,10 +94,11 @@ art_cc_defaults {
     },
 }
 
-// Version of ART gtest `art_libarttools_tests` bundled with the ART APEX on target.
+// Version of ART gtest `art_libarttools_tests` bundled for host.
 // TODO(b/192274705): Remove this module when the migration to standalone ART gtests is complete.
 art_cc_test {
     name: "art_libarttools_tests",
+    device_supported: false,
     defaults: [
         "art_gtest_defaults",
         "art_libarttools_tests_defaults",
