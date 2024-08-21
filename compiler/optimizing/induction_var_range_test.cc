@@ -76,11 +76,8 @@ class InductionVarRangeTest : public OptimizingUnitTest {
     HInstruction* lower_const = graph_->GetIntConstant(lower);
     HPhi* phi;
     std::tie(phi, increment_) = MakeLinearLoopVar(loop_header_, loop_body_, lower, stride);
-    if (stride > 0) {
-      condition_ = MakeCondition<HLessThan>(loop_header_, phi, upper);  // i < u
-    } else {
-      condition_ = MakeCondition<HGreaterThan>(loop_header_, phi, upper);  // i > u
-    }
+    IfCondition cond = (stride > 0) ? kCondLT : kCondGT;
+    condition_ = MakeCondition(loop_header_, cond, phi, upper);  // i < u or i > u
     MakeIf(loop_header_, condition_);
   }
 

@@ -149,7 +149,7 @@ TEST_F(SsaLivenessAnalysisTest, TestDeoptimize) {
   null_check->SetRawEnvironment(null_check_env);
   HInstruction* length = MakeArrayLength(block, array);
   // Use HAboveOrEqual+HDeoptimize as the bounds check.
-  HInstruction* ae = MakeCondition<HAboveOrEqual>(block, index, length);
+  HInstruction* ae = MakeCondition(block, kCondAE, index, length);
   HInstruction* deoptimize = new(GetAllocator()) HDeoptimize(
       GetAllocator(), ae, DeoptimizationKind::kBlockBCE, /* dex_pc= */ 0u);
   block->AddInstruction(deoptimize);

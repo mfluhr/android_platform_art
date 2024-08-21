@@ -48,9 +48,9 @@ class SuperblockClonerTest : public OptimizingUnitTest {
     HIntConstant* const_128 = graph_->GetIntConstant(128);
 
     // Header block.
-    HPhi* phi = MakePhi(loop_header, {const_0, /* placeholder */ const_0});
+    auto [phi, induction_inc] = MakeLinearLoopVar(loop_header, loop_body, const_0, const_1);
     HInstruction* suspend_check = MakeSuspendCheck(loop_header);
-    HInstruction* loop_check = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, const_128);
+    HInstruction* loop_check = MakeCondition(loop_header, kCondGE, phi, const_128);
     MakeIf(loop_header, loop_check);
 
     // Loop body block.
@@ -62,9 +62,6 @@ class SuperblockClonerTest : public OptimizingUnitTest {
     HInstruction* add =  MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, array_get, const_1);
     HInstruction* array_set =
         MakeArraySet(loop_body, null_check, bounds_check, add, DataType::Type::kInt32, dex_pc);
-    HInstruction* induction_inc = MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, phi, const_1);
-
-    phi->ReplaceInput(induction_inc, 1u);  // Update back-edge input.
 
     graph_->SetHasBoundsChecks(true);
 

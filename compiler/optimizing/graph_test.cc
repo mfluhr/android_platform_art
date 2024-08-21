@@ -38,7 +38,7 @@ HBasicBlock* GraphTest::CreateIfBlock(HGraph* graph) {
   HBasicBlock* if_block = new (GetAllocator()) HBasicBlock(graph);
   graph->AddBlock(if_block);
   HInstruction* instr = graph->GetIntConstant(4);
-  HInstruction* equal = MakeCondition<HEqual>(if_block, instr, instr);
+  HInstruction* equal = MakeCondition(if_block, kCondEQ, instr, instr);
   MakeIf(if_block, equal);
   return if_block;
 }

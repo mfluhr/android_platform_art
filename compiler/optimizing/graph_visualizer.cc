@@ -518,6 +518,7 @@ class HGraphVisualizerPrinter final : public HGraphDelegateVisitor {
     if (method != nullptr) {
       StartAttributeStream("method_index") << method->GetMethodIndex();
     }
+    StartAttributeStream("intrinsic") << invoke->GetIntrinsic();
   }
 
   void VisitInvokeUnresolved(HInvokeUnresolved* invoke) override {
@@ -528,7 +529,6 @@ class HGraphVisualizerPrinter final : public HGraphDelegateVisitor {
   void VisitInvokeStaticOrDirect(HInvokeStaticOrDirect* invoke) override {
     VisitInvoke(invoke);
     StartAttributeStream("method_load_kind") << invoke->GetMethodLoadKind();
-    StartAttributeStream("intrinsic") << invoke->GetIntrinsic();
     if (invoke->IsStatic()) {
       StartAttributeStream("clinit_check") << invoke->GetClinitCheckRequirement();
     }
@@ -536,7 +536,6 @@ class HGraphVisualizerPrinter final : public HGraphDelegateVisitor {
 
   void VisitInvokeVirtual(HInvokeVirtual* invoke) override {
     VisitInvoke(invoke);
-    StartAttributeStream("intrinsic") << invoke->GetIntrinsic();
   }
 
   void VisitInvokePolymorphic(HInvokePolymorphic* invoke) override {

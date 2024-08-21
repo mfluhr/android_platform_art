@@ -2673,6 +2673,7 @@ HInstruction* HGraph::InlineInto(HGraph* outer_graph, HInvoke* invoke) {
       }
     }
   }
+  outer_graph->UpdateMaximumNumberOfOutVRegs(GetMaximumNumberOfOutVRegs());
 
   if (HasBoundsChecks()) {
     outer_graph->SetHasBoundsChecks(true);

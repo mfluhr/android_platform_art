@@ -625,13 +625,9 @@ class OptimizingUnitTestHelper {
                                           const std::vector<HInstruction*>& args,
                                           uint32_t dex_pc = kNoDexPc) {
     MethodReference method_reference{/* file= */ &graph_->GetDexFile(), /* index= */ method_idx_++};
-    size_t num_64bit_args = std::count_if(args.begin(), args.end(), [](HInstruction* insn) {
-      return DataType::Is64BitType(insn->GetType());
-    });
     HInvokeStaticOrDirect* invoke = new (GetAllocator())
         HInvokeStaticOrDirect(GetAllocator(),
                               args.size(),
-                              /* number_of_out_vregs= */ args.size() + num_64bit_args,
                               return_type,
                               dex_pc,
                               method_reference,
@@ -660,15 +656,24 @@ class OptimizingUnitTestHelper {
     return insn;
   }
 
-  template <typename Type>
-  Type* MakeCondition(HBasicBlock* block,
-                      HInstruction* first,
-                      HInstruction* second,
-                      uint32_t dex_pc = kNoDexPc) {
-    static_assert(std::is_base_of_v<HCondition, Type>);
-    Type* condition = new (GetAllocator()) Type(first, second, dex_pc);
+  HCondition* MakeCondition(HBasicBlock* block,
+                            IfCondition cond,
+                            HInstruction* first,
+                            HInstruction* second,
+                            uint32_t dex_pc = kNoDexPc) {
+    HCondition* condition = graph_->CreateCondition(cond, first, second, dex_pc);
     AddOrInsertInstruction(block, condition);
     return condition;
+  }
+
+  HSelect* MakeSelect(HBasicBlock* block,
+                      HInstruction* condition,
+                      HInstruction* true_value,
+                      HInstruction* false_value,
+                      uint32_t dex_pc = kNoDexPc) {
+    HSelect* select = new (GetAllocator()) HSelect(condition, true_value, false_value, dex_pc);
+    AddOrInsertInstruction(block, select);
+    return select;
   }
 
   HSuspendCheck* MakeSuspendCheck(HBasicBlock* block, uint32_t dex_pc = kNoDexPc) {

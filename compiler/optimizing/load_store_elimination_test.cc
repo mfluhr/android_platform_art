@@ -123,7 +123,7 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
     //   phi++;
     //   if (phi >= 128)
     suspend_check_ = MakeSuspendCheck(loop_);
-    HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(loop_, phi_, c128);
+    HInstruction* cmp = MakeCondition(loop_, kCondGE, phi_, c128);
     MakeIf(loop_, cmp);
 
     CreateEnvForSuspendCheck();
@@ -147,7 +147,7 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
 
     auto [upper, left, right] = CreateDiamondPattern(return_block_);
 
-    HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(upper, i_, j_);
+    HInstruction* cmp = MakeCondition(upper, kCondGE, i_, j_);
     MakeIf(upper, cmp);
 
     return std::make_tuple(upper, left, right, return_block_);
@@ -1028,7 +1028,7 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopOverlap) {
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, one_const, one_const);
   HPhi* t_phi = MakePhi(loop, {zero_const, /* placeholder */ zero_const});
   HInstruction* suspend = MakeSuspendCheck(loop);
-  HInstruction* i_cmp_top = MakeCondition<HGreaterThanOrEqual>(loop, i_phi, eighty_const);
+  HInstruction* i_cmp_top = MakeCondition(loop, kCondGE, i_phi, eighty_const);
   HIf* loop_if = MakeIf(loop, i_cmp_top);
   CHECK(loop_if->IfTrueSuccessor() == ret);
 
@@ -1102,7 +1102,7 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopOverlap2) {
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, one_const, one_const);
   HPhi* t_phi = MakePhi(loop, {zero_const, /* placeholder */ zero_const});
   HInstruction* suspend = MakeSuspendCheck(loop);
-  HInstruction* i_cmp_top = MakeCondition<HGreaterThanOrEqual>(loop, i_phi, eighty_const);
+  HInstruction* i_cmp_top = MakeCondition(loop, kCondGE, i_phi, eighty_const);
   HIf* loop_if = MakeIf(loop, i_cmp_top);
   CHECK(loop_if->IfTrueSuccessor() == ret);
 
@@ -1284,7 +1284,7 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing1) {
   // loop
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, c0, c1);
   HInstruction* loop_suspend_check = MakeSuspendCheck(loop);
-  HInstruction* loop_cond = MakeCondition<HLessThan>(loop, i_phi, n);
+  HInstruction* loop_cond = MakeCondition(loop, kCondLT, i_phi, n);
   HIf* loop_if = MakeIf(loop, loop_cond);
   CHECK(loop_if->IfTrueSuccessor() == body);
   ManuallyBuildEnvFor(loop_suspend_check, {});
@@ -1332,7 +1332,7 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing2) {
   // loop
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, c0, c1);
   HInstruction* loop_suspend_check = MakeSuspendCheck(loop);
-  HInstruction* loop_cond = MakeCondition<HLessThan>(loop, i_phi, n);
+  HInstruction* loop_cond = MakeCondition(loop, kCondLT, i_phi, n);
   HIf* loop_if = MakeIf(loop, loop_cond);
   CHECK(loop_if->IfTrueSuccessor() == body);
   ManuallyBuildEnvFor(loop_suspend_check, {});

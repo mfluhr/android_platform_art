@@ -73,7 +73,7 @@ TEST_F(BoundsCheckEliminationTest, NarrowingRangeArrayBoundsElimination) {
   HInstruction* constant_0 = graph_->GetIntConstant(0);
 
   HBasicBlock* block1 = AddNewBlock();
-  HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(block1, parameter2, constant_0);
+  HInstruction* cmp = MakeCondition(block1, kCondGE, parameter2, constant_0);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
@@ -86,7 +86,7 @@ TEST_F(BoundsCheckEliminationTest, NarrowingRangeArrayBoundsElimination) {
   HBasicBlock* block3 = AddNewBlock();
   null_check = MakeNullCheck(block3, parameter1);
   array_length = MakeArrayLength(block3, null_check);
-  cmp = MakeCondition<HLessThan>(block3, parameter2, array_length);
+  cmp = MakeCondition(block3, kCondLT, parameter2, array_length);
   MakeIf(block3, cmp);
 
   HBasicBlock* block4 = AddNewBlock();
@@ -137,7 +137,7 @@ TEST_F(BoundsCheckEliminationTest, OverflowArrayBoundsElimination) {
   HInstruction* constant_max_int = graph_->GetIntConstant(INT_MAX);
 
   HBasicBlock* block1 = AddNewBlock();
-  HInstruction* cmp = MakeCondition<HLessThanOrEqual>(block1, parameter2, constant_0);
+  HInstruction* cmp = MakeCondition(block1, kCondLE, parameter2, constant_0);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
@@ -145,7 +145,7 @@ TEST_F(BoundsCheckEliminationTest, OverflowArrayBoundsElimination) {
   HInstruction* add = MakeBinOp<HAdd>(block2, DataType::Type::kInt32, parameter2, constant_max_int);
   HNullCheck* null_check = MakeNullCheck(block2, parameter1);
   HArrayLength* array_length = MakeArrayLength(block2, null_check);
-  HInstruction* cmp2 = MakeCondition<HGreaterThanOrEqual>(block2, add, array_length);
+  HInstruction* cmp2 = MakeCondition(block2, kCondGE, add, array_length);
   MakeIf(block2, cmp2);
 
   HBasicBlock* block3 = AddNewBlock();
@@ -184,7 +184,7 @@ TEST_F(BoundsCheckEliminationTest, UnderflowArrayBoundsElimination) {
   HBasicBlock* block1 = AddNewBlock();
   HNullCheck* null_check = MakeNullCheck(block1, parameter1);
   HArrayLength* array_length = MakeArrayLength(block1, null_check);
-  HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(block1, parameter2, array_length);
+  HInstruction* cmp = MakeCondition(block1, kCondGE, parameter2, array_length);
   MakeIf(block1, cmp);
   entry->AddSuccessor(block1);
 
@@ -192,7 +192,7 @@ TEST_F(BoundsCheckEliminationTest, UnderflowArrayBoundsElimination) {
   HInstruction* sub1 =
       MakeBinOp<HSub>(block2, DataType::Type::kInt32, parameter2, constant_max_int);
   HInstruction* sub2 = MakeBinOp<HSub>(block2, DataType::Type::kInt32, sub1, constant_max_int);
-  HInstruction* cmp2 = MakeCondition<HLessThanOrEqual>(block2, sub2, constant_0);
+  HInstruction* cmp2 = MakeCondition(block2, kCondLE, sub2, constant_0);
   MakeIf(block2, cmp2);
 
   HBasicBlock* block3 = AddNewBlock();
@@ -259,13 +259,8 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph1(int initial,
   auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, increment);
   HInstruction* null_check = MakeNullCheck(loop_header, parameter);
   HInstruction* array_length = MakeArrayLength(loop_header, null_check);
-  HInstruction* cmp = nullptr;
-  if (cond == kCondGE) {
-    cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, array_length);
-  } else {
-    DCHECK(cond == kCondGT);
-    cmp = MakeCondition<HGreaterThan>(loop_header, phi, array_length);
-  }
+  DCHECK(cond == kCondGE || cond == kCondGT) << cond;
+  HInstruction* cmp = MakeCondition(loop_header, cond, phi, array_length);
   MakeIf(loop_header, cmp);
 
   null_check = MakeNullCheck(loop_body, parameter);
@@ -336,13 +331,8 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph2(int initial,
   HInstruction* array_length = MakeArrayLength(pre_header, null_check);
 
   auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, array_length, constant_minus_1);
-  HInstruction* cmp = nullptr;
-  if (cond == kCondLE) {
-    cmp = MakeCondition<HLessThanOrEqual>(loop_header, phi, constant_initial);
-  } else {
-    DCHECK(cond == kCondLT);
-    cmp = MakeCondition<HLessThan>(loop_header, phi, constant_initial);
-  }
+  DCHECK(cond == kCondLE || cond == kCondLT) << cond;
+  HInstruction* cmp = MakeCondition(loop_header, cond, phi, constant_initial);
   MakeIf(loop_header, cmp);
 
   null_check = MakeNullCheck(loop_body, parameter);
@@ -403,13 +393,8 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph3(int initial,
       MakeNewArray(pre_header, /* cls= */ constant_10, /* length= */ constant_10);
 
   auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, increment);
-  HInstruction* cmp = nullptr;
-  if (cond == kCondGE) {
-    cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, constant_10);
-  } else {
-    DCHECK(cond == kCondGT);
-    cmp = MakeCondition<HGreaterThan>(loop_header, phi, constant_10);
-  }
+  DCHECK(cond == kCondGE || cond == kCondGT) << cond;
+  HInstruction* cmp = MakeCondition(loop_header, cond, phi, constant_10);
   MakeIf(loop_header, cmp);
 
   HNullCheck* null_check = MakeNullCheck(loop_body, new_array);
@@ -464,13 +449,8 @@ HInstruction* BoundsCheckEliminationTest::BuildSSAGraph4(int initial, IfConditio
   auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, initial, /*increment=*/ 1);
   HInstruction* null_check = MakeNullCheck(loop_header, parameter);
   HInstruction* array_length = MakeArrayLength(loop_header, null_check);
-  HInstruction* cmp = nullptr;
-  if (cond == kCondGE) {
-    cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, array_length);
-  } else {
-    DCHECK(cond == kCondGT);
-    cmp = MakeCondition<HGreaterThan>(loop_header, phi, array_length);
-  }
+  DCHECK(cond == kCondGE || cond == kCondGT) << cond;
+  HInstruction* cmp = MakeCondition(loop_header, cond, phi, array_length);
   MakeIf(loop_header, cmp);
 
   null_check = MakeNullCheck(loop_body, parameter);
@@ -532,7 +512,7 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   HNullCheck* null_check = MakeNullCheck(outer_header, parameter);
   HArrayLength* array_length = MakeArrayLength(outer_header, null_check);
   HAdd* add = MakeBinOp<HAdd>(outer_header, DataType::Type::kInt32, array_length, constant_minus_1);
-  HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(outer_header, phi_i, add);
+  HInstruction* cmp = MakeCondition(outer_header, kCondGE, phi_i, add);
   MakeIf(outer_header, cmp);
 
   auto [phi_j, add_j] =
@@ -541,7 +521,7 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   array_length = MakeArrayLength(inner_header, null_check);
   HSub* sub = MakeBinOp<HSub>(inner_header, DataType::Type::kInt32, array_length, phi_i);
   add = MakeBinOp<HAdd>(inner_header, DataType::Type::kInt32, sub, constant_minus_1);
-  cmp = MakeCondition<HGreaterThanOrEqual>(inner_header, phi_j, add);
+  cmp = MakeCondition(inner_header, kCondGE, phi_j, add);
   MakeIf(inner_header, cmp);
 
   null_check = MakeNullCheck(inner_body_compare, parameter);
@@ -556,7 +536,7 @@ TEST_F(BoundsCheckEliminationTest, BubbleSortArrayBoundsElimination) {
   HBoundsCheck* bounds_check2 = MakeBoundsCheck(inner_body_compare, j_plus_1, array_length);
   HArrayGet* array_get_j_plus_1 =
       MakeArrayGet(inner_body_compare, null_check, bounds_check2, DataType::Type::kInt32);
-  cmp = MakeCondition<HGreaterThanOrEqual>(inner_body_compare, array_get_j, array_get_j_plus_1);
+  cmp = MakeCondition(inner_body_compare, kCondGE, array_get_j, array_get_j_plus_1);
   MakeIf(inner_body_compare, cmp);
 
   j_plus_1 = MakeBinOp<HAdd>(inner_body_swap, DataType::Type::kInt32, phi_j, constant_1);
@@ -616,7 +596,7 @@ TEST_F(BoundsCheckEliminationTest, ModArrayBoundsElimination) {
       MakeNewArray(pre_header, /* cls= */ constant_10, /* length= */ constant_10);
 
   auto [phi, add] = MakeLinearLoopVar(loop_header, loop_body, /*initial=*/ 0, /*increment=*/ 1);
-  HInstruction* cmp = MakeCondition<HGreaterThanOrEqual>(loop_header, phi, constant_200);
+  HInstruction* cmp = MakeCondition(loop_header, kCondGE, phi, constant_200);
   MakeIf(loop_header, cmp);
 
   //////////////////////////////////////////////////////////////////////////////////

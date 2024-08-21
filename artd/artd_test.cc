@@ -65,7 +65,6 @@
 #include "testing.h"
 #include "tools/binder_utils.h"
 #include "tools/system_properties.h"
-#include "tools/tools.h"
 #include "ziparchive/zip_writer.h"
 
 extern char** environ;
@@ -101,7 +100,6 @@ using ::android::base::Split;
 using ::android::base::WriteStringToFd;
 using ::android::base::WriteStringToFile;
 using ::android::base::testing::HasValue;
-using ::art::tools::GetProcMountsAncestorsOfPath;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::AnyNumber;
@@ -2295,10 +2293,6 @@ TEST_F(ArtdCleanupTest, cleanUpPreRebootStagedFiles) {
 
 TEST_F(ArtdTest, isInDalvikCache) {
   TEST_DISABLED_FOR_HOST();
-
-  if (GetProcMountsAncestorsOfPath("/")->empty()) {
-    GTEST_SKIP() << "Skipped for chroot";
-  }
 
   auto is_in_dalvik_cache = [this](const std::string& dex_file) -> Result<bool> {
     bool result;

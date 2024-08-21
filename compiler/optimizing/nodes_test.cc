@@ -143,26 +143,14 @@ TEST_F(NodeTest, ClearDominanceThenLoopInformation) {
  * and environment lists.
  */
 TEST_F(NodeTest, RemoveInstruction) {
-  HGraph* graph = CreateGraph();
-  HBasicBlock* entry = new (GetAllocator()) HBasicBlock(graph);
-  graph->AddBlock(entry);
-  graph->SetEntryBlock(entry);
+  HBasicBlock* main = InitEntryMainExitGraphWithReturnVoid();
+
   HInstruction* parameter = MakeParam(DataType::Type::kReference);
-  MakeGoto(entry);
 
-  HBasicBlock* first_block = new (GetAllocator()) HBasicBlock(graph);
-  graph->AddBlock(first_block);
-  entry->AddSuccessor(first_block);
-  HInstruction* null_check = MakeNullCheck(first_block, parameter);
-  MakeReturnVoid(first_block);
-
-  HBasicBlock* exit_block = new (GetAllocator()) HBasicBlock(graph);
-  graph->AddBlock(exit_block);
-  first_block->AddSuccessor(exit_block);
-  MakeExit(exit_block);
+  HInstruction* null_check = MakeNullCheck(main, parameter);
 
   HEnvironment* environment = new (GetAllocator()) HEnvironment(
-      GetAllocator(), 1, graph->GetArtMethod(), 0, null_check);
+      GetAllocator(), 1, graph_->GetArtMethod(), 0, null_check);
   null_check->SetRawEnvironment(environment);
   environment->SetRawEnvAt(0, parameter);
   parameter->AddEnvUseAt(null_check->GetEnvironment(), 0);
@@ -170,7 +158,7 @@ TEST_F(NodeTest, RemoveInstruction) {
   ASSERT_TRUE(parameter->HasEnvironmentUses());
   ASSERT_TRUE(parameter->HasUses());
 
-  first_block->RemoveInstruction(null_check);
+  main->RemoveInstruction(null_check);
 
   ASSERT_FALSE(parameter->HasEnvironmentUses());
   ASSERT_FALSE(parameter->HasUses());

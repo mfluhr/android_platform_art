@@ -74,7 +74,7 @@ class InductionVarAnalysisTest : public OptimizingUnitTest {
     for (int d = 0; d < n; d++) {
       std::tie(basic_[d], increment_[d]) =
           MakeLinearLoopVar(loop_header_[d], loop_body_[d], constant0_, constant1_);
-      HInstruction* compare = MakeCondition<HLessThan>(loop_header_[d], basic_[d], constant100_);
+      HInstruction* compare = MakeCondition(loop_header_[d], kCondLT, basic_[d], constant100_);
       MakeIf(loop_header_[d], compare);
     }
   }
