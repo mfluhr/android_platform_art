@@ -233,11 +233,13 @@ class OdRefreshTest : public CommonArtTest {
     cache_info_xml_ = dalvik_cache_dir_ + "/cache-info.xml";
     check_compilation_space_ = [] { return true; };
     setfilecon_ = [](auto, auto) { return 0; };
+    restorecon_ = [](auto, auto) { return 0; };
     odrefresh_ = std::make_unique<OnDeviceRefresh>(config_,
+                                                   setfilecon_,
+                                                   restorecon_,
                                                    cache_info_xml_,
                                                    std::move(mock_exec_utils),
-                                                   check_compilation_space_,
-                                                   setfilecon_);
+                                                   check_compilation_space_);
   }
 
   void TearDown() override {
@@ -277,6 +279,7 @@ class OdRefreshTest : public CommonArtTest {
   std::string cache_info_xml_;
   std::function<bool()> check_compilation_space_;
   std::function<int(const char*, const char*)> setfilecon_;
+  std::function<int(const char*, unsigned int)> restorecon_;
 };
 
 TEST_F(OdRefreshTest, PrimaryBootImage) {

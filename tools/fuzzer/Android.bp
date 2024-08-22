@@ -85,8 +85,7 @@ cc_defaults {
         ":bouncycastle",
         ":apache-xml",
         ":core-icu4j",
-        // TODO: Figure out how to enable conscrypt
-        // ":conscrypt",
+        ":conscrypt-fuzzer",
     ],
 }
 

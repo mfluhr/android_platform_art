@@ -25,6 +25,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.SharedLibraryInfo;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
@@ -53,6 +54,7 @@ import com.android.server.pm.PackageManagerLocal;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.AndroidPackageSplit;
 import com.android.server.pm.pkg.PackageState;
+import com.android.server.pm.pkg.SharedLibrary;
 
 import com.google.auto.value.AutoValue;
 
@@ -447,7 +449,8 @@ public class DexUseManagerLocal {
         // Most likely, the package is loading its own dex file, so we check this first as an
         // optimization.
         PackageState loadingPkgState = Utils.getPackageStateOrThrow(snapshot, loadingPackageName);
-        FindResult result = checkForPackage(loadingPkgState, dexPath);
+        FindResult result =
+                checkForPackage(loadingPkgState, dexPath, true /* checkForSharedLibraries */);
         if (result != null) {
             return result;
         }
@@ -494,7 +497,8 @@ public class DexUseManagerLocal {
                     mRecentDexFilesToPackageNames.remove(dexPath);
                     return null;
                 }
-                FindResult result = checkForPackage(pkgState, dexPath);
+                FindResult result =
+                        checkForPackage(pkgState, dexPath, true /* checkForSharedLibraries */);
                 if (result != null) {
                     mRecentDexFilesToPackageNames.put(dexPath, packageName);
                     return result;
@@ -522,12 +526,14 @@ public class DexUseManagerLocal {
                 }
             }
 
-            // Check remaining packages.
+            // Check remaining packages. Don't check for shared libraries because it might be too
+            // expansive to do so and the time complexity is O(n) no matter we do it or not.
             for (PackageState pkgState : packageStates.values()) {
                 if (visitedPackages.contains(pkgState.getPackageName())) {
                     continue;
                 }
-                FindResult result = checkForPackage(pkgState, dexPath);
+                FindResult result =
+                        checkForPackage(pkgState, dexPath, false /* checkForSharedLibraries */);
                 if (result != null) {
                     mRecentDexFilesToPackageNames.put(dexPath, pkgState.getPackageName());
                     return result;
@@ -539,9 +545,17 @@ public class DexUseManagerLocal {
     }
 
     @Nullable
-    private FindResult checkForPackage(@NonNull PackageState pkgState, @NonNull String dexPath) {
+    private FindResult checkForPackage(@NonNull PackageState pkgState, @NonNull String dexPath,
+            boolean checkForSharedLibraries) {
         if (isOwningPackageForPrimaryDex(pkgState, dexPath)) {
             return new FindResult(TYPE_PRIMARY, pkgState.getPackageName());
+        }
+        if (checkForSharedLibraries) {
+            FindResult result =
+                    checkForSharedLibraries(pkgState.getSharedLibraryDependencies(), dexPath);
+            if (result != null) {
+                return result;
+            }
         }
         synchronized (mLock) {
             if (isOwningPackageForSecondaryDexLocked(pkgState, dexPath)) {
@@ -582,6 +596,29 @@ public class DexUseManagerLocal {
             }
         }
         return false;
+    }
+
+    @Nullable
+    private static FindResult checkForSharedLibraries(
+            @NonNull List<SharedLibrary> libraries, @NonNull String dexPath) {
+        for (SharedLibrary library : libraries) {
+            if (library.isNative()) {
+                continue;
+            }
+            if (dexPath.equals(library.getPath())) {
+                if (library.getType() == SharedLibraryInfo.TYPE_BUILTIN) {
+                    // Shared libraries are considered used by other apps anyway. No need to record
+                    // them.
+                    return new FindResult(TYPE_DONT_RECORD, null);
+                }
+                return new FindResult(TYPE_PRIMARY, library.getPackageName());
+            }
+            FindResult result = checkForSharedLibraries(library.getDependencies(), dexPath);
+            if (result != null) {
+                return result;
+            }
+        }
+        return null;
     }
 
     @Nullable

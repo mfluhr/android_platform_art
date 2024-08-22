@@ -5891,6 +5891,9 @@
   ],
   "postsubmit": [
     {
+      "name": "art-run-test-057-math-intrinsics"
+    },
+    {
       "name": "art_standalone_dex2oat_cts_tests"
     }
   ]

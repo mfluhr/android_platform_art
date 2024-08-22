@@ -330,6 +330,19 @@ java_library {
     },
 }
 
+// A version of conscrypt only for the ART fuzzer.
+java_library {
+    name: "conscrypt-fuzzer",
+    visibility: [
+        "//art/tools/fuzzer",
+    ],
+    static_libs: ["conscrypt-for-host"],
+    stem: "conscrypt",
+    compile_dex: true,
+    sdk_version: "none",
+    system_modules: "none",
+}
+
 // A version of core-icu4j only for enabling the "-hostdex" version to test ART on host.
 java_library {
     // We need our own name to not clash with the core-icu4j library.

@@ -40,7 +40,6 @@ cc_defaults {
     ],
     shared_libs: [
         "liblog",
-        "libselinux",
     ],
     static_libs: [
         "libmodules-utils-build",
@@ -76,6 +75,7 @@ cc_defaults {
         "libarttools",
         "libbase",
         "libdexfile",
+        "libselinux",
     ],
 }
 

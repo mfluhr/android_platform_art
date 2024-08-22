@@ -54,8 +54,7 @@ std::vector<std::string> GetLibCoreDexFileNames() {
       "bouncycastle",
       "apache-xml",
       "core-icu4j",
-      // TODO: We would like to enable conscrypt in the future
-      // "conscrypt",
+      "conscrypt",
   };
   result.reserve(modules.size());
   for (const std::string& module : modules) {
