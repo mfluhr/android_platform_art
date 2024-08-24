@@ -1724,6 +1724,54 @@ void Riscv64Assembler::ZbbZextH(XRegister rd, XRegister rs1) {
 
 /////////////////////////////// RV64 "Zbb" Instructions  END //////////////////////////////
 
+////////////////////////////// RV64 "Zbs" Instructions  START /////////////////////////////
+
+void Riscv64Assembler::Bclr(XRegister rd, XRegister rs1, XRegister rs2) {
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitR(0x24, rs2, rs1, 0x1, rd, 0x33);
+}
+
+void Riscv64Assembler::Bclri(XRegister rd, XRegister rs1, int32_t shamt) {
+  CHECK_LT(static_cast<uint32_t>(shamt), 64u);
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitI6(0x12, shamt, rs1, 0x1, rd, 0x13);
+}
+
+void Riscv64Assembler::Bext(XRegister rd, XRegister rs1, XRegister rs2) {
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitR(0x24, rs2, rs1, 0x5, rd, 0x33);
+}
+
+void Riscv64Assembler::Bexti(XRegister rd, XRegister rs1, int32_t shamt) {
+  CHECK_LT(static_cast<uint32_t>(shamt), 64u);
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitI6(0x12, shamt, rs1, 0x5, rd, 0x13);
+}
+
+void Riscv64Assembler::Binv(XRegister rd, XRegister rs1, XRegister rs2) {
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitR(0x34, rs2, rs1, 0x1, rd, 0x33);
+}
+
+void Riscv64Assembler::Binvi(XRegister rd, XRegister rs1, int32_t shamt) {
+  CHECK_LT(static_cast<uint32_t>(shamt), 64u);
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitI6(0x1A, shamt, rs1, 0x1, rd, 0x13);
+}
+
+void Riscv64Assembler::Bset(XRegister rd, XRegister rs1, XRegister rs2) {
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitR(0x14, rs2, rs1, 0x1, rd, 0x33);
+}
+
+void Riscv64Assembler::Bseti(XRegister rd, XRegister rs1, int32_t shamt) {
+  CHECK_LT(static_cast<uint32_t>(shamt), 64u);
+  AssertExtensionsEnabled(Riscv64Extension::kZbs);
+  EmitI6(0xA, shamt, rs1, 0x1, rd, 0x13);
+}
+
+/////////////////////////////// RV64 "Zbs" Instructions  END //////////////////////////////
+
 /////////////////////////////// RVV "VSet" Instructions  START ////////////////////////////
 
 void Riscv64Assembler::VSetvli(XRegister rd, XRegister rs1, uint32_t vtypei) {

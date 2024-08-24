@@ -4048,6 +4048,42 @@ TEST_F(AssemblerRISCV64Test, ZbbZextH) {
   DriverStr(RepeatRR(&Riscv64Assembler::ZbbZextH, "zext.h {reg1}, {reg2}"), "ZbbZextH");
 }
 
+TEST_F(AssemblerRISCV64Test, Bclr) {
+  DriverStr(RepeatRRR(&Riscv64Assembler::Bclr, "bclr {reg1}, {reg2}, {reg3}"), "Bclr");
+}
+
+TEST_F(AssemblerRISCV64Test, Bclri) {
+  DriverStr(RepeatRRIb(&Riscv64Assembler::Bclri, /*imm_bits=*/6, "bclri {reg1}, {reg2}, {imm}"),
+            "Bclri");
+}
+
+TEST_F(AssemblerRISCV64Test, Bext) {
+  DriverStr(RepeatRRR(&Riscv64Assembler::Bext, "bext {reg1}, {reg2}, {reg3}"), "Bext");
+}
+
+TEST_F(AssemblerRISCV64Test, Bexti) {
+  DriverStr(RepeatRRIb(&Riscv64Assembler::Bexti, /*imm_bits=*/6, "bexti {reg1}, {reg2}, {imm}"),
+            "Bexti");
+}
+
+TEST_F(AssemblerRISCV64Test, Binv) {
+  DriverStr(RepeatRRR(&Riscv64Assembler::Binv, "binv {reg1}, {reg2}, {reg3}"), "Binv");
+}
+
+TEST_F(AssemblerRISCV64Test, Binvi) {
+  DriverStr(RepeatRRIb(&Riscv64Assembler::Binvi, /*imm_bits=*/6, "binvi {reg1}, {reg2}, {imm}"),
+            "Binvi");
+}
+
+TEST_F(AssemblerRISCV64Test, Bset) {
+  DriverStr(RepeatRRR(&Riscv64Assembler::Bset, "bset {reg1}, {reg2}, {reg3}"), "Bset");
+}
+
+TEST_F(AssemblerRISCV64Test, Bseti) {
+  DriverStr(RepeatRRIb(&Riscv64Assembler::Bseti, /*imm_bits=*/6, "bseti {reg1}, {reg2}, {imm}"),
+            "Bseti");
+}
+
 // Vector Instructions
 
 TEST_F(AssemblerRISCV64Test, VSetvl) {

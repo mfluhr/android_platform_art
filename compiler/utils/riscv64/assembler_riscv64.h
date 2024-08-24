@@ -57,7 +57,7 @@ enum class Riscv64Extension : uint32_t {
   kD,
   kZba,
   kZbb,
-  kZbs,  // TODO(riscv64): Implement "Zbs" instructions.
+  kZbs,
   kV,
   kZca,  // "C" extension instructions except floating point loads/stores.
   kZcd,  // "C" extension double loads/stores.
@@ -636,6 +636,16 @@ class Riscv64Assembler final : public Assembler {
   void ZbbSextB(XRegister rd, XRegister rs1);
   void ZbbSextH(XRegister rd, XRegister rs1);
   void ZbbZextH(XRegister rd, XRegister rs1);
+
+  // "Zbs" Standard Extension, opcode = 0x13, or 0x33, funct3 and funct7 varies.
+  void Bclr(XRegister rd, XRegister rs1, XRegister rs2);
+  void Bclri(XRegister rd, XRegister rs1, int32_t shamt);
+  void Bext(XRegister rd, XRegister rs1, XRegister rs2);
+  void Bexti(XRegister rd, XRegister rs1, int32_t shamt);
+  void Binv(XRegister rd, XRegister rs1, XRegister rs2);
+  void Binvi(XRegister rd, XRegister rs1, int32_t shamt);
+  void Bset(XRegister rd, XRegister rs1, XRegister rs2);
+  void Bseti(XRegister rd, XRegister rs1, int32_t shamt);
 
   ////////////////////////////// RISC-V Vector Instructions  START ///////////////////////////////
   enum class LengthMultiplier : uint32_t {

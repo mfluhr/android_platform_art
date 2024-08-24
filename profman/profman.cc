@@ -562,13 +562,20 @@ class ProfMan final {
   }
 
   bool GetProfileFilterKeyFromApks(std::set<ProfileFilterKey>* profile_filter_keys) {
-    auto process_fn = [profile_filter_keys](std::unique_ptr<const DexFile>&& dex_file) {
-      // Store the profile key of the location instead of the location itself.
-      // This will make the matching in the profile filter method much easier.
-      profile_filter_keys->emplace(ProfileCompilationInfo::GetProfileDexFileBaseKey(
-          dex_file->GetLocation()), dex_file->GetLocationChecksum());
-    };
-    return OpenApkFilesFromLocations(process_fn);
+    return ForEachApkFile([&](File file, const std::string& location) {
+      ArtDexFileLoader dex_file_loader(&file, location);
+      std::vector<std::pair<std::string, uint32_t>> checksums;
+      std::string error_msg;
+      if (!dex_file_loader.GetMultiDexChecksums(&checksums, &error_msg)) {
+        LOG(ERROR) << "Open failed for '" << location << "' " << error_msg;
+        return false;
+      }
+      for (const auto& [multi_dex_location, checksum] : checksums) {
+        profile_filter_keys->emplace(
+            ProfileCompilationInfo::GetProfileDexFileBaseKey(multi_dex_location), checksum);
+      }
+      return true;
+    });
   }
 
   bool OpenApkFilesFromLocations(std::vector<std::unique_ptr<const DexFile>>* dex_files) {
@@ -580,6 +587,32 @@ class ProfMan final {
 
   bool OpenApkFilesFromLocations(
       const std::function<void(std::unique_ptr<const DexFile>&&)>& process_fn) {
+    static constexpr bool kVerifyChecksum = true;
+    std::string error_msg;
+    std::vector<std::unique_ptr<const DexFile>> dex_files_for_location;
+    bool result = ForEachApkFile([&](File file, const std::string& location) {
+      ArtDexFileLoader dex_file_loader(&file, location);
+      if (!dex_file_loader.Open(/*verify=*/false,
+                                kVerifyChecksum,
+                                /*allow_no_dex_files=*/true,
+                                &error_msg,
+                                &dex_files_for_location)) {
+        LOG(ERROR) << "Open failed for '" << location << "' " << error_msg;
+        return false;
+      }
+      return true;
+    });
+    if (!result) {
+      return false;
+    }
+    for (std::unique_ptr<const DexFile>& dex_file : dex_files_for_location) {
+      process_fn(std::move(dex_file));
+    }
+    return true;
+  }
+
+  bool ForEachApkFile(
+      const std::function<bool(File file, const std::string& location)>& process_fn) {
     bool use_apk_fd_list = !apks_fd_.empty();
     if (use_apk_fd_list) {
       // Get the APKs from the collection of FDs.
@@ -592,7 +625,7 @@ class ProfMan final {
         }
       } else {
         if (dex_locations_.size() != apks_fd_.size()) {
-            Usage("The number of apk-fds must match the number of dex-locations.");
+          Usage("The number of apk-fds must match the number of dex-locations.");
         }
       }
     } else if (!apk_files_.empty()) {
@@ -600,49 +633,29 @@ class ProfMan final {
         // If no dex locations are specified use the apk names as locations.
         dex_locations_ = apk_files_;
       } else if (dex_locations_.size() != apk_files_.size()) {
-          Usage("The number of apk-fds must match the number of dex-locations.");
+        Usage("The number of apk-fds must match the number of dex-locations.");
       }
     } else {
       // No APKs were specified.
       CHECK(dex_locations_.empty());
       return true;
     }
-    static constexpr bool kVerifyChecksum = true;
     for (size_t i = 0; i < dex_locations_.size(); ++i) {
-      std::string error_msg;
-      std::vector<std::unique_ptr<const DexFile>> dex_files_for_location;
       // We do not need to verify the apk for processing profiles.
       if (use_apk_fd_list) {
-          File file(apks_fd_[i], /*check_usage=*/false);
-          ArtDexFileLoader dex_file_loader(&file, dex_locations_[i]);
-          if (dex_file_loader.Open(/*verify=*/false,
-                                   kVerifyChecksum,
-                                   /*allow_no_dex_files=*/true,
-                                   &error_msg,
-                                   &dex_files_for_location)) {
-          } else {
-            LOG(ERROR) << "OpenZip failed for '" << dex_locations_[i] << "' " << error_msg;
-            return false;
-          }
+        File file(apks_fd_[i], /*check_usage=*/false);
+        if (!process_fn(std::move(file), dex_locations_[i])) {
+          return false;
+        }
       } else {
         File file(apk_files_[i], O_RDONLY, /*check_usage=*/false);
         if (file.Fd() < 0) {
           PLOG(ERROR) << "Unable to open '" << apk_files_[i] << "'";
           return false;
         }
-        ArtDexFileLoader dex_file_loader(&file, dex_locations_[i]);
-        if (dex_file_loader.Open(/*verify=*/false,
-                                 kVerifyChecksum,
-                                 /*allow_no_dex_files=*/true,
-                                 &error_msg,
-                                 &dex_files_for_location)) {
-        } else {
-          LOG(ERROR) << "Open failed for '" << dex_locations_[i] << "' " << error_msg;
+        if (!process_fn(std::move(file), dex_locations_[i])) {
           return false;
         }
-      }
-      for (std::unique_ptr<const DexFile>& dex_file : dex_files_for_location) {
-        process_fn(std::move(dex_file));
       }
     }
     return true;
