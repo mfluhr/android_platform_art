@@ -731,7 +731,7 @@ public final class ArtShellCommand extends BasicShellCommandHandler {
 
         switch (mode) {
             case "--version":
-                pw.println(2);
+                pw.println(3);
                 return 0;
             case "--test":
                 return handleTestPrDexoptJob(pw);

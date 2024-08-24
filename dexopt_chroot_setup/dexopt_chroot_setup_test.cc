@@ -25,6 +25,7 @@
 
 #include "aidl/com/android/server/art/BnDexoptChrootSetup.h"
 #include "android-base/properties.h"
+#include "android-base/result-gmock.h"
 #include "android-base/scopeguard.h"
 #include "android/binder_auto_utils.h"
 #include "base/common_art_test.h"
@@ -42,6 +43,9 @@ namespace {
 
 using ::android::base::ScopeGuard;
 using ::android::base::WaitForProperty;
+using ::android::base::testing::HasError;
+using ::android::base::testing::HasValue;
+using ::android::base::testing::WithMessage;
 using ::art::tools::CmdlineBuilder;
 
 class DexoptChrootSetupTest : public CommonArtTest {
@@ -196,6 +200,110 @@ TEST_F(DexoptChrootSetupTest, Run) {
       dexopt_chroot_setup_->setUp(/*in_otaSlot=*/std::nullopt, /*in_mapSnapshotsForOta=*/false));
   ASSERT_STATUS_OK(dexopt_chroot_setup_->tearDown(/*in_allowConcurrent=*/false));
   EXPECT_FALSE(std::filesystem::exists(DexoptChrootSetup::CHROOT_DIR));
+}
+
+TEST(DexoptChrootSetupUnitTest, ConstructLinkerConfigCompatEnvSection) {
+  std::string art_linker_config_content = R"(dir.com.android.art = /apex/com.android.art/bin
+[com.android.art]
+additional.namespaces = com_android_art,system
+namespace.default.isolated = true
+namespace.default.links = com_android_art,system
+namespace.default.link.com_android_art.allow_all_shared_libs = true
+namespace.default.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.com_android_art.isolated = true
+namespace.com_android_art.visible = true
+namespace.com_android_art.search.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths += /system/${LIB}
+namespace.com_android_art.permitted.paths += /system_ext/${LIB}
+namespace.com_android_art.permitted.paths += /data
+namespace.com_android_art.permitted.paths += /apex/com.android.art/javalib
+namespace.com_android_art.links = system
+namespace.com_android_art.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.system.isolated = true
+namespace.system.visible = true
+namespace.system.search.paths = /system/${LIB}
+namespace.system.search.paths += /system_ext/${LIB}
+namespace.system.permitted.paths = /system/${LIB}/drm:/system/${LIB}/extractors:/system/${LIB}/hw
+namespace.system.permitted.paths += /system_ext/${LIB}
+namespace.system.permitted.paths += /system/framework
+namespace.system.permitted.paths += /data
+namespace.system.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
+namespace.system.permitted.paths += /system/${LIB}/bootstrap
+namespace.system.links = com_android_art
+namespace.system.link.com_android_art.shared_libs = libdexfile.so:libjdwp.so:libnativebridge.so:libnativehelper.so:libnativeloader.so:libsigchain.so
+[some_other_section]
+)";
+
+  std::string expected_compat_env_section = R"([com.android.art.compat]
+additional.namespaces = com_android_art,system
+namespace.default.isolated = true
+namespace.default.links = com_android_art,system
+namespace.default.link.com_android_art.allow_all_shared_libs = true
+namespace.default.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.com_android_art.isolated = true
+namespace.com_android_art.visible = true
+namespace.com_android_art.search.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths += /mnt/compat_env/system/${LIB}
+namespace.com_android_art.permitted.paths += /mnt/compat_env/system_ext/${LIB}
+namespace.com_android_art.permitted.paths += /data
+namespace.com_android_art.permitted.paths += /apex/com.android.art/javalib
+namespace.com_android_art.links = system
+namespace.com_android_art.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.system.isolated = true
+namespace.system.visible = true
+namespace.system.search.paths = /mnt/compat_env/system/${LIB}
+namespace.system.search.paths += /mnt/compat_env/system_ext/${LIB}
+namespace.system.permitted.paths = /mnt/compat_env/system/${LIB}/drm:/mnt/compat_env/system/${LIB}/extractors:/mnt/compat_env/system/${LIB}/hw
+namespace.system.permitted.paths += /mnt/compat_env/system_ext/${LIB}
+namespace.system.permitted.paths += /system/framework
+namespace.system.permitted.paths += /data
+namespace.system.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
+namespace.system.permitted.paths += /mnt/compat_env/system/${LIB}/bootstrap
+namespace.system.links = com_android_art
+namespace.system.link.com_android_art.shared_libs = libdexfile.so:libjdwp.so:libnativebridge.so:libnativehelper.so:libnativeloader.so:libsigchain.so
+)";
+
+  EXPECT_THAT(ConstructLinkerConfigCompatEnvSection(art_linker_config_content),
+              HasValue(expected_compat_env_section));
+}
+
+TEST(DexoptChrootSetupUnitTest, ConstructLinkerConfigCompatEnvSectionNoMatch) {
+  std::string art_linker_config_content = R"(dir.com.android.art = /apex/com.android.art/bin
+[com.android.art]
+additional.namespaces = com_android_art,system
+namespace.default.isolated = true
+namespace.default.links = com_android_art,system
+namespace.default.link.com_android_art.allow_all_shared_libs = true
+namespace.default.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.com_android_art.isolated = true
+namespace.com_android_art.visible = true
+namespace.com_android_art.search.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths = /apex/com.android.art/${LIB}
+namespace.com_android_art.permitted.paths += /foo/${LIB}
+namespace.com_android_art.permitted.paths += /foo_ext/${LIB}
+namespace.com_android_art.permitted.paths += /data
+namespace.com_android_art.permitted.paths += /apex/com.android.art/javalib
+namespace.com_android_art.links = system
+namespace.com_android_art.link.system.shared_libs = libartpalette-system.so:libbinder_ndk.so:libc.so:libdl.so:libdl_android.so:liblog.so:libm.so
+namespace.system.isolated = true
+namespace.system.visible = true
+namespace.system.search.paths = /foo/${LIB}
+namespace.system.search.paths += /foo_ext/${LIB}
+namespace.system.permitted.paths = /foo/${LIB}/drm:/foo/${LIB}/extractors:/foo/${LIB}/hw
+namespace.system.permitted.paths += /foo_ext/${LIB}
+namespace.system.permitted.paths += /system/framework
+namespace.system.permitted.paths += /data
+namespace.system.permitted.paths += /apex/com.android.runtime/${LIB}/bionic
+namespace.system.permitted.paths += /foo/${LIB}/bootstrap
+namespace.system.links = com_android_art
+namespace.system.link.com_android_art.shared_libs = libdexfile.so:libjdwp.so:libnativebridge.so:libnativehelper.so:libnativeloader.so:libsigchain.so
+[some_other_section]
+)";
+
+  EXPECT_THAT(ConstructLinkerConfigCompatEnvSection(art_linker_config_content),
+              HasError(WithMessage("No matching lines to patch in ART linker config")));
 }
 
 }  // namespace

@@ -52,6 +52,9 @@ class DexoptChrootSetup : public aidl::com::android::server::art::BnDexoptChroot
 
 std::string PathInChroot(std::string_view path);
 
+android::base::Result<std::string> ConstructLinkerConfigCompatEnvSection(
+    const std::string& art_linker_config_content);
+
 }  // namespace dexopt_chroot_setup
 }  // namespace art
 

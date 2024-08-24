@@ -1604,8 +1604,17 @@ bool Artd::DenyArtApexDataFilesLocked() {
 Result<std::string> Artd::GetProfman() { return BuildArtBinPath("profman"); }
 
 Result<CmdlineBuilder> Artd::GetArtExecCmdlineBuilder() {
+  std::string art_exec_path = OR_RETURN(BuildArtBinPath("art_exec"));
+  if (options_.is_pre_reboot) {
+    // "/mnt/compat_env" is prepared by dexopt_chroot_setup on Android V.
+    std::string compat_art_exec_path = "/mnt/compat_env" + art_exec_path;
+    if (OS::FileExists(compat_art_exec_path.c_str())) {
+      art_exec_path = std::move(compat_art_exec_path);
+    }
+  }
+
   CmdlineBuilder args;
-  args.Add(OR_RETURN(BuildArtBinPath("art_exec")))
+  args.Add(art_exec_path)
       .Add("--drop-capabilities")
       .AddIf(options_.is_pre_reboot, "--process-name-suffix=Pre-reboot Dexopt chroot");
   return args;

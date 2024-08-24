@@ -30,6 +30,7 @@
 #include <iterator>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -51,6 +52,7 @@
 #include "base/macros.h"
 #include "base/os.h"
 #include "base/stl_util.h"
+#include "base/utils.h"
 #include "exec_utils.h"
 #include "fstab/fstab.h"
 #include "tools/binder_utils.h"
@@ -144,6 +146,24 @@ Result<void> Unmount(const std::string& target, bool logging = true) {
   return ErrnoErrorf("Failed to umount2 '{}'", target);
 }
 
+// Bind-mounts `source` at `target` with the mount propagation type being "shared". You generally
+// want to use `BindMount` instead.
+//
+// `BindMountDirect` is safe to use only if there is no child mount points under `target`. DO NOT
+// mount or unmount under `target` because mount events propagate to `source`.
+Result<void> BindMountDirect(const std::string& source, const std::string& target) {
+  if (mount(source.c_str(),
+            target.c_str(),
+            /*fs_type=*/nullptr,
+            MS_BIND,
+            /*data=*/nullptr) != 0) {
+    return ErrnoErrorf("Failed to bind-mount '{}' at '{}'", source, target);
+  }
+  LOG(INFO) << ART_FORMAT("Bind-mounted '{}' at '{}'", source, target);
+  return {};
+}
+
+// Bind-mounts `source` at `target` with the mount propagation type being "slave+shared".
 Result<void> BindMount(const std::string& source, const std::string& target) {
   // Don't bind-mount repeatedly.
   CHECK(!PathStartsWith(source, DexoptChrootSetup::CHROOT_DIR));
@@ -359,6 +379,86 @@ Result<std::optional<std::string>> LoadOtaSlotFile() {
   return Errorf("Invalid content of '{}': '{}'", *kOtaSlotFile, content);
 }
 
+Result<void> PatchLinkerConfigForCompatEnv() {
+  std::string art_linker_config_content;
+  if (!ReadFileToString(PathInChroot("/linkerconfig/com.android.art/ld.config.txt"),
+                        &art_linker_config_content)) {
+    return ErrnoErrorf("Failed to read ART linker config");
+  }
+
+  std::string compat_section =
+      OR_RETURN(ConstructLinkerConfigCompatEnvSection(art_linker_config_content));
+
+  // Append the patched section to the global linker config. Because the compat env path doesn't
+  // start with "/apex", the global linker config is the one that takes effect.
+  std::string global_linker_config_path = PathInChroot("/linkerconfig/ld.config.txt");
+  std::string global_linker_config_content;
+  if (!ReadFileToString(global_linker_config_path, &global_linker_config_content)) {
+    return ErrnoErrorf("Failed to read global linker config");
+  }
+
+  if (!WriteStringToFile("dir.com.android.art.compat = /mnt/compat_env/apex/com.android.art/bin\n" +
+                             global_linker_config_content + compat_section,
+                         global_linker_config_path)) {
+    return ErrnoErrorf("Failed to write global linker config");
+  }
+
+  LOG(INFO) << "Patched " << global_linker_config_path;
+  return {};
+}
+
+// Platform libraries communicate with things outside of chroot through unstable APIs. Examples are
+// `libbinder_ndk.so` talking to `servicemanager` and `libcgrouprc.so` reading
+// `/dev/cgroup_info/cgroup.rc`. To work around incompatibility issues, we bind-mount the old
+// platform library directories into chroot so that both sides of a communication are old and
+// therefore align with each other.
+// After bind-mounting old platform libraries, the chroot environment has a combination of new
+// modules and old platform libraries. We currently use the new linker config in such an
+// environment, which is potentially problematic. If we start to see problems, we should consider
+// generating a more correct linker config in a more complex way.
+Result<void> PrepareExternalLibDirs() {
+  std::vector<const char*> existing_lib_dirs;
+  std::copy_if(kExternalLibDirs.begin(),
+               kExternalLibDirs.end(),
+               std::back_inserter(existing_lib_dirs),
+               OS::DirectoryExists);
+  if (existing_lib_dirs.empty()) {
+    return Errorf("Unexpectedly missing platform library directories. Tried '{}'",
+                  android::base::Join(kExternalLibDirs, "', '"));
+  }
+
+  // We should bind-mount all existing lib dirs or none of them. Try the first one to decide what
+  // to do next.
+  Result<void> result = BindMount(existing_lib_dirs[0], PathInChroot(existing_lib_dirs[0]));
+  if (result.ok()) {
+    for (size_t i = 1; i < existing_lib_dirs.size(); i++) {
+      OR_RETURN(BindMount(existing_lib_dirs[i], PathInChroot(existing_lib_dirs[i])));
+    }
+  } else if (result.error().code() == EACCES) {
+    // We don't have the permission to do so on V. Fall back to bind-mounting elsewhere.
+    LOG(WARNING) << result.error().message();
+
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env")));
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env/system")));
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env/system_ext")));
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env/apex")));
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env/apex/com.android.art")));
+    OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env/apex/com.android.art/bin")));
+    OR_RETURN(BindMountDirect(PathInChroot("/apex/com.android.art/bin"),
+                              PathInChroot("/mnt/compat_env/apex/com.android.art/bin")));
+    for (const char* lib_dir : existing_lib_dirs) {
+      OR_RETURN(CreateDir(PathInChroot("/mnt/compat_env") + lib_dir));
+      OR_RETURN(BindMountDirect(lib_dir, PathInChroot("/mnt/compat_env") + lib_dir));
+    }
+
+    OR_RETURN(PatchLinkerConfigForCompatEnv());
+  } else {
+    return result;
+  }
+
+  return {};
+}
+
 }  // namespace
 
 ScopedAStatus DexoptChrootSetup::setUp(const std::optional<std::string>& in_otaSlot,
@@ -537,50 +637,27 @@ Result<void> DexoptChrootSetup::InitChroot() const {
       .Add("/linkerconfig");
   OR_RETURN(Run("linkerconfig", args.Get()));
 
-  // Platform libraries communicate with things outside of chroot through unstable APIs. Examples
-  // are `libbinder_ndk.so` talking to `servicemanager` and `libcgrouprc.so` reading
-  // `/dev/cgroup_info/cgroup.rc`. To work around incompatibility issues, we bind-mount the old
-  // platform library directories into chroot so that both sides of a communication are old and
-  // therefore align with each other.
-  // After bind-mounting old platform libraries, the chroot environment has a combination of new
-  // modules and old platform libraries. We currently use the new linker config in such an
-  // environment, which is potentially problematic. If we start to see problems, we should consider
-  // generating a more correct linker config in a more complex way.
   if (IsOtaUpdate(ota_slot)) {
-    std::vector<const char*> existing_lib_dirs;
-    std::copy_if(kExternalLibDirs.begin(),
-                 kExternalLibDirs.end(),
-                 std::back_inserter(existing_lib_dirs),
-                 OS::DirectoryExists);
-    if (existing_lib_dirs.empty()) {
-      return Errorf("Unexpectedly missing platform library directories. Tried '{}'",
-                    android::base::Join(kExternalLibDirs, "', '"));
-    }
-
-    // We should bind-mount all existing lib dirs or none of them. Try the first one to decide what
-    // to do next.
-    Result<void> result = BindMount(existing_lib_dirs[0], PathInChroot(existing_lib_dirs[0]));
-    if (result.ok()) {
-      for (size_t i = 1; i < existing_lib_dirs.size(); i++) {
-        OR_RETURN(BindMount(existing_lib_dirs[i], PathInChroot(existing_lib_dirs[i])));
-      }
-    } else if (result.error().code() == EACCES) {
-      // We don't have the permission to do so on V. We'll have to use new libs.
-      LOG(WARNING) << result.error().message();
-    } else {
-      return result;
-    }
+    OR_RETURN(PrepareExternalLibDirs());
   }
 
   return {};
 }
 
 Result<void> DexoptChrootSetup::TearDownChroot() const {
-  // Make sure we have unmounted old platform library directories before running apexd, as apexd
-  // expects new libraries.
+  // For mount points in `kExternalLibDirs`, make sure we have unmounted them before running apexd,
+  // as apexd expects new libraries.
+  // For mount points under "/mnt/compat_env", make sure we have unmounted them before running
+  // apexd, as apexd doesn't expect apexes to be in-use.
   std::vector<FstabEntry> entries = OR_RETURN(GetProcMountsDescendantsOfPath(CHROOT_DIR));
   for (const FstabEntry entry : entries) {
-    if (ContainsElement(kExternalLibDirs, entry.mount_point.substr(strlen(CHROOT_DIR)))) {
+    std::string_view mount_point_in_chroot = entry.mount_point;
+    CHECK(ConsumePrefix(&mount_point_in_chroot, CHROOT_DIR));
+    if (mount_point_in_chroot.empty()) {
+      continue;  // The root mount.
+    }
+    if (ContainsElement(kExternalLibDirs, mount_point_in_chroot) ||
+        PathStartsWith(mount_point_in_chroot, "/mnt/compat_env")) {
       OR_RETURN(Unmount(entry.mount_point));
     }
   }
@@ -656,6 +733,45 @@ Result<void> DexoptChrootSetup::TearDownChroot() const {
 
 std::string PathInChroot(std::string_view path) {
   return std::string(DexoptChrootSetup::CHROOT_DIR).append(path);
+}
+
+Result<std::string> ConstructLinkerConfigCompatEnvSection(
+    const std::string& art_linker_config_content) {
+  std::regex system_lib_re(R"re((=\s*|:)/(system(?:_ext)?/\$\{LIB\}))re");
+  constexpr const char* kSystemLibFmt = "$1/mnt/compat_env/$2";
+
+  // Make a copy of the [com.android.art] section and patch particular lines.
+  std::string compat_section;
+  bool is_in_art_section = false;
+  bool replaced = false;
+  std::vector<std::string_view> art_linker_config_lines;
+  art::Split(art_linker_config_content, '\n', &art_linker_config_lines);
+  for (std::string_view line : art_linker_config_lines) {
+    if (!is_in_art_section && line == "[com.android.art]") {
+      is_in_art_section = true;
+    } else if (is_in_art_section && line.starts_with('[')) {
+      is_in_art_section = false;
+    }
+
+    if (is_in_art_section) {
+      if (line == "[com.android.art]") {
+        compat_section += "[com.android.art.compat]\n";
+      } else {
+        std::string patched_line =
+            std::regex_replace(std::string(line), system_lib_re, kSystemLibFmt);
+        if (line != patched_line) {
+          LOG(DEBUG) << ART_FORMAT("Replacing '{}' with '{}'", line, patched_line);
+          replaced = true;
+        }
+        compat_section += patched_line;
+        compat_section += '\n';
+      }
+    }
+  }
+  if (!replaced) {
+    return Errorf("No matching lines to patch in ART linker config");
+  }
+  return compat_section;
 }
 
 }  // namespace dexopt_chroot_setup
