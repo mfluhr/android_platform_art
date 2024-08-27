@@ -49,14 +49,15 @@ class SuperblockClonerTest : public OptimizingUnitTest {
 
     // Header block.
     auto [phi, induction_inc] = MakeLinearLoopVar(loop_header, loop_body, const_0, const_1);
-    HInstruction* suspend_check = MakeSuspendCheck(loop_header);
+    std::initializer_list<HInstruction*> common_env{phi, const_128, param_};
+    HInstruction* suspend_check = MakeSuspendCheck(loop_header, common_env);
     HInstruction* loop_check = MakeCondition(loop_header, kCondGE, phi, const_128);
     MakeIf(loop_header, loop_check);
 
     // Loop body block.
-    HInstruction* null_check = MakeNullCheck(loop_body, param_, dex_pc);
+    HInstruction* null_check = MakeNullCheck(loop_body, param_, common_env, dex_pc);
     HInstruction* array_length = MakeArrayLength(loop_body, null_check, dex_pc);
-    HInstruction* bounds_check = MakeBoundsCheck(loop_body, phi, array_length, dex_pc);
+    HInstruction* bounds_check = MakeBoundsCheck(loop_body, phi, array_length, common_env, dex_pc);
     HInstruction* array_get =
         MakeArrayGet(loop_body, null_check, bounds_check, DataType::Type::kInt32, dex_pc);
     HInstruction* add =  MakeBinOp<HAdd>(loop_body, DataType::Type::kInt32, array_get, const_1);
@@ -64,14 +65,6 @@ class SuperblockClonerTest : public OptimizingUnitTest {
         MakeArraySet(loop_body, null_check, bounds_check, add, DataType::Type::kInt32, dex_pc);
 
     graph_->SetHasBoundsChecks(true);
-
-    // Adjust HEnvironment for each instruction which require that.
-    ArenaVector<HInstruction*> current_locals({phi, const_128, param_},
-                                              GetAllocator()->Adapter(kArenaAllocInstruction));
-
-    HEnvironment* env = ManuallyBuildEnvFor(suspend_check, &current_locals);
-    null_check->CopyEnvironmentFrom(env);
-    bounds_check->CopyEnvironmentFrom(env);
   }
 
   HParameterValue* param_ = nullptr;

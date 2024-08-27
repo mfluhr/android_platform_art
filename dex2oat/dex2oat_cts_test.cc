@@ -19,6 +19,15 @@
 
 namespace art {
 
+// Test the binary with the same bitness as the test. This is also done to avoid
+// the symlink /apex/com.android.art/bin/dex2oat, which we don't have selinux
+// permission to read on S.
+#if defined(__LIB64__)
+constexpr const char* kDex2oatBinary = "dex2oat64";
+#else
+constexpr const char* kDex2oatBinary = "dex2oat32";
+#endif
+
 class Dex2oatCtsTest : public CommonArtTest, public Dex2oatScratchDirs {
  public:
   void SetUp() override {
@@ -37,8 +46,8 @@ class Dex2oatCtsTest : public CommonArtTest, public Dex2oatScratchDirs {
   int Dex2Oat(const std::vector<std::string>& dex2oat_args,
               std::string* output,
               std::string* error_msg) {
-    // This command line should work regardless of bitness, ISA, etc.
-    std::vector<std::string> argv = {std::string(kAndroidArtApexDefaultPath) + "/bin/dex2oat"};
+    std::vector<std::string> argv = {std::string(kAndroidArtApexDefaultPath) + "/bin/" +
+                                     kDex2oatBinary};
     argv.insert(argv.end(), dex2oat_args.begin(), dex2oat_args.end());
 
     // We must set --android-root.

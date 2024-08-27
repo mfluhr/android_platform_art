@@ -173,11 +173,6 @@ TEST_P(InstanceOfInstructionSimplifierTestGroup, ExactClassInstanceOfOther) {
   }
   if_block->AddInstruction(instance_of);
   HIf* if_inst = MakeIf(if_block, instance_of);
-  ManuallyBuildEnvFor(new_inst_klass, {});
-  if (new_inst_klass != target_klass) {
-    target_klass->CopyEnvironmentFrom(new_inst_klass->GetEnvironment());
-  }
-  new_inst->CopyEnvironmentFrom(new_inst_klass->GetEnvironment());
 
   HInstruction* read_bottom =
       MakeIFieldGet(breturn, new_inst, DataType::Type::kInt32, MemberOffset(32));
@@ -222,11 +217,6 @@ TEST_P(InstanceOfInstructionSimplifierTestGroup, ExactClassCheckCastOther) {
   }
   main->AddInstruction(check_cast);
   MakeReturn(main, new_inst);
-  ManuallyBuildEnvFor(new_inst_klass, {});
-  if (new_inst_klass != target_klass) {
-    target_klass->CopyEnvironmentFrom(new_inst_klass->GetEnvironment());
-  }
-  new_inst->CopyEnvironmentFrom(new_inst_klass->GetEnvironment());
 
   PerformSimplification();
 

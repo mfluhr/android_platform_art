@@ -80,26 +80,12 @@ TEST_F(SsaLivenessAnalysisTest, TestAput) {
   HInstruction* value = MakeParam(DataType::Type::kInt32);
   HInstruction* extra_arg1 = MakeParam(DataType::Type::kInt32);
   HInstruction* extra_arg2 = MakeParam(DataType::Type::kReference);
-  HInstruction* const args[] = { array, index, value, extra_arg1, extra_arg2 };
+  std::initializer_list<HInstruction*> args{array, index, value, extra_arg1, extra_arg2};
 
   HBasicBlock* block = CreateSuccessor(entry_);
-  HInstruction* null_check = MakeNullCheck(block, array);
-  HEnvironment* null_check_env = new (GetAllocator()) HEnvironment(GetAllocator(),
-                                                                   /* number_of_vregs= */ 5,
-                                                                   /* method= */ nullptr,
-                                                                   /* dex_pc= */ 0u,
-                                                                   null_check);
-  null_check_env->CopyFrom(ArrayRef<HInstruction* const>(args));
-  null_check->SetRawEnvironment(null_check_env);
+  HInstruction* null_check = MakeNullCheck(block, array, /*env=*/ args);
   HInstruction* length = MakeArrayLength(block, array);
-  HInstruction* bounds_check = MakeBoundsCheck(block, index, length);
-  HEnvironment* bounds_check_env = new (GetAllocator()) HEnvironment(GetAllocator(),
-                                                                     /* number_of_vregs= */ 5,
-                                                                     /* method= */ nullptr,
-                                                                     /* dex_pc= */ 0u,
-                                                                     bounds_check);
-  bounds_check_env->CopyFrom(ArrayRef<HInstruction* const>(args));
-  bounds_check->SetRawEnvironment(bounds_check_env);
+  HInstruction* bounds_check = MakeBoundsCheck(block, index, length, /*env=*/ args);
   MakeArraySet(block, array, index, value, DataType::Type::kInt32);
 
   graph_->BuildDominatorTree();
@@ -120,7 +106,7 @@ TEST_F(SsaLivenessAnalysisTest, TestAput) {
       // Environment uses keep the reference argument alive.
       "ranges: { [10,19) }, uses: { }, { 15 19 } is_fixed: 0, is_split: 0 is_low: 0 is_high: 0",
   };
-  static_assert(arraysize(expected) == arraysize(args), "Array size check.");
+  CHECK_EQ(arraysize(expected), args.size());
   size_t arg_index = 0u;
   for (HInstruction* arg : args) {
     std::ostringstream arg_dump;
@@ -136,30 +122,17 @@ TEST_F(SsaLivenessAnalysisTest, TestDeoptimize) {
   HInstruction* value = MakeParam(DataType::Type::kInt32);
   HInstruction* extra_arg1 = MakeParam(DataType::Type::kInt32);
   HInstruction* extra_arg2 = MakeParam(DataType::Type::kReference);
-  HInstruction* const args[] = { array, index, value, extra_arg1, extra_arg2 };
+  std::initializer_list<HInstruction*> args{array, index, value, extra_arg1, extra_arg2};
 
   HBasicBlock* block = CreateSuccessor(entry_);
-  HInstruction* null_check = MakeNullCheck(block, array);
-  HEnvironment* null_check_env = new (GetAllocator()) HEnvironment(GetAllocator(),
-                                                                   /* number_of_vregs= */ 5,
-                                                                   /* method= */ nullptr,
-                                                                   /* dex_pc= */ 0u,
-                                                                   null_check);
-  null_check_env->CopyFrom(ArrayRef<HInstruction* const>(args));
-  null_check->SetRawEnvironment(null_check_env);
+  HInstruction* null_check = MakeNullCheck(block, array, /*env=*/ args);
   HInstruction* length = MakeArrayLength(block, array);
   // Use HAboveOrEqual+HDeoptimize as the bounds check.
   HInstruction* ae = MakeCondition(block, kCondAE, index, length);
   HInstruction* deoptimize = new(GetAllocator()) HDeoptimize(
       GetAllocator(), ae, DeoptimizationKind::kBlockBCE, /* dex_pc= */ 0u);
   block->AddInstruction(deoptimize);
-  HEnvironment* deoptimize_env = new (GetAllocator()) HEnvironment(GetAllocator(),
-                                                                   /* number_of_vregs= */ 5,
-                                                                   /* method= */ nullptr,
-                                                                   /* dex_pc= */ 0u,
-                                                                   deoptimize);
-  deoptimize_env->CopyFrom(ArrayRef<HInstruction* const>(args));
-  deoptimize->SetRawEnvironment(deoptimize_env);
+  ManuallyBuildEnvFor(deoptimize, /*env=*/ args);
   MakeArraySet(block, array, index, value, DataType::Type::kInt32);
 
   graph_->BuildDominatorTree();
@@ -179,7 +152,7 @@ TEST_F(SsaLivenessAnalysisTest, TestDeoptimize) {
       // Environment uses keep the reference argument alive.
       "ranges: { [10,21) }, uses: { }, { 15 21 } is_fixed: 0, is_split: 0 is_low: 0 is_high: 0",
   };
-  static_assert(arraysize(expected) == arraysize(args), "Array size check.");
+  CHECK_EQ(arraysize(expected), args.size());
   size_t arg_index = 0u;
   for (HInstruction* arg : args) {
     std::ostringstream arg_dump;

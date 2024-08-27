@@ -642,9 +642,6 @@ TEST_F(LoadStoreAnalysisTest, PartialPhiPropagation1) {
   HInstruction* new_inst = MakeNewInstance(start, cls);
   HInstruction* store = MakeIFieldSet(start, new_inst, c12, MemberOffset(32));
   MakeIf(start, param1);
-  ArenaVector<HInstruction*> current_locals({}, GetAllocator()->Adapter(kArenaAllocInstruction));
-  ManuallyBuildEnvFor(cls, &current_locals);
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   MakeIf(left, param2);
 
@@ -652,7 +649,6 @@ TEST_F(LoadStoreAnalysisTest, PartialPhiPropagation1) {
   HInstruction* call_left = MakeInvokeStatic(left_merge, DataType::Type::kVoid, {left_phi});
   MakeGoto(left_merge);
   left_phi->SetCanBeNull(true);
-  call_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HPhi* return_phi = MakePhi(breturn, {left_phi, obj_param});
   HInstruction* read_exit =

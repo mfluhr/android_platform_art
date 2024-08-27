@@ -116,21 +116,14 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
 
     CreateEntryBlockInstructions();
 
-    std::tie(phi_, std::ignore) = MakeLinearLoopVar(loop_, loop_, /*initial=*/ 0, /*increment=*/ 1);
-
     // loop block:
     //   suspend_check
     //   phi++;
     //   if (phi >= 128)
-    suspend_check_ = MakeSuspendCheck(loop_);
+    suspend_check_ = MakeSuspendCheck(loop_, /*env=*/ {array_, i_, j_});
+    std::tie(phi_, std::ignore) = MakeLinearLoopVar(loop_, loop_, /*initial=*/ 0, /*increment=*/ 1);
     HInstruction* cmp = MakeCondition(loop_, kCondGE, phi_, c128);
     MakeIf(loop_, cmp);
-
-    CreateEnvForSuspendCheck();
-  }
-
-  void CreateEnvForSuspendCheck() {
-    ManuallyBuildEnvFor(suspend_check_, {array_, i_, j_});
   }
 
   // Create the diamond-shaped CFG:
@@ -203,38 +196,6 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
     return vstore;
   }
 
-  // Add a HArrayGet instruction to the end of the provided basic block.
-  //
-  // Return: the created HArrayGet instruction.
-  HInstruction* AddArrayGet(HBasicBlock* block, HInstruction* array, HInstruction* index) {
-    DCHECK(block != nullptr);
-    DCHECK(array != nullptr);
-    DCHECK(index != nullptr);
-    HInstruction* get = new (GetAllocator()) HArrayGet(array, index, DataType::Type::kInt32, 0);
-    block->InsertInstructionBefore(get, block->GetLastInstruction());
-    return get;
-  }
-
-  // Add a HArraySet instruction to the end of the provided basic block.
-  // If no data is specified, generate HArraySet: array[index] = 1.
-  //
-  // Return: the created HArraySet instruction.
-  HInstruction* AddArraySet(HBasicBlock* block,
-                            HInstruction* array,
-                            HInstruction* index,
-                            HInstruction* data = nullptr) {
-    DCHECK(block != nullptr);
-    DCHECK(array != nullptr);
-    DCHECK(index != nullptr);
-    if (data == nullptr) {
-      data = graph_->GetIntConstant(1);
-    }
-    HInstruction* store =
-        new (GetAllocator()) HArraySet(array, index, data, DataType::Type::kInt32, 0);
-    block->InsertInstructionBefore(store, block->GetLastInstruction());
-    return store;
-  }
-
   void InitGraphAndParameters() {
     return_block_ = InitEntryMainExitGraphWithReturnVoid();
     array_ = MakeParam(DataType::Type::kInt32);
@@ -281,12 +242,12 @@ TEST_F(LoadStoreEliminationTest, ArrayGetSetElimination) {
   // array[1] = 1;  <--- Remove, since it stores same value.
   // array[i] = 3;  <--- MAY alias.
   // array[1] = 1;  <--- Cannot remove, even if it stores the same value.
-  AddArraySet(entry_block_, array_, c1, c1);
-  HInstruction* load1 = AddArrayGet(entry_block_, array_, c1);
-  HInstruction* load2 = AddArrayGet(entry_block_, array_, c2);
-  HInstruction* store1 = AddArraySet(entry_block_, array_, c1, c1);
-  AddArraySet(entry_block_, array_, i_, c3);
-  HInstruction* store2 = AddArraySet(entry_block_, array_, c1, c1);
+  MakeArraySet(entry_block_, array_, c1, c1);
+  HInstruction* load1 = MakeArrayGet(entry_block_, array_, c1, DataType::Type::kInt32);
+  HInstruction* load2 = MakeArrayGet(entry_block_, array_, c2, DataType::Type::kInt32);
+  HInstruction* store1 = MakeArraySet(entry_block_, array_, c1, c1);
+  MakeArraySet(entry_block_, array_, i_, c3);
+  HInstruction* store2 = MakeArraySet(entry_block_, array_, c1, c1);
 
   PerformLSE();
 
@@ -307,10 +268,10 @@ TEST_F(LoadStoreEliminationTest, SameHeapValue1) {
   // array[2] = 1;
   // array[1] = 1;  <--- Can remove.
   // array[1] = 2;  <--- Can NOT remove.
-  AddArraySet(entry_block_, array_, c1, c1);
-  AddArraySet(entry_block_, array_, c2, c1);
-  HInstruction* store1 = AddArraySet(entry_block_, array_, c1, c1);
-  HInstruction* store2 = AddArraySet(entry_block_, array_, c1, c2);
+  MakeArraySet(entry_block_, array_, c1, c1);
+  MakeArraySet(entry_block_, array_, c2, c1);
+  HInstruction* store1 = MakeArraySet(entry_block_, array_, c1, c1);
+  HInstruction* store2 = MakeArraySet(entry_block_, array_, c1, c2);
 
   PerformLSE();
 
@@ -364,10 +325,10 @@ TEST_F(LoadStoreEliminationTest, OverlappingLoadStore) {
   // .. = a[i];                <-- Remove.
   // a[i,i+1,i+2,i+3] = data;  <-- PARTIAL OVERLAP !
   // .. = a[i];                <-- Cannot remove.
-  AddArraySet(entry_block_, array_, i_, c1);
-  HInstruction* load1 = AddArrayGet(entry_block_, array_, i_);
+  MakeArraySet(entry_block_, array_, i_, c1);
+  HInstruction* load1 = MakeArrayGet(entry_block_, array_, i_, DataType::Type::kInt32);
   AddVecStore(entry_block_, array_, i_);
-  HInstruction* load2 = AddArrayGet(entry_block_, array_, i_);
+  HInstruction* load2 = MakeArrayGet(entry_block_, array_, i_, DataType::Type::kInt32);
 
   // Test LSE handling vector load/store partial overlap.
   // a[i,i+1,i+2,i+3] = data;
@@ -390,7 +351,7 @@ TEST_F(LoadStoreEliminationTest, OverlappingLoadStore) {
   // a[i+1] = 1;                 <-- PARTIAL OVERLAP !
   // .. = a[i,i+1,i+2,i+3];
   AddVecStore(entry_block_, array_, i_);
-  AddArraySet(entry_block_, array_, i_, c1);
+  MakeArraySet(entry_block_, array_, i_, c1);
   HInstruction* vload5 = AddVecLoad(entry_block_, array_, i_);
 
   // TODO: enable LSE for graphs with predicated SIMD.
@@ -419,14 +380,14 @@ TEST_F(LoadStoreEliminationTest, StoreAfterLoopWithoutSideEffects) {
   HInstruction* c1 = graph_->GetIntConstant(1);
 
   // a[j] = 1
-  AddArraySet(pre_header_, array_, j_, c1);
+  MakeArraySet(pre_header_, array_, j_, c1);
 
   // LOOP BODY:
   // .. = a[i,i+1,i+2,i+3];
   AddVecLoad(loop_, array_, phi_);
 
   // a[j] = 1;
-  HInstruction* array_set = AddArraySet(return_block_, array_, j_, c1);
+  HInstruction* array_set = MakeArraySet(return_block_, array_, j_, c1);
 
   // TODO: enable LSE for graphs with predicated SIMD.
   graph_->SetHasTraditionalSIMD(true);
@@ -455,7 +416,7 @@ TEST_F(LoadStoreEliminationTest, StoreAfterSIMDLoopWithSideEffects) {
   array_b->CopyEnvironmentFrom(suspend_check_->GetEnvironment());
 
   // a[j] = 0;
-  AddArraySet(pre_header_, array_, j_, c0);
+  MakeArraySet(pre_header_, array_, j_, c0);
 
   // LOOP BODY:
   // a[phi,phi+1,phi+2,phi+3] = [1,1,1,1];
@@ -465,7 +426,7 @@ TEST_F(LoadStoreEliminationTest, StoreAfterSIMDLoopWithSideEffects) {
   AddVecStore(loop_, array_b, phi_, vload);
 
   // a[j] = 0;
-  HInstruction* a_set = AddArraySet(return_block_, array_, j_, c0);
+  HInstruction* a_set = MakeArraySet(return_block_, array_, j_, c0);
 
   // TODO: enable LSE for graphs with predicated SIMD.
   graph_->SetHasTraditionalSIMD(true);
@@ -495,7 +456,7 @@ TEST_F(LoadStoreEliminationTest, LoadAfterSIMDLoopWithSideEffects) {
   array_b->CopyEnvironmentFrom(suspend_check_->GetEnvironment());
 
   // a[j] = 0;
-  AddArraySet(pre_header_, array_, j_, c0);
+  MakeArraySet(pre_header_, array_, j_, c0);
 
   // LOOP BODY:
   // a[phi,phi+1,phi+2,phi+3] = [1,1,1,1];
@@ -505,7 +466,7 @@ TEST_F(LoadStoreEliminationTest, LoadAfterSIMDLoopWithSideEffects) {
   AddVecStore(loop_, array_b, phi_, vload);
 
   // x = a[j];
-  HInstruction* load = AddArrayGet(return_block_, array_, j_);
+  HInstruction* load = MakeArrayGet(return_block_, array_, j_, DataType::Type::kInt32);
 
   // TODO: enable LSE for graphs with predicated SIMD.
   graph_->SetHasTraditionalSIMD(true);
@@ -571,17 +532,19 @@ TEST_F(LoadStoreEliminationTest, MergePredecessorVecStores) {
 TEST_F(LoadStoreEliminationTest, MergePredecessorStores) {
   auto [upper, left, right, down] = CreateDiamondShapedCFG();
 
-  // upper: a[i,... i + 3] = [1,...1]
-  AddArraySet(upper, array_, i_);
+  HInstruction* c1 = graph_->GetIntConstant(1);
 
-  // left: a[i,... i + 3] = [1,...1]
-  HInstruction* store1 = AddArraySet(left, array_, i_);
+  // upper: a[i] = 1
+  MakeArraySet(upper, array_, i_, c1);
 
-  // right: a[i+1, ... i + 4] = [1, ... 1]
-  HInstruction* store2 = AddArraySet(right, array_, i_add1_);
+  // left: a[i] = 1
+  HInstruction* store1 = MakeArraySet(left, array_, i_, c1);
 
-  // down: a[i,... i + 3] = [1,...1]
-  HInstruction* store3 = AddArraySet(down, array_, i_);
+  // right: a[i+1] = 1
+  HInstruction* store2 = MakeArraySet(right, array_, i_add1_, c1);
+
+  // down: a[i] = 1
+  HInstruction* store3 = MakeArraySet(down, array_, i_, c1);
 
   PerformLSE();
 
@@ -655,16 +618,16 @@ TEST_F(LoadStoreEliminationTest, StoreAfterLoopWithSideEffects) {
   // loop:
   //   b[i] = array[i]
   // array[0] = 2
-  HInstruction* store1 = AddArraySet(entry_block_, array_, c0, c2);
+  HInstruction* store1 = MakeArraySet(entry_block_, array_, c0, c2);
 
   HInstruction* array_b = new (GetAllocator()) HNewArray(c0, c128, 0, 0);
   pre_header_->InsertInstructionBefore(array_b, pre_header_->GetLastInstruction());
   array_b->CopyEnvironmentFrom(suspend_check_->GetEnvironment());
 
-  HInstruction* load = AddArrayGet(loop_, array_, phi_);
-  HInstruction* store2 = AddArraySet(loop_, array_b, phi_, load);
+  HInstruction* load = MakeArrayGet(loop_, array_, phi_, DataType::Type::kInt32);
+  HInstruction* store2 = MakeArraySet(loop_, array_b, phi_, load);
 
-  HInstruction* store3 = AddArraySet(return_block_, array_, c0, c2);
+  HInstruction* store3 = MakeArraySet(return_block_, array_, c0, c2);
 
   PerformLSE();
 
@@ -688,12 +651,12 @@ TEST_F(LoadStoreEliminationTest, StoreAfterLoopWithSideEffects2) {
   // loop:
   //   array2[i] = array[i]
   // array[0] = 2
-  HInstruction* store1 = AddArraySet(pre_header_, array_, c0, c2);
+  HInstruction* store1 = MakeArraySet(pre_header_, array_, c0, c2);
 
-  HInstruction* load = AddArrayGet(loop_, array_, phi_);
-  HInstruction* store2 = AddArraySet(loop_, array2, phi_, load);
+  HInstruction* load = MakeArrayGet(loop_, array_, phi_, DataType::Type::kInt32);
+  HInstruction* store2 = MakeArraySet(loop_, array2, phi_, load);
 
-  HInstruction* store3 = AddArraySet(return_block_, array_, c0, c2);
+  HInstruction* store3 = MakeArraySet(return_block_, array_, c0, c2);
 
   PerformLSE();
 
@@ -768,8 +731,8 @@ TEST_F(LoadStoreEliminationTest, LoadDefaultValueInLoopWithoutWriteSideEffects) 
   // LOOP BODY:
   //    v = a[i]
   // array[0] = v
-  HInstruction* load = AddArrayGet(loop_, array_a, phi_);
-  HInstruction* store = AddArraySet(return_block_, array_, c0, load);
+  HInstruction* load = MakeArrayGet(loop_, array_a, phi_, DataType::Type::kInt32);
+  HInstruction* store = MakeArraySet(return_block_, array_, c0, load);
 
   PerformLSE();
 
@@ -791,8 +754,8 @@ TEST_F(LoadStoreEliminationTest, LoadDefaultValue) {
 
   // v = a[0]
   // array[0] = v
-  HInstruction* load = AddArrayGet(pre_header_, array_a, c0);
-  HInstruction* store = AddArraySet(return_block_, array_, c0, load);
+  HInstruction* load = MakeArrayGet(pre_header_, array_a, c0, DataType::Type::kInt32);
+  HInstruction* store = MakeArraySet(return_block_, array_, c0, load);
 
   PerformLSE();
 
@@ -819,9 +782,9 @@ TEST_F(LoadStoreEliminationTest, VLoadAndLoadDefaultValueInLoopWithoutWriteSideE
   // array[0,... 3] = v
   // array[0] = v1
   HInstruction* vload = AddVecLoad(loop_, array_a, phi_);
-  HInstruction* load = AddArrayGet(loop_, array_a, phi_);
+  HInstruction* load = MakeArrayGet(loop_, array_a, phi_, DataType::Type::kInt32);
   HInstruction* vstore = AddVecStore(return_block_, array_, c0, vload);
-  HInstruction* store = AddArraySet(return_block_, array_, c0, load);
+  HInstruction* store = MakeArraySet(return_block_, array_, c0, load);
 
   // TODO: enable LSE for graphs with predicated SIMD.
   graph_->SetHasTraditionalSIMD(true);
@@ -851,9 +814,9 @@ TEST_F(LoadStoreEliminationTest, VLoadAndLoadDefaultValue) {
   // array[0,... 3] = v
   // array[0] = v1
   HInstruction* vload = AddVecLoad(pre_header_, array_a, c0);
-  HInstruction* load = AddArrayGet(pre_header_, array_a, c0);
+  HInstruction* load = MakeArrayGet(pre_header_, array_a, c0, DataType::Type::kInt32);
   HInstruction* vstore = AddVecStore(return_block_, array_, c0, vload);
-  HInstruction* store = AddArraySet(return_block_, array_, c0, load);
+  HInstruction* store = MakeArraySet(return_block_, array_, c0, load);
 
   // TODO: enable LSE for graphs with predicated SIMD.
   graph_->SetHasTraditionalSIMD(true);
@@ -940,7 +903,6 @@ TEST_F(LoadStoreEliminationTest, DefaultShadowClass) {
   HBasicBlock* main = InitEntryMainExitGraph();
 
   HInstruction* suspend_check = MakeSuspendCheck(entry_block_);
-  ManuallyBuildEnvFor(suspend_check, {});
 
   HInstruction* cls = MakeLoadClass(main);
   HInstruction* new_inst = MakeNewInstance(main, cls);
@@ -951,8 +913,6 @@ TEST_F(LoadStoreEliminationTest, DefaultShadowClass) {
   HInstruction* get_field =
       MakeIFieldGet(main, new_inst, DataType::Type::kReference, mirror::Object::ClassOffset());
   HReturn* return_val = MakeReturn(main, get_field);
-  cls->CopyEnvironmentFrom(suspend_check->GetEnvironment());
-  new_inst->CopyEnvironmentFrom(suspend_check->GetEnvironment());
 
   PerformLSE();
 
@@ -975,7 +935,6 @@ TEST_F(LoadStoreEliminationTest, DefaultShadowMonitor) {
   HBasicBlock* main = InitEntryMainExitGraph();
 
   HInstruction* suspend_check = MakeSuspendCheck(entry_block_);
-  ManuallyBuildEnvFor(suspend_check, {});
 
   HInstruction* cls = MakeLoadClass(main);
   HInstruction* new_inst = MakeNewInstance(main, cls);
@@ -986,8 +945,6 @@ TEST_F(LoadStoreEliminationTest, DefaultShadowMonitor) {
   HInstruction* get_field =
       MakeIFieldGet(main, new_inst, DataType::Type::kInt32, mirror::Object::MonitorOffset());
   HReturn* return_val = MakeReturn(main, get_field);
-  cls->CopyEnvironmentFrom(suspend_check->GetEnvironment());
-  new_inst->CopyEnvironmentFrom(suspend_check->GetEnvironment());
 
   PerformLSE();
 
@@ -1022,30 +979,26 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopOverlap) {
 
   // preheader
   HInstruction* alloc_w = MakeNewArray(preheader, zero_const, eighty_const);
-  ManuallyBuildEnvFor(alloc_w, {});
 
   // loop-start
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, one_const, one_const);
   HPhi* t_phi = MakePhi(loop, {zero_const, /* placeholder */ zero_const});
-  HInstruction* suspend = MakeSuspendCheck(loop);
+  std::initializer_list<HInstruction*> common_env{alloc_w, i_phi, t_phi};
+  HInstruction* suspend = MakeSuspendCheck(loop, common_env);
   HInstruction* i_cmp_top = MakeCondition(loop, kCondGE, i_phi, eighty_const);
   HIf* loop_if = MakeIf(loop, i_cmp_top);
   CHECK(loop_if->IfTrueSuccessor() == ret);
 
-  // environment
-  ManuallyBuildEnvFor(suspend, { alloc_w, i_phi, t_phi });
-
   // BODY
   HInstruction* last_i = MakeBinOp<HSub>(body, DataType::Type::kInt32, i_phi, one_const);
   HInstruction* last_get = MakeArrayGet(body, alloc_w, last_i, DataType::Type::kInt32);
-  HInvoke* body_value = MakeInvokeStatic(body, DataType::Type::kInt32, { last_get, one_const });
+  HInvoke* body_value =
+      MakeInvokeStatic(body, DataType::Type::kInt32, { last_get, one_const }, common_env);
   HInstruction* body_set = MakeArraySet(body, alloc_w, i_phi, body_value, DataType::Type::kInt32);
   HInstruction* body_get = MakeArrayGet(body, alloc_w, i_phi, DataType::Type::kInt32);
-  HInvoke* t_next = MakeInvokeStatic(body, DataType::Type::kInt32, { body_get, t_phi });
-  body_value->CopyEnvironmentFrom(suspend->GetEnvironment());
+  HInvoke* t_next = MakeInvokeStatic(body, DataType::Type::kInt32, { body_get, t_phi }, common_env);
 
   t_phi->ReplaceInput(t_next, 1u);  // Update back-edge input.
-  t_next->CopyEnvironmentFrom(suspend->GetEnvironment());
 
   // ret
   MakeReturn(ret, t_phi);
@@ -1095,41 +1048,33 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopOverlap2) {
 
   // preheader
   HInstruction* alloc_w = MakeNewArray(preheader, zero_const, eighty_const);
-  // environment
-  ManuallyBuildEnvFor(alloc_w, {});
 
   // loop-start
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, one_const, one_const);
   HPhi* t_phi = MakePhi(loop, {zero_const, /* placeholder */ zero_const});
-  HInstruction* suspend = MakeSuspendCheck(loop);
+  std::initializer_list<HInstruction*> common_env{alloc_w, i_phi, t_phi};
+  HInstruction* suspend = MakeSuspendCheck(loop, common_env);
   HInstruction* i_cmp_top = MakeCondition(loop, kCondGE, i_phi, eighty_const);
   HIf* loop_if = MakeIf(loop, i_cmp_top);
   CHECK(loop_if->IfTrueSuccessor() == ret);
-
-  // environment
-  ManuallyBuildEnvFor(suspend, { alloc_w, i_phi, t_phi });
 
   // BODY
   HInstruction* last_i = MakeBinOp<HSub>(body, DataType::Type::kInt32, i_phi, one_const);
   auto make_instructions = [&](HInstruction* last_t_value) {
     HInstruction* last_get = MakeArrayGet(body, alloc_w, last_i, DataType::Type::kInt32);
-    HInvoke* body_value = MakeInvokeStatic(body, DataType::Type::kInt32, { last_get, one_const });
+    HInvoke* body_value =
+        MakeInvokeStatic(body, DataType::Type::kInt32, { last_get, one_const }, common_env);
     HInstruction* body_set = MakeArraySet(body, alloc_w, i_phi, body_value, DataType::Type::kInt32);
     HInstruction* body_get = MakeArrayGet(body, alloc_w, i_phi, DataType::Type::kInt32);
-    HInvoke* t_next = MakeInvokeStatic(body, DataType::Type::kInt32, { body_get, last_t_value });
+    HInvoke* t_next =
+        MakeInvokeStatic(body, DataType::Type::kInt32, { body_get, last_t_value }, common_env);
     return std::make_tuple(last_get, body_value, body_set, body_get, t_next);
   };
   auto [last_get_1, body_value_1, body_set_1, body_get_1, t_next_1] = make_instructions(t_phi);
   auto [last_get_2, body_value_2, body_set_2, body_get_2, t_next_2] = make_instructions(t_next_1);
   auto [last_get_3, body_value_3, body_set_3, body_get_3, t_next_3] = make_instructions(t_next_2);
-  body_value_1->CopyEnvironmentFrom(suspend->GetEnvironment());
-  body_value_2->CopyEnvironmentFrom(suspend->GetEnvironment());
-  body_value_3->CopyEnvironmentFrom(suspend->GetEnvironment());
 
   t_phi->ReplaceInput(t_next_3, 1u);  // Update back-edge input.
-  t_next_1->CopyEnvironmentFrom(suspend->GetEnvironment());
-  t_next_2->CopyEnvironmentFrom(suspend->GetEnvironment());
-  t_next_3->CopyEnvironmentFrom(suspend->GetEnvironment());
 
   // ret
   MakeReturn(ret, t_phi);
@@ -1175,23 +1120,22 @@ TEST_F(LoadStoreEliminationTest, ArrayNonLoopPhi) {
 
   // start
   HInstruction* alloc_w = MakeNewArray(start, zero_const, two_const);
-  ManuallyBuildEnvFor(alloc_w, {});
 
   // left
-  HInvoke* left_value = MakeInvokeStatic(left, DataType::Type::kInt32, { zero_const });
+  HInvoke* left_value =
+      MakeInvokeStatic(left, DataType::Type::kInt32, { zero_const }, /*env=*/ { alloc_w });
   HInstruction* left_set_1 =
       MakeArraySet(left, alloc_w, zero_const, left_value, DataType::Type::kInt32);
   HInstruction* left_set_2 =
       MakeArraySet(left, alloc_w, one_const, zero_const, DataType::Type::kInt32);
-  ManuallyBuildEnvFor(left_value, { alloc_w });
 
   // right
-  HInvoke* right_value = MakeInvokeStatic(right, DataType::Type::kInt32, { one_const });
+  HInvoke* right_value =
+      MakeInvokeStatic(right, DataType::Type::kInt32, { one_const }, /*env=*/ { alloc_w });
   HInstruction* right_set_1 =
       MakeArraySet(right, alloc_w, zero_const, right_value, DataType::Type::kInt32);
   HInstruction* right_set_2 =
       MakeArraySet(right, alloc_w, one_const, zero_const, DataType::Type::kInt32);
-  ManuallyBuildEnvFor(right_value, { alloc_w });
 
   // ret
   HInstruction* read_1 = MakeArrayGet(ret, alloc_w, zero_const, DataType::Type::kInt32);
@@ -1228,7 +1172,6 @@ TEST_F(LoadStoreEliminationTest, ArrayMergeDefault) {
   // start
   HInstruction* alloc_w = MakeNewArray(start, zero_const, two_const);
   ArenaVector<HInstruction*> alloc_locals({}, GetAllocator()->Adapter(kArenaAllocInstruction));
-  ManuallyBuildEnvFor(alloc_w, {});
 
   // left
   HInstruction* left_set_1 =
@@ -1278,8 +1221,6 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing1) {
   // preheader
   HInstruction* cls = MakeLoadClass(preheader);
   HInstruction* array = MakeNewArray(preheader, cls, n);
-  ManuallyBuildEnvFor(cls, {});
-  ManuallyBuildEnvFor(array, {});
 
   // loop
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, c0, c1);
@@ -1287,7 +1228,6 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing1) {
   HInstruction* loop_cond = MakeCondition(loop, kCondLT, i_phi, n);
   HIf* loop_if = MakeIf(loop, loop_cond);
   CHECK(loop_if->IfTrueSuccessor() == body);
-  ManuallyBuildEnvFor(loop_suspend_check, {});
 
   // body
   HInstruction* body_set = MakeArraySet(body, array, i_phi, i_phi, DataType::Type::kInt32);
@@ -1326,8 +1266,6 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing2) {
   // preheader
   HInstruction* cls = MakeLoadClass(preheader);
   HInstruction* array = MakeNewArray(preheader, cls, n);
-  ManuallyBuildEnvFor(cls, {});
-  ManuallyBuildEnvFor(array, {});
 
   // loop
   auto [i_phi, i_add] = MakeLinearLoopVar(loop, body, c0, c1);
@@ -1335,7 +1273,6 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing2) {
   HInstruction* loop_cond = MakeCondition(loop, kCondLT, i_phi, n);
   HIf* loop_if = MakeIf(loop, loop_cond);
   CHECK(loop_if->IfTrueSuccessor() == body);
-  ManuallyBuildEnvFor(loop_suspend_check, {});
 
   // body
   HInstruction* body_set = MakeArraySet(body, array, i_phi, i_phi, DataType::Type::kInt32);
@@ -1435,8 +1372,6 @@ TEST_F(LoadStoreEliminationTest, PartialUnknownMerge) {
   HInstruction* cls = MakeLoadClass(entry);
   HInstruction* new_inst = MakeNewInstance(entry, cls);
   MakeGoto(entry);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* switch_inst = new (GetAllocator()) HPackedSwitch(0, 2, switch_val);
   bswitch->AddInstruction(switch_inst);
@@ -1444,12 +1379,10 @@ TEST_F(LoadStoreEliminationTest, PartialUnknownMerge) {
   HInstruction* write_c1 = MakeIFieldSet(case1, new_inst, c1, MemberOffset(32));
   HInstruction* call_c1 = MakeInvokeStatic(case1, DataType::Type::kVoid, { new_inst });
   MakeGoto(case1);
-  call_c1->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_c2 = MakeIFieldSet(case2, new_inst, c2, MemberOffset(32));
   HInstruction* call_c2 = MakeInvokeStatic(case2, DataType::Type::kVoid, { new_inst });
   MakeGoto(case2);
-  call_c2->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_c3 = MakeIFieldSet(case3, new_inst, c3, MemberOffset(32));
   MakeGoto(case3);
@@ -1459,12 +1392,9 @@ TEST_F(LoadStoreEliminationTest, PartialUnknownMerge) {
   HInstruction* suspend_check_header = MakeSuspendCheck(loop_header);
   HInstruction* call_loop_header = MakeInvokeStatic(loop_header, DataType::Type::kBool, {});
   MakeIf(loop_header, call_loop_header);
-  call_loop_header->CopyEnvironmentFrom(cls->GetEnvironment());
-  suspend_check_header->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* call_loop_body = MakeInvokeStatic(loop_body, DataType::Type::kBool, {});
   MakeIf(loop_body, call_loop_body);
-  call_loop_body->CopyEnvironmentFrom(cls->GetEnvironment());
 
   MakeGoto(loop_if_left);
 
@@ -1516,12 +1446,9 @@ TEST_F(LoadStoreEliminationTest, PartialLoadPreserved) {
 
   HInstruction* cls = MakeLoadClass(start);
   HInstruction* new_inst = MakeNewInstance(start, cls);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_left = MakeIFieldSet(left, new_inst, c1, MemberOffset(32));
   HInstruction* call_left = MakeInvokeStatic(left, DataType::Type::kVoid, { new_inst });
-  call_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_right = MakeIFieldSet(right, new_inst, c2, MemberOffset(32));
 
@@ -1570,12 +1497,9 @@ TEST_F(LoadStoreEliminationTest, PartialLoadPreserved2) {
 
   HInstruction* cls = MakeLoadClass(start);
   HInstruction* new_inst = MakeNewInstance(start, cls);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_left = MakeIFieldSet(left, new_inst, c1, MemberOffset(32));
   HInstruction* call_left = MakeInvokeStatic(left, DataType::Type::kVoid, { new_inst });
-  call_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_right_first = MakeIFieldSet(right_first, new_inst, c2, MemberOffset(32));
 
@@ -1649,8 +1573,6 @@ TEST_F(LoadStoreEliminationTest, PartialLoadPreserved3) {
   HInstruction* cls = MakeLoadClass(entry);
   HInstruction* new_inst = MakeNewInstance(entry, cls);
   MakeGoto(entry);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   MakeIf(entry_post, bool_value);
 
@@ -1660,8 +1582,6 @@ TEST_F(LoadStoreEliminationTest, PartialLoadPreserved3) {
   HInstruction* suspend_left_loop = MakeSuspendCheck(left_loop);
   HInstruction* call_left_loop = MakeInvokeStatic(left_loop, DataType::Type::kBool, {new_inst});
   MakeIf(left_loop, call_left_loop);
-  suspend_left_loop->CopyEnvironmentFrom(cls->GetEnvironment());
-  call_left_loop->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_left_loop = MakeIFieldSet(left_loop_post, new_inst, c3, MemberOffset(32));
   MakeGoto(left_loop_post);
@@ -1741,8 +1661,6 @@ TEST_F(LoadStoreEliminationTest, DISABLED_PartialLoadPreserved4) {
   HInstruction* cls = MakeLoadClass(entry);
   HInstruction* new_inst = MakeNewInstance(entry, cls);
   MakeGoto(entry);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   MakeIf(entry_post, bool_value);
 
@@ -1753,13 +1671,10 @@ TEST_F(LoadStoreEliminationTest, DISABLED_PartialLoadPreserved4) {
   HInstruction* call_left_loop = MakeInvokeStatic(left_loop, DataType::Type::kBool, {});
   HInstruction* write_left_loop = MakeIFieldSet(left_loop, new_inst, c3, MemberOffset(32));
   MakeIf(left_loop, call_left_loop);
-  suspend_left_loop->CopyEnvironmentFrom(cls->GetEnvironment());
-  call_left_loop->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_right = MakeIFieldSet(right, new_inst, c2, MemberOffset(32));
   HInstruction* call_right = MakeInvokeStatic(right, DataType::Type::kBool, {new_inst});
   MakeGoto(right);
-  call_right->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* read_return =
       MakeIFieldGet(return_block, new_inst, DataType::Type::kInt32, MemberOffset(32));
@@ -1810,18 +1725,13 @@ TEST_F(LoadStoreEliminationTest, PartialLoadPreserved5) {
   // start
   HInstruction* cls = MakeLoadClass(start);
   HInstruction* new_inst = MakeNewInstance(start, cls);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* call_left = MakeInvokeStatic(left, DataType::Type::kVoid, { new_inst });
   HInstruction* write_left = MakeIFieldSet(left, new_inst, c1, MemberOffset(32));
   HInstruction* call2_left = MakeInvokeStatic(left, DataType::Type::kVoid, {});
-  call_left->CopyEnvironmentFrom(cls->GetEnvironment());
-  call2_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_right = MakeIFieldSet(right, new_inst, c2, MemberOffset(32));
   HInstruction* call_right = MakeInvokeStatic(right, DataType::Type::kVoid, {});
-  call_right->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* read_bottom =
       MakeIFieldGet(breturn, new_inst, DataType::Type::kInt32, MemberOffset(32));
@@ -1881,14 +1791,10 @@ TEST_F(LoadStoreEliminationTest, DISABLED_PartialLoadPreserved6) {
   HInstruction* write_entry = MakeIFieldSet(entry, new_inst, c3, MemberOffset(32));
   HInstruction* call_entry = MakeInvokeStatic(entry, DataType::Type::kVoid, {});
   MakeIf(entry, bool_value);
-  ManuallyBuildEnvFor(cls, {});
-  new_inst->CopyEnvironmentFrom(cls->GetEnvironment());
-  call_entry->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* call_left = MakeInvokeStatic(left, DataType::Type::kVoid, { new_inst });
   HInstruction* write_left = MakeIFieldSet(left, new_inst, c1, MemberOffset(32));
   MakeGoto(left);
-  call_left->CopyEnvironmentFrom(cls->GetEnvironment());
 
   HInstruction* write_right = MakeIFieldSet(right, new_inst, c2, MemberOffset(32));
   MakeGoto(right);

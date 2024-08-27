@@ -55,9 +55,7 @@ TEST_F(SelectGeneratorTest, testZeroCheck) {
   HDivZeroCheck* instr = new (GetAllocator()) HDivZeroCheck(param, 0);
   HPhi* phi = ConstructBasicGraphForSelect(return_block, instr);
 
-  ArenaVector<HInstruction*> current_locals({param, graph_->GetIntConstant(1)},
-                                            GetAllocator()->Adapter(kArenaAllocInstruction));
-  ManuallyBuildEnvFor(instr, &current_locals);
+  ManuallyBuildEnvFor(instr, {param, graph_->GetIntConstant(1)});
 
   EXPECT_FALSE(CheckGraphAndTrySelectGenerator());
   EXPECT_FALSE(phi->GetBlock() == nullptr);
