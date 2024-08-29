@@ -58,3 +58,10 @@ java_test_helper_library {
     name: "ahat-ri-test-dump",
     srcs: ["src/ri-test-dump/**/*.java"],
 }
+
+cc_library_shared {
+    name: "libahat-test-jni",
+    srcs: ["src/test/jni/**/*.cpp"],
+    header_libs: ["jni_headers"],
+    host_supported: true,
+}

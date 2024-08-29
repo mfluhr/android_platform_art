@@ -5378,9 +5378,8 @@ void LocationsBuilderX86_64::HandleFieldSet(HInstruction* instruction,
   if (needs_write_barrier ||
       check_gc_card ||
       (kPoisonHeapReferences && field_type == DataType::Type::kReference)) {
-    // Temporary registers for the write barrier.
-    locations->AddTemp(Location::RequiresRegister());
-    locations->AddTemp(Location::RequiresRegister());  // Possibly used for reference poisoning too.
+    // Temporary registers for the write barrier / reference poisoning.
+    locations->AddRegisterTemps(2);
   }
 }
 
@@ -8189,8 +8188,7 @@ void LocationsBuilderX86_64::VisitPackedSwitch(HPackedSwitch* switch_instr) {
   LocationSummary* locations =
       new (GetGraph()->GetAllocator()) LocationSummary(switch_instr, LocationSummary::kNoCall);
   locations->SetInAt(0, Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(2);
 }
 
 void InstructionCodeGeneratorX86_64::VisitPackedSwitch(HPackedSwitch* switch_instr) {

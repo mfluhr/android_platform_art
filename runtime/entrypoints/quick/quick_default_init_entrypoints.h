@@ -109,6 +109,8 @@ static void DefaultInitEntryPoints(JniEntryPoints* jpoints,
   qpoints->SetInvokeVirtualTrampolineWithAccessCheck(
       art_quick_invoke_virtual_trampoline_with_access_check);
   qpoints->SetInvokePolymorphic(art_quick_invoke_polymorphic);
+  // Adding support for x86_64 first.
+  qpoints->SetInvokePolymorphicWithHiddenReceiver(nullptr);
   qpoints->SetInvokeCustom(art_quick_invoke_custom);
 
   // Thread

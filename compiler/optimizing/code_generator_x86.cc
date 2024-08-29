@@ -2237,8 +2237,7 @@ void LocationsBuilderX86::VisitIf(HIf* if_instr) {
         codegen_->GetCompilerOptions().ProfileBranches() &&
         !Runtime::Current()->IsAotCompiler()) {
       locations->SetInAt(0, Location::RequiresRegister());
-      locations->AddTemp(Location::RequiresRegister());
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddRegisterTemps(2);
     } else {
       locations->SetInAt(0, Location::Any());
     }

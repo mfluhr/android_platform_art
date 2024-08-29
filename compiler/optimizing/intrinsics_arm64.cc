@@ -1554,8 +1554,7 @@ void IntrinsicLocationsBuilderARM64::VisitJdkUnsafeCompareAndSetReference(HInvok
     // We need two non-scratch temporary registers for read barrier.
     LocationSummary* locations = invoke->GetLocations();
     if (kUseBakerReadBarrier) {
-      locations->AddTemp(Location::RequiresRegister());
-      locations->AddTemp(Location::RequiresRegister());
+      locations->AddRegisterTemps(2);
     } else {
       // To preserve the old value across the non-Baker read barrier
       // slow path, use a fixed callee-save register.
@@ -1836,9 +1835,7 @@ void IntrinsicLocationsBuilderARM64::VisitStringCompareTo(HInvoke* invoke) {
                                        kIntrinsified);
   locations->SetInAt(0, Location::RequiresRegister());
   locations->SetInAt(1, Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
   // Need temporary registers for String compression's feature.
   if (mirror::kUseStringCompression) {
     locations->AddTemp(Location::RequiresRegister());
@@ -2602,9 +2599,7 @@ void IntrinsicLocationsBuilderARM64::VisitStringGetCharsNoCheck(HInvoke* invoke)
   locations->SetInAt(3, Location::RequiresRegister());
   locations->SetInAt(4, Location::RequiresRegister());
 
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
 }
 
 void IntrinsicCodeGeneratorARM64::VisitStringGetCharsNoCheck(HInvoke* invoke) {
@@ -2777,9 +2772,7 @@ void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
   locations->SetInAt(3, LocationForSystemArrayCopyInput(invoke->InputAt(3)));
   locations->SetInAt(4, LocationForSystemArrayCopyInput(invoke->InputAt(4)));
 
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
 }
 
 static void CheckSystemArrayCopyPosition(MacroAssembler* masm,

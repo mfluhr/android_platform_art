@@ -291,7 +291,10 @@ class EntrypointsOrderTest : public CommonArtTest {
                          pInvokeVirtualTrampolineWithAccessCheck, sizeof(void*));
     EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pInvokeVirtualTrampolineWithAccessCheck,
                          pInvokePolymorphic, sizeof(void*));
-    EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pInvokePolymorphic, pInvokeCustom, sizeof(void*));
+    EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pInvokePolymorphic,
+                         pInvokePolymorphicWithHiddenReceiver, sizeof(void*));
+    EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pInvokePolymorphicWithHiddenReceiver,
+                         pInvokeCustom, sizeof(void*));
     EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pInvokeCustom, pTestSuspend, sizeof(void*));
     EXPECT_OFFSET_DIFFNP(QuickEntryPoints, pTestSuspend, pDeliverException, sizeof(void*));
 

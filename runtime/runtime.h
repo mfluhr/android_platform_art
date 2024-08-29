@@ -1132,6 +1132,8 @@ class Runtime {
     }
   }
 
+  bool AreMetricsInitialized() const { return metrics_reporter_ != nullptr; }
+
  private:
   static void InitPlatformSignalHandlers();
 

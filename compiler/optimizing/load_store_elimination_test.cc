@@ -98,6 +98,48 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
     MakeGoto(entry_block_);
   }
 
+  // Create suspend check, linear loop variable and loop condition.
+  // The `HPhi` for the loop variable can be easily retrieved as the only `HPhi` in the loop block.
+  // The `HSuspendCheck` can be retrieved as the first non-Phi instruction from the loop block.
+  void MakeSimpleLoopInstructions(HBasicBlock* loop,
+                                  HBasicBlock* body,
+                                  std::initializer_list<HInstruction*> suspend_check_env = {}) {
+    CHECK(loop->GetInstructions().IsEmpty());
+    CHECK_IMPLIES(loop != body, body->IsSingleGoto());
+    HInstruction* c128 = graph_->GetIntConstant(128);
+    MakeSuspendCheck(loop, suspend_check_env);
+    auto [phi, increment] = MakeLinearLoopVar(loop, body, /*initial=*/ 0, /*increment=*/ 1);
+    HInstruction* cmp = MakeCondition(loop, kCondGE, phi, c128);
+    MakeIf(loop, cmp);
+  }
+
+  // Create a do-while loop with instructions:
+  //   i = 0;
+  //   do {
+  //     HSuspendCheck;
+  //     cmp = i < 128;
+  //     ++i;
+  //   } while (cmp);
+  // Return the pre-header and loop block.
+  std::tuple<HBasicBlock*, HBasicBlock*> CreateDoWhileLoopWithInstructions(
+      HBasicBlock* loop_exit, std::initializer_list<HInstruction*> suspend_check_env = {}) {
+    auto [pre_header, loop] = CreateDoWhileLoop(loop_exit);
+    MakeSimpleLoopInstructions(loop, loop, suspend_check_env);
+    return {pre_header, loop};
+  }
+
+  // Create a for loop with instructions:
+  //   for (int i = 0; i < 128; ++i) {
+  //     HSuspendCheck;
+  //   }
+  // Return the pre-header, header and body blocks.
+  std::tuple<HBasicBlock*, HBasicBlock*, HBasicBlock*> CreateForLoopWithInstructions(
+      HBasicBlock* loop_exit, std::initializer_list<HInstruction*> suspend_check_env = {}) {
+    auto [pre_header, loop_header, loop_body] = CreateWhileLoop(loop_exit);
+    MakeSimpleLoopInstructions(loop_header, loop_body, suspend_check_env);
+    return {pre_header, loop_header, loop_body};
+  }
+
   // Create the major CFG used by tests:
   //    entry
   //      |
@@ -110,20 +152,11 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
   //     exit
   void CreateTestControlFlowGraph() {
     InitGraphAndParameters();
-    std::tie(pre_header_, loop_) = CreateDoWhileLoop(return_block_);
-
-    HInstruction* c128 = graph_->GetIntConstant(128);
-
     CreateEntryBlockInstructions();
-
-    // loop block:
-    //   suspend_check
-    //   phi++;
-    //   if (phi >= 128)
-    suspend_check_ = MakeSuspendCheck(loop_, /*env=*/ {array_, i_, j_});
-    std::tie(phi_, std::ignore) = MakeLinearLoopVar(loop_, loop_, /*initial=*/ 0, /*increment=*/ 1);
-    HInstruction* cmp = MakeCondition(loop_, kCondGE, phi_, c128);
-    MakeIf(loop_, cmp);
+    std::tie(pre_header_, loop_) =
+        CreateDoWhileLoopWithInstructions(return_block_, /*suspend_check_env=*/ {array_, i_, j_});
+    phi_ = loop_->GetFirstPhi()->AsPhi();
+    suspend_check_ = loop_->GetFirstInstruction()->AsSuspendCheck();
   }
 
   // Create the diamond-shaped CFG:
@@ -218,16 +251,6 @@ class LoadStoreEliminationTestBase : public SuperTest, public OptimizingUnitTest
 };
 
 class LoadStoreEliminationTest : public LoadStoreEliminationTestBase<CommonCompilerTest> {};
-
-enum class TestOrder { kSameAsAlloc, kReverseOfAlloc };
-std::ostream& operator<<(std::ostream& os, const TestOrder& ord) {
-  switch (ord) {
-    case TestOrder::kSameAsAlloc:
-      return os << "SameAsAlloc";
-    case TestOrder::kReverseOfAlloc:
-      return os << "ReverseOfAlloc";
-  }
-}
 
 TEST_F(LoadStoreEliminationTest, ArrayGetSetElimination) {
   CreateTestControlFlowGraph();
@@ -1292,6 +1315,381 @@ TEST_F(LoadStoreEliminationTest, ArrayLoopAliasing2) {
   EXPECT_INS_RETAINED(ret_get1);
   EXPECT_INS_RETAINED(ret_get2);
 }
+
+class TwoTypesConversionsTestGroup : public LoadStoreEliminationTestBase<
+    CommonCompilerTestWithParam<std::tuple<DataType::Type, DataType::Type>>> {
+ protected:
+  DataType::Type FieldTypeForLoadType(DataType::Type load_type) {
+    // `Uint8` is not a valid field type but it's a valid load type we can set for
+    // a `HInstanceFieldGet` after constructing it.
+    return (load_type == DataType::Type::kUint8) ? DataType::Type::kInt8 : load_type;
+  }
+};
+
+TEST_P(TwoTypesConversionsTestGroup, StoreLoad) {
+  auto [param_type, load_type] = GetParam();
+  DataType::Type field_type = FieldTypeForLoadType(load_type);
+
+  HBasicBlock* main = InitEntryMainExitGraph();
+  HInstruction* param = MakeParam(param_type);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  HInstruction* write = MakeIFieldSet(main, object, param, field_type, MemberOffset(32));
+  HInstanceFieldGet* read = MakeIFieldGet(main, object, field_type, MemberOffset(32));
+  read->SetType(load_type);
+  HInstruction* ret = MakeReturn(main, read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(write);
+  EXPECT_INS_REMOVED(read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  if (DataType::IsTypeConversionImplicit(param_type, load_type)) {
+    ASSERT_EQ(param, ret_input) << ret_input->DebugName();
+  } else {
+    ASSERT_TRUE(ret_input->IsTypeConversion()) << ret_input->DebugName();
+    ASSERT_EQ(load_type, ret_input->GetType());
+    ASSERT_EQ(param, ret_input->InputAt(0)) << ret_input->InputAt(0)->DebugName();
+  }
+}
+
+TEST_P(TwoTypesConversionsTestGroup, StoreLoadStoreLoad) {
+  auto [load_type1, load_type2] = GetParam();
+  DataType::Type field_type1 = FieldTypeForLoadType(load_type1);
+  DataType::Type field_type2 = FieldTypeForLoadType(load_type2);
+
+  HBasicBlock* main = InitEntryMainExitGraph();
+  HInstruction* param = MakeParam(DataType::Type::kInt32);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  HInstruction* write1 = MakeIFieldSet(main, object, param, field_type1, MemberOffset(32));
+  HInstanceFieldGet* read1 = MakeIFieldGet(main, object, field_type1, MemberOffset(32));
+  read1->SetType(load_type1);
+  HInstruction* write2 = MakeIFieldSet(main, object, read1, field_type2, MemberOffset(40));
+  HInstanceFieldGet* read2 = MakeIFieldGet(main, object, field_type2, MemberOffset(40));
+  read2->SetType(load_type2);
+  HInstruction* ret = MakeReturn(main, read2);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(write1);
+  EXPECT_INS_RETAINED(write2);
+  EXPECT_INS_REMOVED(read1);
+  EXPECT_INS_REMOVED(read2);
+
+  // Note: Sometimes we create two type conversions when one is enough (Int32->Int16->Int8).
+  // We currently rely on the instruction simplifier to remove the intermediate conversion.
+  HInstruction* current = ret->InputAt(0);
+  if (!DataType::IsTypeConversionImplicit(load_type1, load_type2)) {
+    ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+    ASSERT_EQ(load_type2, current->GetType());
+    current = current->InputAt(0);
+  }
+  if (!DataType::IsTypeConversionImplicit(DataType::Type::kInt32, load_type1)) {
+    ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+    ASSERT_EQ(load_type1, current->GetType());
+    current = current->InputAt(0);
+  }
+  ASSERT_EQ(param, current) << current->DebugName();
+}
+
+TEST_P(TwoTypesConversionsTestGroup, DefaultValueStores_LoadAfterLoop) {
+  auto [default_load_type, load_type] = GetParam();
+  DataType::Type default_field_type = FieldTypeForLoadType(default_load_type);
+  DataType::Type field_type = FieldTypeForLoadType(load_type);
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop] = CreateDoWhileLoopWithInstructions(return_block);
+
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+  HInstruction* cls = MakeLoadClass(pre_header);
+  HInstruction* default_object = MakeNewInstance(pre_header, cls);
+  HInstanceFieldGet* default_value =
+      MakeIFieldGet(pre_header, default_object, default_field_type, MemberOffset(40));
+  default_value->SetType(default_load_type);
+  // Make the `default_object` escape to avoid write elimination (test only load elimination).
+  HInstruction* invoke = MakeInvokeStatic(return_block, DataType::Type::kVoid, {default_object});
+
+  HInstruction* write =
+      MakeIFieldSet(return_block, object, default_value, field_type, MemberOffset(32));
+  HInstanceFieldGet* read = MakeIFieldGet(return_block, object, field_type, MemberOffset(32));
+  read->SetType(load_type);
+  HInstruction* ret = MakeReturn(return_block, read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(default_object);
+  EXPECT_INS_REMOVED(default_value);
+  EXPECT_INS_RETAINED(write);
+  EXPECT_INS_REMOVED(read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  ASSERT_TRUE(ret_input->IsIntConstant()) << ret_input->DebugName();
+  ASSERT_EQ(ret_input->AsIntConstant()->GetValue(), 0);
+}
+
+TEST_P(TwoTypesConversionsTestGroup, SingleValueStores_LoadAfterLoop) {
+  auto [param_type, load_type] = GetParam();
+  DataType::Type field_type = FieldTypeForLoadType(load_type);
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop_header, loop_body] = CreateForLoopWithInstructions(return_block);
+
+  HInstruction* param = MakeParam(param_type);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  // Write the value in pre-header.
+  HInstruction* write1 =
+      MakeIFieldSet(pre_header, object, param, field_type, MemberOffset(32));
+
+  // In the body, make a call to clobber all fields, then write the same value as in pre-header.
+  MakeInvokeStatic(loop_body, DataType::Type::kVoid, {object});
+  HInstruction* write2 =
+      MakeIFieldSet(loop_body, object, param, field_type, MemberOffset(32));
+
+  HInstanceFieldGet* read = MakeIFieldGet(return_block, object, field_type, MemberOffset(32));
+  read->SetType(load_type);
+  HInstruction* ret = MakeReturn(return_block, read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(write1);
+  EXPECT_INS_RETAINED(write2);
+  EXPECT_INS_REMOVED(read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  if (DataType::IsTypeConversionImplicit(param_type, load_type)) {
+    ASSERT_EQ(param, ret_input) << ret_input->DebugName();
+  } else {
+    ASSERT_TRUE(ret_input->IsTypeConversion()) << ret_input->DebugName();
+    ASSERT_EQ(load_type, ret_input->GetType());
+    ASSERT_EQ(param, ret_input->InputAt(0)) << ret_input->InputAt(0)->DebugName();
+  }
+}
+
+TEST_P(TwoTypesConversionsTestGroup, StoreLoopLoad) {
+  auto [param_type, load_type] = GetParam();
+  DataType::Type field_type = FieldTypeForLoadType(load_type);
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop] = CreateDoWhileLoopWithInstructions(return_block);
+
+  HInstruction* param = MakeParam(param_type);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  HInstruction* write = MakeIFieldSet(pre_header, object, param, field_type, MemberOffset(32));
+
+  HInstanceFieldGet* read = MakeIFieldGet(return_block, object, field_type, MemberOffset(32));
+  read->SetType(load_type);
+  HInstruction* ret = MakeReturn(return_block, read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(write);
+  EXPECT_INS_REMOVED(read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  if (DataType::IsTypeConversionImplicit(param_type, load_type)) {
+    ASSERT_EQ(param, ret_input) << ret_input->DebugName();
+  } else {
+    ASSERT_TRUE(ret_input->IsTypeConversion()) << ret_input->DebugName();
+    ASSERT_EQ(load_type, ret_input->GetType());
+    ASSERT_EQ(param, ret_input->InputAt(0)) << ret_input->InputAt(0)->DebugName();
+  }
+}
+
+TEST_P(TwoTypesConversionsTestGroup, StoreLoopLoadStoreLoad) {
+  auto [load_type1, load_type2] = GetParam();
+  DataType::Type field_type1 = FieldTypeForLoadType(load_type1);
+  DataType::Type field_type2 = FieldTypeForLoadType(load_type2);
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop] = CreateDoWhileLoopWithInstructions(return_block);
+  HInstruction* param = MakeParam(DataType::Type::kInt32);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  HInstruction* write1 = MakeIFieldSet(pre_header, object, param, field_type1, MemberOffset(32));
+
+  HInstanceFieldGet* read1 = MakeIFieldGet(return_block, object, field_type1, MemberOffset(32));
+  read1->SetType(load_type1);
+  HInstruction* write2 = MakeIFieldSet(return_block, object, read1, field_type2, MemberOffset(40));
+  HInstanceFieldGet* read2 = MakeIFieldGet(return_block, object, field_type2, MemberOffset(40));
+  read2->SetType(load_type2);
+  HInstruction* ret = MakeReturn(return_block, read2);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(write1);
+  EXPECT_INS_RETAINED(write2);
+  EXPECT_INS_REMOVED(read1);
+  EXPECT_INS_REMOVED(read2);
+
+  if (load_type1 != DataType::Type::kInt32 && load_type2 != load_type1) {
+    GTEST_SKIP() << "FIXME: Missing type conversions. Bug: 341476044";
+  }
+  // Note: Sometimes we create two type conversions when one is enough (Int32->Int16->Int8).
+  // We currently rely on the instruction simplifier to remove the intermediate conversion.
+  HInstruction* current = ret->InputAt(0);
+  if (!DataType::IsTypeConversionImplicit(load_type1, load_type2)) {
+    ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+    ASSERT_EQ(load_type2, current->GetType());
+    current = current->InputAt(0);
+  }
+  if (!DataType::IsTypeConversionImplicit(DataType::Type::kInt32, load_type1)) {
+    ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+    ASSERT_EQ(load_type1, current->GetType()) << load_type2;
+    current = current->InputAt(0);
+  }
+  ASSERT_EQ(param, current) << current->DebugName();
+}
+
+TEST_P(TwoTypesConversionsTestGroup, MergingConvertedValueStore) {
+  auto [param_type, load_type] = GetParam();
+  DataType::Type field_type = FieldTypeForLoadType(load_type);
+  DataType::Type phi_field_type = DataType::Type::kInt32;  // "phi field" can hold the full value.
+  CHECK(DataType::IsTypeConversionImplicit(param_type, phi_field_type));
+  CHECK(DataType::IsTypeConversionImplicit(load_type, phi_field_type));
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop_header, loop_body] = CreateForLoopWithInstructions(return_block);
+
+  HInstruction* param = MakeParam(param_type);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  // Initialize the "phi field".
+  HInstruction* pre_header_write =
+      MakeIFieldSet(pre_header, object, param, phi_field_type, MemberOffset(40));
+
+  // In the body, we read the "phi field", store and load the value to a different field
+  // to force type conversion, and store back to the "phi field".
+  HInstanceFieldGet* phi_read = MakeIFieldGet(loop_body, object, phi_field_type, MemberOffset(40));
+  HInstruction* conversion_write =
+      MakeIFieldSet(loop_body, object, phi_read, field_type, MemberOffset(32));
+  HInstanceFieldGet* conversion_read =
+      MakeIFieldGet(loop_body, object, field_type, MemberOffset(32));
+  conversion_read->SetType(load_type);
+  HInstruction* phi_write =
+      MakeIFieldSet(loop_body, object, conversion_read, phi_field_type, MemberOffset(40));
+
+  HInstanceFieldGet* final_read =
+      MakeIFieldGet(return_block, object, phi_field_type, MemberOffset(40));
+  HInstruction* ret = MakeReturn(return_block, final_read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(pre_header_write);
+  EXPECT_INS_RETAINED(conversion_write);
+  EXPECT_INS_REMOVED(phi_read);
+  EXPECT_INS_REMOVED(conversion_read);
+  EXPECT_INS_REMOVED(final_read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  if (DataType::IsTypeConversionImplicit(param_type, load_type)) {
+    EXPECT_INS_REMOVED(phi_write) << "\n" << param_type << "/" << load_type;
+    ASSERT_EQ(param, ret_input) << ret_input->DebugName();
+  } else {
+    GTEST_SKIP() << "FIXME: Missing type conversions. Bug: 341476044";
+    EXPECT_INS_RETAINED(phi_write) << "\n" << param_type << "/" << load_type;
+    ASSERT_TRUE(ret_input->IsPhi()) << ret_input->DebugName();
+    HInstruction* pre_header_input = ret_input->InputAt(0);
+    HInstruction* loop_body_input = ret_input->InputAt(1);
+    ASSERT_EQ(param, pre_header_input) << pre_header_input->DebugName();
+    ASSERT_TRUE(loop_body_input->IsTypeConversion());
+    ASSERT_EQ(load_type, loop_body_input->GetType());
+    ASSERT_EQ(ret_input, loop_body_input->InputAt(0));
+  }
+}
+
+TEST_P(TwoTypesConversionsTestGroup, MergingTwiceConvertedValueStore) {
+  auto [load_type1, load_type2] = GetParam();
+  DataType::Type field_type1 = FieldTypeForLoadType(load_type1);
+  DataType::Type field_type2 = FieldTypeForLoadType(load_type2);
+  DataType::Type phi_field_type = DataType::Type::kInt32;  // "phi field" can hold the full value.
+  CHECK(DataType::IsTypeConversionImplicit(load_type1, phi_field_type));
+  CHECK(DataType::IsTypeConversionImplicit(load_type2, phi_field_type));
+
+  HBasicBlock* return_block = InitEntryMainExitGraph();
+  auto [pre_header, loop_header, loop_body] = CreateForLoopWithInstructions(return_block);
+
+  HInstruction* param = MakeParam(DataType::Type::kInt32);
+  HInstruction* object = MakeParam(DataType::Type::kReference);
+
+  // Initialize the "phi field".
+  HInstruction* pre_header_write =
+      MakeIFieldSet(pre_header, object, param, phi_field_type, MemberOffset(40));
+
+  // In the body, we read the "phi field", store and load the value to a different field
+  // to force type conversion - twice, and store back to the "phi field".
+  HInstanceFieldGet* phi_read = MakeIFieldGet(loop_body, object, phi_field_type, MemberOffset(40));
+  HInstruction* conversion_write1 =
+      MakeIFieldSet(loop_body, object, phi_read, field_type1, MemberOffset(32));
+  HInstanceFieldGet* conversion_read1 =
+      MakeIFieldGet(loop_body, object, field_type1, MemberOffset(32));
+  conversion_read1->SetType(load_type1);
+  HInstruction* conversion_write2 =
+      MakeIFieldSet(loop_body, object, conversion_read1, field_type2, MemberOffset(36));
+  HInstanceFieldGet* conversion_read2 =
+      MakeIFieldGet(loop_body, object, field_type2, MemberOffset(36));
+  conversion_read2->SetType(load_type2);
+  HInstruction* phi_write =
+      MakeIFieldSet(loop_body, object, conversion_read2, phi_field_type, MemberOffset(40));
+
+  HInstanceFieldGet* final_read =
+      MakeIFieldGet(return_block, object, phi_field_type, MemberOffset(40));
+  HInstruction* ret = MakeReturn(return_block, final_read);
+
+  PerformLSE();
+
+  EXPECT_INS_RETAINED(pre_header_write);
+  EXPECT_INS_RETAINED(conversion_write1);
+  EXPECT_INS_RETAINED(conversion_write2);
+  EXPECT_INS_REMOVED(phi_read);
+  EXPECT_INS_REMOVED(conversion_read1);
+  EXPECT_INS_REMOVED(conversion_read2);
+  EXPECT_INS_REMOVED(final_read);
+
+  HInstruction* ret_input = ret->InputAt(0);
+  if (load_type1 == DataType::Type::kInt32 && load_type2 == DataType::Type::kInt32) {
+    EXPECT_INS_REMOVED(phi_write) << "\n" << load_type1 << "/" << load_type2;
+    ASSERT_EQ(param, ret_input) << ret_input->DebugName();
+  } else {
+    GTEST_SKIP() << "FIXME: Missing type conversions. Bug: 341476044";
+    EXPECT_INS_RETAINED(phi_write) << "\n" << load_type1 << "/" << load_type2;
+    ASSERT_TRUE(ret_input->IsPhi()) << ret_input->DebugName();
+    HInstruction* pre_header_input = ret_input->InputAt(0);
+    HInstruction* loop_body_input = ret_input->InputAt(1);
+    ASSERT_EQ(param, pre_header_input) << pre_header_input->DebugName();
+    ASSERT_TRUE(loop_body_input->IsTypeConversion());
+    // Note: Sometimes we create two type conversions when one is enough (Int32->Int16->Int8).
+    // We currently rely on the instruction simplifier to remove the intermediate conversion.
+    HInstruction* current = loop_body_input;
+    if (!DataType::IsTypeConversionImplicit(load_type1, load_type2)) {
+      ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+      ASSERT_EQ(load_type2, current->GetType());
+      current = current->InputAt(0);
+    }
+    if (!DataType::IsTypeConversionImplicit(DataType::Type::kInt32, load_type1)) {
+      ASSERT_TRUE(current->IsTypeConversion()) << current->DebugName();
+      ASSERT_EQ(load_type1, current->GetType()) << load_type2;
+      current = current->InputAt(0);
+    }
+    ASSERT_EQ(current, ret_input);
+  }
+}
+
+auto Int32AndSmallerTypesGenerator() {
+  return testing::Values(DataType::Type::kInt32,
+                         DataType::Type::kInt16,
+                         DataType::Type::kInt8,
+                         DataType::Type::kUint16,
+                         DataType::Type::kUint8);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LoadStoreEliminationTest,
+    TwoTypesConversionsTestGroup,
+    testing::Combine(Int32AndSmallerTypesGenerator(), Int32AndSmallerTypesGenerator()));
 
 // // ENTRY
 // obj = new Obj();

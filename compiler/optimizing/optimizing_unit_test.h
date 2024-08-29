@@ -507,22 +507,22 @@ class OptimizingUnitTestHelper {
   }
 
   HInstanceFieldSet* MakeIFieldSet(HBasicBlock* block,
-                                   HInstruction* inst,
+                                   HInstruction* object,
                                    HInstruction* data,
                                    MemberOffset off,
                                    uint32_t dex_pc = kNoDexPc) {
     CHECK(data != nullptr);
-    return MakeIFieldSet(block, inst, data, data->GetType(), off, dex_pc);
+    return MakeIFieldSet(block, object, data, data->GetType(), off, dex_pc);
   }
 
   HInstanceFieldSet* MakeIFieldSet(HBasicBlock* block,
-                                   HInstruction* inst,
+                                   HInstruction* object,
                                    HInstruction* data,
                                    DataType::Type field_type,
                                    MemberOffset off,
                                    uint32_t dex_pc = kNoDexPc) {
     HInstanceFieldSet* ifield_set = new (GetAllocator()) HInstanceFieldSet(
-        inst,
+        object,
         data,
         /* field= */ nullptr,
         field_type,
@@ -537,12 +537,12 @@ class OptimizingUnitTestHelper {
   }
 
   HInstanceFieldGet* MakeIFieldGet(HBasicBlock* block,
-                                   HInstruction* inst,
+                                   HInstruction* object,
                                    DataType::Type type,
                                    MemberOffset off,
                                    uint32_t dex_pc = kNoDexPc) {
     HInstanceFieldGet* ifield_get = new (GetAllocator()) HInstanceFieldGet(
-        inst,
+        object,
         /* field= */ nullptr,
         /* field_type= */ type,
         /* field_offset= */ off,

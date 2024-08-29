@@ -22,7 +22,7 @@ namespace art {
 // Test the binary with the same bitness as the test. This is also done to avoid
 // the symlink /apex/com.android.art/bin/dex2oat, which we don't have selinux
 // permission to read on S.
-#if defined(__LIB64__)
+#if defined(__LP64__)
 constexpr const char* kDex2oatBinary = "dex2oat64";
 #else
 constexpr const char* kDex2oatBinary = "dex2oat32";

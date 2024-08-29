@@ -1185,8 +1185,6 @@ class LSEVisitor final : private HGraphDelegateVisitor {
 
   Phase current_phase_;
 
-  friend struct ScopedRestoreHeapValues;
-
   friend std::ostream& operator<<(std::ostream& os, const Value& v);
   friend std::ostream& operator<<(std::ostream& oss, const LSEVisitor::Phase& phase);
 
@@ -2537,57 +2535,7 @@ void LSEVisitor::FindOldValueForPhiPlaceholder(PhiPlaceholder phi_placeholder,
             !success);
 }
 
-struct ScopedRestoreHeapValues {
- public:
-  ScopedRestoreHeapValues(ArenaStack* alloc,
-                          size_t num_heap_locs,
-                          ScopedArenaVector<ScopedArenaVector<LSEVisitor::ValueRecord>>& to_restore)
-      : alloc_(alloc),
-        updated_values_(alloc_.Adapter(kArenaAllocLSE)),
-        to_restore_(to_restore) {
-    updated_values_.reserve(num_heap_locs * to_restore_.size());
-  }
-
-  ~ScopedRestoreHeapValues() {
-    for (const auto& rec : updated_values_) {
-      to_restore_[rec.blk_id][rec.heap_loc].value = rec.val_;
-    }
-  }
-
-  template<typename Func>
-  void ForEachRecord(Func&& func) {
-    for (size_t blk_id : Range(to_restore_.size())) {
-      for (size_t heap_loc : Range(to_restore_[blk_id].size())) {
-        LSEVisitor::ValueRecord* vr = &to_restore_[blk_id][heap_loc];
-        LSEVisitor::Value initial = vr->value;
-        func(vr);
-        if (!vr->value.ExactEquals(initial)) {
-          updated_values_.push_back({blk_id, heap_loc, initial});
-        }
-      }
-    }
-  }
-
- private:
-  struct UpdateRecord {
-    size_t blk_id;
-    size_t heap_loc;
-    LSEVisitor::Value val_;
-  };
-  ScopedArenaAllocator alloc_;
-  ScopedArenaVector<UpdateRecord> updated_values_;
-  ScopedArenaVector<ScopedArenaVector<LSEVisitor::ValueRecord>>& to_restore_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedRestoreHeapValues);
-};
-
 void LSEVisitor::FindStoresWritingOldValues() {
-  // Partial LSE relies on knowing the real heap-values not the
-  // store-replacement versions so we need to restore the map after removing
-  // stores.
-  ScopedRestoreHeapValues heap_vals(allocator_.GetArenaStack(),
-                                    heap_location_collector_.GetNumberOfHeapLocations(),
-                                    heap_values_for_);
   // The Phi placeholder replacements have so far been used for eliminating loads,
   // tracking values that would be stored if all stores were kept. As we want to
   // compare actual old values after removing unmarked stores, prune the Phi
@@ -2602,14 +2550,10 @@ void LSEVisitor::FindStoresWritingOldValues() {
   }
 
   // Update heap values at end of blocks.
-  heap_vals.ForEachRecord([&](ValueRecord* rec) {
-    UpdateValueRecordForStoreElimination(rec);
-  });
-
-  if (kIsDebugBuild) {
-    heap_vals.ForEachRecord([](ValueRecord* rec) {
-      DCHECK(!rec->value.NeedsNonLoopPhi()) << rec->value;
-    });
+  for (HBasicBlock* block : GetGraph()->GetReversePostOrder()) {
+    for (ValueRecord& value_record : heap_values_for_[block->GetBlockId()]) {
+      UpdateValueRecordForStoreElimination(&value_record);
+    }
   }
 
   // Use local allocator to reduce peak memory usage.

@@ -1,0 +1,28 @@
+in voidMethod
+A.returnInt()=42
+A.returnDouble()=42.0
+in I.defaultMethod
+in A.overrideMe
+I'm private interface method
+A.privateReturnInt()=1042
+B.privateReturnInt()=9999
+((B) new A()).privateReturnInt()=9999
+I am from throwException
+A.staticMethod()=staticMethod
+Multi.$noinline$getMethodHandle().invokeExact(nonEmpty)=hello
+Multi: mh.invokeExact(nonEmpty)=1001
+Sums.sum(1)=1
+Sums.sum(1, 2)=3
+Sums.sum(1, 2, 3)=6
+Sums.sum(1, 2, 3, 4)=10
+Sums.sum(1, 2, 3, 4, 5)=15
+Sums.sum(1, 2, 3, 4, 5, 6)=21
+Sums.sum(1, 2, 3, 4, 5, 6, 7)=28
+Sums.sum(1, 2, 3, 4, 5, 6, 7, 8)=36
+Sums.sum(1, 2, 3, 4, 5, 6, 7, 8, 9)=45
+Sums.sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)=55
+Sums.sum(1, 2L)=3
+Sums.sum(1, 2L, 3, 4L)=10
+Sums.sum(1, 2L, 3, 4L, 5, 6L)=21
+Sums.sum(1, 2L, 3, 4L, 5, 6L, 7, 8L)=36
+Sums.sum(1, 2L, 3, 4L, 5, 6L, 7, 8L, 9, 10L)=55

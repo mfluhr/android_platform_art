@@ -379,7 +379,7 @@ class WatchDog {
                                    false);
       runtime->DumpForSigQuit(std::cerr);
     }
-    exit(1);
+    exit(static_cast<int>(dex2oat::ReturnCode::kOther));
   }
 
   void Wait() {

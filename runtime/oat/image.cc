@@ -34,8 +34,8 @@
 namespace art HIDDEN {
 
 const uint8_t ImageHeader::kImageMagic[] = { 'a', 'r', 't', '\n' };
-// Last change: Add signum, copySign intrinsics.
-const uint8_t ImageHeader::kImageVersion[] = { '1', '1', '2', '\0' };
+// Last change: Add invoke-virtual targeting MethodHandle.invokeExact intrinsic.
+const uint8_t ImageHeader::kImageVersion[] = { '1', '1', '3', '\0' };
 
 ImageHeader::ImageHeader(uint32_t image_reservation_size,
                          uint32_t component_count,

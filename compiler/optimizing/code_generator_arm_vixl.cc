@@ -5391,8 +5391,7 @@ void LocationsBuilderARMVIXL::VisitRor(HRor* ror) {
         locations->SetInAt(1, Location::ConstantLocation(shift));
       } else {
         locations->SetInAt(1, Location::RequiresRegister());
-        locations->AddTemp(Location::RequiresRegister());
-        locations->AddTemp(Location::RequiresRegister());
+        locations->AddRegisterTemps(2);
       }
       locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
       break;
@@ -5958,8 +5957,7 @@ void LocationsBuilderARMVIXL::HandleFieldSet(HInstruction* instruction,
   // Temporary registers for the write barrier.
   // TODO: consider renaming StoreNeedsWriteBarrier to StoreNeedsGCMark.
   if (needs_write_barrier || check_gc_card) {
-    locations->AddTemp(Location::RequiresRegister());
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddRegisterTemps(2);
   } else if (generate_volatile) {
     // ARM encoding have some additional constraints for ldrexd/strexd:
     // - registers need to be consecutive
@@ -5967,9 +5965,7 @@ void LocationsBuilderARMVIXL::HandleFieldSet(HInstruction* instruction,
     // We don't test for ARM yet, and the assertion makes sure that we
     // revisit this if we ever enable ARM encoding.
     DCHECK_EQ(InstructionSet::kThumb2, codegen_->GetInstructionSet());
-
-    locations->AddTemp(Location::RequiresRegister());
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddRegisterTemps(2);
     if (field_type == DataType::Type::kFloat64) {
       // For doubles we need two more registers to copy the value.
       locations->AddTemp(LocationFrom(r2));
@@ -6150,8 +6146,7 @@ void LocationsBuilderARMVIXL::HandleFieldGet(HInstruction* instruction,
     // We don't test for ARM yet, and the assertion makes sure that we
     // revisit this if we ever enable ARM encoding.
     DCHECK_EQ(InstructionSet::kThumb2, codegen_->GetInstructionSet());
-    locations->AddTemp(Location::RequiresRegister());
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddRegisterTemps(2);
   } else if (object_field_get_with_read_barrier && kUseBakerReadBarrier) {
     // We need a temporary register for the read barrier load in
     // CodeGeneratorARMVIXL::GenerateFieldLoadWithBakerReadBarrier()
@@ -6875,8 +6870,7 @@ void LocationsBuilderARMVIXL::VisitArraySet(HArraySet* instruction) {
   if (needs_write_barrier || check_gc_card || instruction->NeedsTypeCheck()) {
     // Temporary registers for type checking, write barrier, checking the dirty bit, or register
     // poisoning.
-    locations->AddTemp(Location::RequiresRegister());
-    locations->AddTemp(Location::RequiresRegister());
+    locations->AddRegisterTemps(2);
   } else if (kPoisonHeapReferences && value_type == DataType::Type::kReference) {
     locations->AddTemp(Location::RequiresRegister());
   }

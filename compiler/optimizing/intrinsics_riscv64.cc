@@ -1963,9 +1963,7 @@ static void CreateSystemArrayCopyLocations(HInvoke* invoke, DataType::Type type)
   locations->SetInAt(3, LocationForSystemArrayCopyInput(invoke->InputAt(3)));
   locations->SetInAt(4, LocationForSystemArrayCopyInput(invoke->InputAt(4)));
 
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
 }
 
 void IntrinsicLocationsBuilderRISCV64::VisitSystemArrayCopyByte(HInvoke* invoke) {
@@ -3110,9 +3108,7 @@ void IntrinsicLocationsBuilderRISCV64::VisitStringCompareTo(HInvoke* invoke) {
                                        kIntrinsified);
   locations->SetInAt(0, Location::RequiresRegister());
   locations->SetInAt(1, Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
   // Need temporary registers for String compression's feature.
   if (mirror::kUseStringCompression) {
     locations->AddTemp(Location::RequiresRegister());
@@ -5357,9 +5353,7 @@ void IntrinsicLocationsBuilderRISCV64::VisitStringGetCharsNoCheck(HInvoke* invok
   locations->SetInAt(3, Location::RequiresRegister());
   locations->SetInAt(4, Location::RequiresRegister());
 
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(3);
 }
 
 void IntrinsicCodeGeneratorRISCV64::VisitStringGetCharsNoCheck(HInvoke* invoke) {

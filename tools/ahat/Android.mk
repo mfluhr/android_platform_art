@@ -27,6 +27,7 @@ ifneq ($(EMMA_INSTRUMENT),true)
 # Determine the location of the test-dump.jar, test-dump.hprof, and proguard
 AHAT_TEST_DUMP_JAR := $(call intermediates-dir-for,JAVA_LIBRARIES,ahat-test-dump)/javalib.jar
 AHAT_TEST_DUMP_COMMON := $(call intermediates-dir-for,JAVA_LIBRARIES,ahat-test-dump,,COMMON)
+AHAT_TEST_DUMP_JNI := $(ART_HOST_OUT_SHARED_LIBRARIES)/libahat-test-jni$(ART_HOST_SHLIB_EXTENSION)
 AHAT_TEST_DUMP_HPROF := $(AHAT_TEST_DUMP_COMMON)/test-dump.hprof
 AHAT_TEST_DUMP_BASE_HPROF := $(AHAT_TEST_DUMP_COMMON)/test-dump-base.hprof
 AHAT_TEST_DUMP_PROGUARD_MAP := $(AHAT_TEST_DUMP_COMMON)/test-dump.map
@@ -56,6 +57,7 @@ endif
 # The scripts below are run with --no-compile to avoid dependency on dex2oat.
 AHAT_TEST_DUMP_DEPENDENCIES := \
   $(AHAT_TEST_DALVIKVM_DEP) \
+  $(AHAT_TEST_DUMP_JNI) \
   $(ART_HOST_SHARED_LIBRARY_DEPENDENCIES) \
   $(ART_HOST_SHARED_LIBRARY_DEBUG_DEPENDENCIES) \
   $(ART_HOST_DEX_DEPENDENCIES) \
@@ -127,6 +129,7 @@ endif # linux
 # Clean up local variables.
 AHAT_TEST_JAR :=
 AHAT_TEST_DUMP_JAR :=
+AHAT_TEST_DUMP_JNI :=
 AHAT_TEST_DUMP_COMMON :=
 AHAT_TEST_DUMP_HPROF :=
 AHAT_TEST_DUMP_BASE_HPROF :=

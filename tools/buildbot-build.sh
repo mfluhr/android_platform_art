@@ -110,20 +110,12 @@ fi
 
 implementation_libs=(
   "heapprofd_client_api"
-  "libandroid_runtime_lazy"
   "libartpalette-system"
   "libdebugstore_cxx" # Needed by "libartpalette-system".
-  "libbinder"
-  "libbinder_ndk"
   "libcutils"
   "libutils"
   "libvndksupport"
 )
-
-# riscv64 has a newer version of libbinder which depends on libapexsupport.
-if [[ $TARGET_ARCH = "riscv64" ]]; then
-    implementation_libs+=("libapexsupport") # Needed by "libbinder".
-fi
 
 if [ -d frameworks/base ]; then
   # In full manifest branches, build the implementation libraries from source
@@ -142,8 +134,18 @@ apexes=(
   "com.android.i18n"
   "com.android.runtime"
   "com.android.tzdata"
-  "com.android.os.statsd"
+  "art_fake_com.android.os.statsd"
 )
+
+override_apex_name() {
+  if [[ $1 == "com.android.art.testing" ]]; then
+    echo "com.android.art"
+  elif [[ $1 == "art_fake_com.android.os.statsd" ]]; then
+    echo "com.android.os.statsd"
+  else
+    echo $1
+  fi
+}
 
 make_command="build/soong/soong_ui.bash --make-mode $j_arg $extra_args $showcommands $common_targets"
 if [[ $build_host == "yes" ]]; then
@@ -353,11 +355,7 @@ if [[ $build_target == "yes" ]]; then
   mkdir -p $linkerconfig_root/apex
   for apex in ${apexes[@]}; do
     src="$ANDROID_PRODUCT_OUT/system/apex/${apex}"
-    if [[ $apex == com.android.art.* ]]; then
-      dst="$linkerconfig_root/apex/com.android.art"
-    else
-      dst="$linkerconfig_root/apex/${apex}"
-    fi
+    dst="$linkerconfig_root/apex/$(override_apex_name $apex)"
     msginfo "Copying APEX directory" "from $src to $dst"
     rm -rf $dst
     cp -r $src $dst
@@ -371,7 +369,7 @@ if [[ $build_target == "yes" ]]; then
 <apex-info-list>
 EOF
   for apex in ${apexes[@]}; do
-    [[ $apex == com.android.art.* ]] && apex=com.android.art
+    apex=$(override_apex_name $apex)
     cat <<EOF >> $apex_xml_file
     <apex-info moduleName="${apex}" modulePath="/system/apex/${apex}.apex" preinstalledModulePath="/system/apex/${apex}.apex" versionCode="1" versionName="" isFactory="true" isActive="true">
     </apex-info>

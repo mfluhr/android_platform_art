@@ -4252,8 +4252,7 @@ static void CreateVarHandleGetAndSetLocations(HInvoke* invoke, CodeGeneratorX86*
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations = new (allocator) LocationSummary(
       invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(2);
   // We use this temporary for the card, so we need a byte register
   locations->AddTemp(Location::RegisterLocation(EBX));
   locations->SetInAt(0, Location::RequiresRegister());
@@ -4426,8 +4425,7 @@ static void CreateVarHandleCompareAndSetOrExchangeLocations(HInvoke* invoke,
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations = new (allocator) LocationSummary(
       invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(2);
   // We use this temporary for the card, so we need a byte register
   locations->AddTemp(Location::RegisterLocation(EBX));
   locations->SetInAt(0, Location::RequiresRegister());
@@ -4606,8 +4604,7 @@ static void CreateVarHandleGetAndAddLocations(HInvoke* invoke, CodeGeneratorX86*
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations = new (allocator) LocationSummary(
       invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
-  locations->AddTemp(Location::RequiresRegister());
-  locations->AddTemp(Location::RequiresRegister());
+  locations->AddRegisterTemps(2);
   locations->SetInAt(0, Location::RequiresRegister());
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   if (expected_coordinates_count == 1u) {

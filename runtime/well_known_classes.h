@@ -251,6 +251,8 @@ struct EXPORT WellKnownClasses {
       java_lang_StackOverflowError;
   static constexpr ClassFromField<&java_lang_Thread_daemon> java_lang_Thread;
   static constexpr ClassFromField<&java_lang_ThreadGroup_groups> java_lang_ThreadGroup;
+  static constexpr ClassFromMethod<&java_lang_invoke_MethodHandle_invokeExact>
+      java_lang_invoke_MethodHandle;
   static constexpr ClassFromMethod<&java_lang_invoke_MethodType_makeImpl>
       java_lang_invoke_MethodType;
   static constexpr ClassFromMethod<&java_lang_reflect_InvocationTargetException_init>
