@@ -519,6 +519,7 @@ art_cc_defaults {
     ],
     static_libs: [
         "libcrypto_for_art",
+        "libgmock",
         "liblz4", // libart(d)-dex2oat dependency; must be repeated here since it's a static lib.
     ],
 }

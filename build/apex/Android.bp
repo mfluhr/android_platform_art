@@ -348,7 +348,6 @@ art_gtests = [
     "art_dexoptanalyzer_tests",
     "art_imgdiag_tests",
     "art_libartbase_tests",
-    "art_libartpalette_tests",
     "art_libdexfile_tests",
     "art_libdexfile_support_tests",
     "art_libprofile_tests",

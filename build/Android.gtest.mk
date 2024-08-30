@@ -113,7 +113,6 @@ ART_TEST_MODULES_COMMON := \
     art_hiddenapi_tests \
     art_imgdiag_tests \
     art_libartbase_tests \
-    art_libartpalette_tests \
     art_libdexfile_external_tests \
     art_libdexfile_support_static_tests \
     art_libdexfile_support_tests \
@@ -134,6 +133,7 @@ ART_TEST_MODULES_TARGET := $(ART_TEST_MODULES_COMMON) \
     art_odrefresh_tests \
 
 ART_TEST_MODULES_HOST := $(ART_TEST_MODULES_COMMON) \
+    art_libartpalette_tests \
     art_libartservice_tests \
     art_libarttools_tests \
 

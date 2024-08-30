@@ -27,6 +27,8 @@
 
 #include "android-base/logging.h"
 #include "android-base/macros.h"
+#include "android-base/result-gmock.h"
+#include "android-base/result.h"
 #include "android-base/stringprintf.h"
 #include "arch/instruction_set_features.h"
 #include "base/macros.h"
@@ -54,7 +56,15 @@
 
 namespace art {
 
-using android::base::StringPrintf;
+using ::android::base::Result;
+using ::android::base::StringPrintf;
+using ::android::base::testing::HasValue;
+using ::android::base::testing::Ok;
+using ::testing::AssertionFailure;
+using ::testing::AssertionResult;
+using ::testing::AssertionSuccess;
+using ::testing::Ne;
+using ::testing::Not;
 
 class Dex2oatTest : public Dex2oatEnvironmentTest {
  public:
@@ -62,16 +72,14 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
     Dex2oatEnvironmentTest::TearDown();
 
     output_ = "";
-    error_msg_ = "";
   }
 
  protected:
-  int GenerateOdexForTestWithStatus(const std::vector<std::string>& dex_locations,
-                                    const std::string& odex_location,
-                                    CompilerFilter::Filter filter,
-                                    std::string* error_msg,
-                                    const std::vector<std::string>& extra_args = {},
-                                    bool use_fd = false) {
+  Result<int> GenerateOdexForTestWithStatus(const std::vector<std::string>& dex_locations,
+                                            const std::string& odex_location,
+                                            CompilerFilter::Filter filter,
+                                            const std::vector<std::string>& extra_args = {},
+                                            bool use_fd = false) {
     std::unique_ptr<File> oat_file;
     std::vector<std::string> args;
     args.reserve(dex_locations.size() + extra_args.size() + 6);
@@ -81,7 +89,9 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
     }
     if (use_fd) {
       oat_file.reset(OS::CreateEmptyFile(odex_location.c_str()));
-      CHECK(oat_file != nullptr) << odex_location;
+      if (oat_file == nullptr) {
+        return ErrnoErrorf("CreateEmptyFile failed on {}", odex_location);
+      }
       args.push_back("--oat-fd=" + std::to_string(oat_file->Fd()));
       args.push_back("--oat-location=" + odex_location);
     } else {
@@ -97,20 +107,24 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
 
     args.insert(args.end(), extra_args.begin(), extra_args.end());
 
-    int status = Dex2Oat(args, &output_, error_msg);
+    int status = OR_RETURN(Dex2Oat(args, &output_));
     if (oat_file != nullptr) {
-      CHECK_EQ(oat_file->FlushClose(), 0) << "Could not flush and close oat file";
+      int fc_errno = oat_file->FlushClose();
+      if (fc_errno != 0) {
+        return Errorf(
+            "Could not flush and close oat file {}: {}", odex_location, strerror(-fc_errno));
+      }
     }
     return status;
   }
 
-  ::testing::AssertionResult GenerateOdexForTest(const std::string& dex_location,
-                                                 const std::string& odex_location,
-                                                 CompilerFilter::Filter filter,
-                                                 const std::vector<std::string>& extra_args = {},
-                                                 bool expect_success = true,
-                                                 bool use_fd = false,
-                                                 bool use_zip_fd = false) WARN_UNUSED {
+  AssertionResult GenerateOdexForTest(const std::string& dex_location,
+                                      const std::string& odex_location,
+                                      CompilerFilter::Filter filter,
+                                      const std::vector<std::string>& extra_args = {},
+                                      bool expect_success = true,
+                                      bool use_fd = false,
+                                      bool use_zip_fd = false) WARN_UNUSED {
     return GenerateOdexForTest(dex_location,
                                odex_location,
                                filter,
@@ -124,14 +138,14 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
   bool test_accepts_odex_file_on_failure = false;
 
   template <typename T>
-  ::testing::AssertionResult GenerateOdexForTest(const std::string& dex_location,
-                                                 const std::string& odex_location,
-                                                 CompilerFilter::Filter filter,
-                                                 const std::vector<std::string>& extra_args,
-                                                 bool expect_success,
-                                                 bool use_fd,
-                                                 bool use_zip_fd,
-                                                 T check_oat) WARN_UNUSED {
+  AssertionResult GenerateOdexForTest(const std::string& dex_location,
+                                      const std::string& odex_location,
+                                      CompilerFilter::Filter filter,
+                                      const std::vector<std::string>& extra_args,
+                                      bool expect_success,
+                                      bool use_fd,
+                                      bool use_zip_fd,
+                                      T check_oat) WARN_UNUSED {
     std::vector<std::string> dex_locations;
     if (use_zip_fd) {
       std::string loc_arg = "--zip-location=" + dex_location;
@@ -144,17 +158,21 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
     } else {
       dex_locations.push_back(dex_location);
     }
-    std::string error_msg;
-    int status = GenerateOdexForTestWithStatus(
-        dex_locations, odex_location, filter, &error_msg, extra_args, use_fd);
-    bool success = (WIFEXITED(status) && WEXITSTATUS(status) == 0);
+
+    int status = UNWRAP_OR_DO(
+        res,
+        GenerateOdexForTestWithStatus(dex_locations, odex_location, filter, extra_args, use_fd),
+        { return AssertionFailure() << res.error(); });
+
+    bool success = status == 0;
     if (expect_success) {
       if (!success) {
-        return ::testing::AssertionFailure() << "Failed to compile odex: " << error_msg << std::endl
-                                             << output_;
+        return AssertionFailure() << "Failed to compile odex (status=" << status
+                                  << "): " << output_;
       }
 
       // Verify the odex file was generated as expected.
+      std::string error_msg;
       std::unique_ptr<OatFile> odex_file(OatFile::Open(/*zip_fd=*/-1,
                                                        odex_location,
                                                        odex_location,
@@ -163,20 +181,19 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
                                                        dex_location,
                                                        &error_msg));
       if (odex_file == nullptr) {
-        return ::testing::AssertionFailure() << "Could not open odex file: " << error_msg;
+        return AssertionFailure() << "Could not open odex file: " << error_msg;
       }
 
       CheckFilter(filter, odex_file->GetCompilerFilter());
       check_oat(*(odex_file.get()));
     } else {
       if (success) {
-        return ::testing::AssertionFailure() << "Succeeded to compile odex: " << output_;
+        return AssertionFailure() << "Succeeded to compile odex: " << output_;
       }
-
-      error_msg_ = error_msg;
 
       if (!test_accepts_odex_file_on_failure) {
         // Verify there's no loadable odex file.
+        std::string error_msg;
         std::unique_ptr<OatFile> odex_file(OatFile::Open(/*zip_fd=*/-1,
                                                          odex_location,
                                                          odex_location,
@@ -185,11 +202,11 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
                                                          dex_location,
                                                          &error_msg));
         if (odex_file != nullptr) {
-          return ::testing::AssertionFailure() << "Could open odex file: " << error_msg;
+          return AssertionFailure() << "Could open odex file: " << error_msg;
         }
       }
     }
-    return ::testing::AssertionSuccess();
+    return AssertionSuccess();
   }
 
   // Check the input compiler filter against the generated oat file's filter. May be overridden
@@ -199,7 +216,6 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
   }
 
   std::string output_ = "";
-  std::string error_msg_ = "";
 };
 
 // This test class provides an easy way to validate an expected filter which is different
@@ -1023,7 +1039,6 @@ class Dex2oatClassLoaderContextTest : public Dex2oatTest {
 
     Copy(use_second_source ? GetDexSrc2() : GetDexSrc1(), dex_location);
 
-    std::string error_msg;
     std::vector<std::string> extra_args;
     if (class_loader_context != nullptr) {
       extra_args.push_back(std::string("--class-loader-context=") + class_loader_context);
@@ -1179,18 +1194,15 @@ TEST_F(Dex2oatDeterminism, UnloadCompile) {
   const std::string unload_vdex_name = out_dir + "/unload.vdex";
   const std::string no_unload_oat_name = out_dir + "/nounload.oat";
   const std::string no_unload_vdex_name = out_dir + "/nounload.vdex";
-  std::string error_msg;
   const std::vector<gc::space::ImageSpace*>& spaces = runtime->GetHeap()->GetBootImageSpaces();
   ASSERT_GT(spaces.size(), 0u);
   const std::string image_location = spaces[0]->GetImageLocation();
   // Without passing in an app image, it will unload in between compilations.
-  const int res =
-      GenerateOdexForTestWithStatus(GetLibCoreDexFileNames(),
-                                    base_oat_name,
-                                    CompilerFilter::Filter::kVerify,
-                                    &error_msg,
-                                    {"--force-determinism", "--avoid-storing-invocation"});
-  ASSERT_EQ(res, 0);
+  ASSERT_THAT(GenerateOdexForTestWithStatus(GetLibCoreDexFileNames(),
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kVerify,
+                                            {"--force-determinism", "--avoid-storing-invocation"}),
+              HasValue(0));
   Copy(base_oat_name, unload_oat_name);
   Copy(base_vdex_name, unload_vdex_name);
   std::unique_ptr<File> unload_oat(OS::OpenFileForReading(unload_oat_name.c_str()));
@@ -1201,13 +1213,12 @@ TEST_F(Dex2oatDeterminism, UnloadCompile) {
   EXPECT_GT(unload_vdex->GetLength(), 0u);
   // Regenerate with an app image to disable the dex2oat unloading and verify that the output is
   // the same.
-  const int res2 = GenerateOdexForTestWithStatus(
-      GetLibCoreDexFileNames(),
-      base_oat_name,
-      CompilerFilter::Filter::kVerify,
-      &error_msg,
-      {"--force-determinism", "--avoid-storing-invocation", "--compile-individually"});
-  ASSERT_EQ(res2, 0);
+  ASSERT_THAT(GenerateOdexForTestWithStatus(
+                  GetLibCoreDexFileNames(),
+                  base_oat_name,
+                  CompilerFilter::Filter::kVerify,
+                  {"--force-determinism", "--avoid-storing-invocation", "--compile-individually"}),
+              HasValue(0));
   Copy(base_oat_name, no_unload_oat_name);
   Copy(base_vdex_name, no_unload_vdex_name);
   std::unique_ptr<File> no_unload_oat(OS::OpenFileForReading(no_unload_oat_name.c_str()));
@@ -1232,20 +1243,18 @@ TEST_F(Dex2oatVerifierAbort, HardFail) {
   std::unique_ptr<const DexFile> dex(OpenTestDexFile("VerifierDeps"));
   std::string out_dir = GetScratchDir();
   const std::string base_oat_name = out_dir + "/base.oat";
-  std::string error_msg;
-  const int res_fail = GenerateOdexForTestWithStatus({dex->GetLocation()},
-                                                     base_oat_name,
-                                                     CompilerFilter::Filter::kVerify,
-                                                     &error_msg,
-                                                     {"--abort-on-hard-verifier-error"});
-  EXPECT_NE(0, res_fail);
 
-  const int res_no_fail = GenerateOdexForTestWithStatus({dex->GetLocation()},
-                                                        base_oat_name,
-                                                        CompilerFilter::Filter::kVerify,
-                                                        &error_msg,
-                                                        {"--no-abort-on-hard-verifier-error"});
-  EXPECT_EQ(0, res_no_fail);
+  EXPECT_THAT(GenerateOdexForTestWithStatus({dex->GetLocation()},
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kVerify,
+                                            {"--abort-on-hard-verifier-error"}),
+              HasValue(Ne(0)));
+
+  EXPECT_THAT(GenerateOdexForTestWithStatus({dex->GetLocation()},
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kVerify,
+                                            {"--no-abort-on-hard-verifier-error"}),
+              HasValue(0));
 }
 
 class Dex2oatDedupeCode : public Dex2oatTest {};
@@ -1308,31 +1317,25 @@ TEST_F(Dex2oatTest, MissingBootImageTest) {
 TEST_F(Dex2oatTest, EmptyUncompressedDexTest) {
   std::string out_dir = GetScratchDir();
   const std::string base_oat_name = out_dir + "/base.oat";
-  std::string error_msg;
-  int status = GenerateOdexForTestWithStatus({GetTestDexFileName("MainEmptyUncompressed")},
-                                             base_oat_name,
-                                             CompilerFilter::Filter::kVerify,
-                                             &error_msg,
-                                             {},
-                                             /*use_fd*/ false);
   // Expect to fail with code 1 and not SIGSEGV or SIGABRT.
-  ASSERT_TRUE(WIFEXITED(status));
-  ASSERT_EQ(WEXITSTATUS(status), 1) << error_msg;
+  EXPECT_THAT(GenerateOdexForTestWithStatus({GetTestDexFileName("MainEmptyUncompressed")},
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kVerify,
+                                            /*extra_args*/ {},
+                                            /*use_fd*/ false),
+              HasValue(1));
 }
 
 TEST_F(Dex2oatTest, EmptyUncompressedAlignedDexTest) {
   std::string out_dir = GetScratchDir();
   const std::string base_oat_name = out_dir + "/base.oat";
-  std::string error_msg;
-  int status = GenerateOdexForTestWithStatus({GetTestDexFileName("MainEmptyUncompressedAligned")},
-                                             base_oat_name,
-                                             CompilerFilter::Filter::kVerify,
-                                             &error_msg,
-                                             {},
-                                             /*use_fd*/ false);
   // Expect to fail with code 1 and not SIGSEGV or SIGABRT.
-  ASSERT_TRUE(WIFEXITED(status));
-  ASSERT_EQ(WEXITSTATUS(status), 1) << error_msg;
+  EXPECT_THAT(GenerateOdexForTestWithStatus({GetTestDexFileName("MainEmptyUncompressedAligned")},
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kVerify,
+                                            /*extra_args*/ {},
+                                            /*use_fd*/ false),
+              HasValue(1));
 }
 
 TEST_F(Dex2oatTest, StderrLoggerOutput) {
@@ -1510,10 +1513,10 @@ TEST_F(Dex2oatTest, CompactDexInvalidSource) {
   }
   const std::string& dex_location = invalid_dex.GetFilename();
   const std::string odex_location = GetOdexDir() + "/output.odex";
-  std::string error_msg;
-  int status = GenerateOdexForTestWithStatus(
-      {dex_location}, odex_location, CompilerFilter::kVerify, &error_msg, {});
-  ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) != 0) << status << " " << output_;
+  EXPECT_THAT(GenerateOdexForTestWithStatus(
+                  {dex_location}, odex_location, CompilerFilter::kVerify, /*extra_args*/ {}),
+              HasValue(Ne(0)))
+      << " " << output_;
 }
 
 // Retain the header magic for the now removed compact dex files.
@@ -1557,22 +1560,20 @@ TEST_F(Dex2oatTest, CompactDexInZip) {
     ASSERT_GE(invalid_dex.GetFile()->WriteFully(&header, sizeof(header)), 0);
     ASSERT_EQ(invalid_dex.GetFile()->Flush(), 0);
   }
-  std::string error_msg;
-  int status = 0u;
 
-  status = GenerateOdexForTestWithStatus({invalid_dex_zip.GetFilename()},
-                                         GetOdexDir() + "/output_apk.odex",
-                                         CompilerFilter::kVerify,
-                                         &error_msg,
-                                         {});
-  ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) != 0) << status << " " << output_;
+  EXPECT_THAT(GenerateOdexForTestWithStatus({invalid_dex_zip.GetFilename()},
+                                            GetOdexDir() + "/output_apk.odex",
+                                            CompilerFilter::kVerify,
+                                            /*extra_args*/ {}),
+              HasValue(Ne(0)))
+      << " " << output_;
 
-  status = GenerateOdexForTestWithStatus({invalid_dex.GetFilename()},
-                                         GetOdexDir() + "/output.odex",
-                                         CompilerFilter::kVerify,
-                                         &error_msg,
-                                         {});
-  ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) != 0) << status << " " << output_;
+  EXPECT_THAT(GenerateOdexForTestWithStatus({invalid_dex.GetFilename()},
+                                            GetOdexDir() + "/output.odex",
+                                            CompilerFilter::kVerify,
+                                            /*extra_args*/ {}),
+              HasValue(Ne(0)))
+      << " " << output_;
 }
 
 TEST_F(Dex2oatWithExpectedFilterTest, AppImageNoProfile) {
@@ -1962,21 +1963,18 @@ TEST_F(LinkageTest, LinkageEnabled) {
   std::unique_ptr<const DexFile> dex(OpenTestDexFile("LinkageTest"));
   std::string out_dir = GetScratchDir();
   const std::string base_oat_name = out_dir + "/base.oat";
-  std::string error_msg;
-  const int res_fail =
+  EXPECT_THAT(
       GenerateOdexForTestWithStatus({dex->GetLocation()},
                                     base_oat_name,
                                     CompilerFilter::Filter::kSpeed,
-                                    &error_msg,
-                                    {"--check-linkage-conditions", "--crash-on-linkage-violation"});
-  EXPECT_NE(0, res_fail);
+                                    {"--check-linkage-conditions", "--crash-on-linkage-violation"}),
+      Not(Ok()));
 
-  const int res_no_fail = GenerateOdexForTestWithStatus({dex->GetLocation()},
-                                                        base_oat_name,
-                                                        CompilerFilter::Filter::kSpeed,
-                                                        &error_msg,
-                                                        {"--check-linkage-conditions"});
-  EXPECT_EQ(0, res_no_fail);
+  EXPECT_THAT(GenerateOdexForTestWithStatus({dex->GetLocation()},
+                                            base_oat_name,
+                                            CompilerFilter::Filter::kSpeed,
+                                            {"--check-linkage-conditions"}),
+              HasValue(0));
 }
 
 // Regression test for bug 179221298.

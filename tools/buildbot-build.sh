@@ -61,7 +61,7 @@ if [[ $TARGET_ARCH = "riscv64" && ! ( -d frameworks/base ) ]]; then
 fi
 
 java_libraries_dir=${out_dir}/target/common/obj/JAVA_LIBRARIES
-common_targets="vogar core-tests core-ojtests apache-harmony-jdwp-tests-hostdex jsr166-tests libartpalette-system mockito-target desugar"
+common_targets="vogar core-tests core-ojtests apache-harmony-jdwp-tests-hostdex jsr166-tests mockito-target desugar"
 # These build targets have different names on device and host.
 specific_targets="libjavacoretests libwrapagentproperties libwrapagentpropertiesd"
 build_host="no"
@@ -108,19 +108,10 @@ if [[ $build_host == "no" ]] && [[ $build_target == "no" ]]; then
   build_target="yes"
 fi
 
-implementation_libs=(
-  "heapprofd_client_api"
-  "libartpalette-system"
-  "libdebugstore_cxx" # Needed by "libartpalette-system".
-  "libcutils"
-  "libutils"
-  "libvndksupport"
-)
-
 if [ -d frameworks/base ]; then
   # In full manifest branches, build the implementation libraries from source
   # instead of using prebuilts.
-  common_targets="$common_targets ${implementation_libs[*]}"
+  common_targets="$common_targets"
 else
   # Necessary to build successfully in master-art.
   extra_args="SOONG_ALLOW_MISSING_DEPENDENCIES=true"
@@ -164,10 +155,11 @@ if [[ $build_target == "yes" ]]; then
   make_command+=" build-art-target-gtests"
   test $skip_run_tests_build == "yes" || make_command+=" build-art-target-run-tests"
   make_command+=" debuggerd sh su toybox"
-  # Indirect dependencies in the platform, e.g. through heapprofd_client_api.
+  make_command+=" libartpalette_fake art_fake_heapprofd_client_api"
+  # Indirect dependencies in the platform.
   # These are built to go into system/lib(64) to be part of the system linker
   # namespace.
-  make_command+=" libnetd_client-target libprocinfo libtombstoned_client libunwindstack"
+  make_command+=" libnetd_client-target libtombstoned_client"
   # Stubs for other APEX SDKs, for use by vogar. Referenced from DEVICE_JARS in
   # external/vogar/src/vogar/ModeId.java.
   # Note these go into out/target/common/obj/JAVA_LIBRARIES which isn't removed
@@ -210,6 +202,19 @@ if [[ $build_target == "yes" ]]; then
     ANDROID_HOST_OUT=$out_dir/host/linux-x86
   fi
 
+  # Use fake implementations to prevent chroot tests from talking to the platform (e.g., through
+  # libartpalette).
+  for l in lib lib64; do
+    if [ ! -d "$ANDROID_PRODUCT_OUT/system/$l" ]; then
+      continue
+    fi
+    for lib in libartpalette-system heapprofd_client_api; do
+      cmd="cp -p \"$ANDROID_PRODUCT_OUT/system/$l/art_fake/$lib.so\" \"$ANDROID_PRODUCT_OUT/system/$l/$lib.so\""
+      msginfo "Executing" "$cmd"
+      eval "$cmd"
+    done
+  done
+
   # Extract prebuilt APEXes.
   debugfs=$ANDROID_HOST_OUT/bin/debugfs_static
   fsckerofs=$ANDROID_HOST_OUT/bin/fsck.erofs
@@ -230,35 +235,6 @@ if [[ $build_target == "yes" ]]; then
         extract $file $dir
     fi
   done
-
-  # Replace stub libraries with implementation libraries: because we do chroot
-  # testing, we need to install an implementation of the libraries (and cannot
-  # rely on the one already installed on the device, if the device is post R and
-  # has it).
-  if [ -d prebuilts/runtime/mainline/platform/impl -a ! -d frameworks/base ]; then
-    if [[ $TARGET_ARCH = arm* ]]; then
-      arch32=arm
-      arch64=arm64
-    elif [[ $TARGET_ARCH = riscv64 ]]; then
-      arch32=none # there is no 32-bit arch for RISC-V
-      arch64=riscv64
-    else
-      arch32=x86
-      arch64=x86_64
-    fi
-    for so in ${implementation_libs[@]}; do
-      if [ -d "$ANDROID_PRODUCT_OUT/system/lib" -a $arch32 != none ]; then
-        cmd="cp -p prebuilts/runtime/mainline/platform/impl/$arch32/${so}.so $ANDROID_PRODUCT_OUT/system/lib/${so}.so"
-        msginfo "Executing" "$cmd"
-        eval "$cmd"
-      fi
-      if [ -d "$ANDROID_PRODUCT_OUT/system/lib64" -a $arch64 != none ]; then
-        cmd="cp -p prebuilts/runtime/mainline/platform/impl/$arch64/${so}.so $ANDROID_PRODUCT_OUT/system/lib64/${so}.so"
-        msginfo "Executing" "$cmd"
-        eval "$cmd"
-      fi
-    done
-  fi
 
   # Create canonical name -> file name symlink in the symbol directory for the
   # Testing ART APEX.

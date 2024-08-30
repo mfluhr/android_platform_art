@@ -22,7 +22,6 @@ def run(ctx, args):
       diff_min_log_tag="i",
       runtime_option=[
           "-Xmetrics-force-enable:true",
-          "-Xmetrics-write-to-statsd:false",
           "-Xmetrics-write-to-logcat:true",
           "-Xmetrics-reporting-mods:100",
       ])

@@ -712,6 +712,10 @@ def default_run(ctx, args, **kwargs):
     # these binaries.
     ANDROID_ART_BIN_DIR = f"{ANDROID_ART_ROOT}/bin"
 
+  # Disable metrics reporting to StatsD for chroot tests.
+  if CHROOT:
+    FLAGS += " -Xmetrics-write-to-statsd:false"
+
   profman_cmdline = "true"
   dex2oat_cmdline = "true"
   vdex_cmdline = "true"
