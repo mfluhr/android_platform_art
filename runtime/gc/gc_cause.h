@@ -35,6 +35,8 @@ enum GcCause {
   kGcCauseBackground,
   // An explicit System.gc() call.
   kGcCauseExplicit,
+  // An explicit VMRuntime.requestConcurrentGC() call.
+  kGcCauseExplicitBackground,
   // GC triggered for a native allocation when NativeAllocationGcWatermark is exceeded.
   // (This may be a blocking GC depending on whether we run a non-concurrent collector).
   kGcCauseForNativeAlloc,

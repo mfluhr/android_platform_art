@@ -449,16 +449,26 @@ class Generator:
     self.top_dir = top_dir
     # Path to the ART directory
     self.art_dir = os.path.join(top_dir, "art")
-    # Path to the ART tests directory.
+    # Path to the ART tests top-level directory.
     self.art_test_dir = os.path.join(self.art_dir, "test")
     # Path to the MTS configuration directory.
     self.mts_config_dir = os.path.join(
         top_dir, "test", "mts", "tools", "mts-tradefed", "res", "config")
+    # Path to the ART JVM TI CTS tests top-level directory.
+    self.jvmti_cts_test_dir = os.path.join(top_dir, "cts/hostsidetests/jvmti/run-tests")
 
+  # Return the list of ART run-tests (in short form, i.e. `001-HelloWorld`,
+  # not `art-run-test-001-HelloWorld`).
   def enumerate_run_tests(self):
     return sorted([run_test
                    for run_test in os.listdir(self.art_test_dir)
                    if re.match("^[0-9]{3,}-", run_test)])
+
+  # Return the list of ART JVM TI CTS tests.
+  def enumerate_jvmti_cts_tests(self):
+    return sorted([re.sub(r"test-(\d+)", r"CtsJvmtiRunTest\1HostTestCases", cts_jvmti_test_dir)
+                   for cts_jvmti_test_dir in os.listdir(self.jvmti_cts_test_dir)
+                   if re.match(r"^test-\d+$", cts_jvmti_test_dir)])
 
   # Return the metadata of a test, if any.
   def get_test_metadata(self, run_test):
@@ -1000,7 +1010,7 @@ class Generator:
       logging.debug(f"Writing `{mts_art_tests_list_user_file}`.")
       f.write(xml_str)
 
-  def regen_art_mts_files(self, art_run_tests):
+  def regen_art_mts_files(self, art_run_tests, art_jvmti_cts_tests):
     """Regenerate ART MTS definition files."""
 
     # Remove any previously MTS ART test plan shard (`mts-art-shard-[0-9]+.xml`)
@@ -1035,9 +1045,6 @@ class Generator:
 
     # Other CTS tests shard.
     other_cts_tests_shard_num = len(mts_test_shards)
-    other_cts_art_tests_shard_tests = [
-        "CtsJvmtiRunTest988HostTestCases",
-    ]
     other_cts_libcore_tests_shard_tests = [
         "CtsLibcoreApiEvolutionTestCases",
         "CtsLibcoreFileIOTestCases",
@@ -1048,8 +1055,7 @@ class Generator:
         "MtsLibcoreOkHttpTestCases",
         "MtsLibcoreBouncyCastleTestCases",
     ]
-    other_cts_tests_shard_tests = \
-      other_cts_art_tests_shard_tests + other_cts_libcore_tests_shard_tests
+    other_cts_tests_shard_tests = art_jvmti_cts_tests + other_cts_libcore_tests_shard_tests
     other_cts_tests_shard = self.create_mts_test_shard(
         "Other CTS tests", other_cts_tests_shard_tests, other_cts_tests_shard_num, 2021)
     mts_test_shards.append(other_cts_tests_shard)
@@ -1169,7 +1175,7 @@ class Generator:
     # -----------------------------------------
 
     if regen_art_mts:
-      self.regen_art_mts_files(expected_succeeding_tests)
+      self.regen_art_mts_files(expected_succeeding_tests, self.enumerate_jvmti_cts_tests())
       print(f"Generated ART MTS entries for {num_expected_succeeding_tests} ART run-tests out"
             f" of {len(run_tests)} ({expected_succeeding_tests_percentage}%).")
 
