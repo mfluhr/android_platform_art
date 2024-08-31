@@ -201,6 +201,7 @@ size_t LargeObjectMapSpace::Free(Thread* self, mirror::Object* ptr) {
     Runtime::Current()->GetHeap()->DumpSpaces(LOG_STREAM(FATAL_WITHOUT_ABORT));
     LOG(FATAL) << "Attempted to free large object " << ptr << " which was not live";
   }
+  Runtime::Current()->GetHeap()->RemoveStrayNonMovableObject(ptr);
   const size_t map_size = it->second.mem_map.BaseSize();
   DCHECK_GE(num_bytes_allocated_, map_size);
   size_t allocation_size = map_size;
@@ -464,6 +465,8 @@ size_t FreeListSpace::Free(Thread* self, mirror::Object* obj) {
   const size_t allocation_size = info->ByteSize();
   DCHECK_GT(allocation_size, 0U);
   DCHECK_ALIGNED_PARAM(allocation_size, ObjectAlignment());
+
+  Runtime::Current()->GetHeap()->RemoveStrayNonMovableObject(obj);
 
   // madvise the pages without lock
   madvise(obj, allocation_size, MADV_DONTNEED);

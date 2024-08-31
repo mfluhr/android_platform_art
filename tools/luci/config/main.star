@@ -247,6 +247,10 @@ def add_builder(name,
         # Other than the `AP1A` builds above, all other devices are flashed to `SP2A`.
         # This avoids allocating `userfaultfd` devices for tests that don't need it.
         dimensions |= {"device_os": "S"}
+    elif mode == "host":
+      dimensions |= {"os": "Ubuntu-20"}
+    elif mode == "qemu":
+      dimensions |= {"os": "Ubuntu-22"}
 
     testrunner_args = ['--verbose', '--host'] if mode == 'host' else ['--target', '--verbose']
     testrunner_args += ['--debug'] if debug else ['--ndebug']

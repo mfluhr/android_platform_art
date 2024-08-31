@@ -144,9 +144,8 @@ ObjPtr<Array> Array::CopyOf(Handle<Array> h_this, Thread* self, int32_t new_leng
   CHECK(klass->IsPrimitiveArray()) << "Will miss write barriers";
   DCHECK_GE(new_length, 0);
   auto* heap = Runtime::Current()->GetHeap();
-  gc::AllocatorType allocator_type = heap->IsMovableObject(h_this.Get())
-      ? heap->GetCurrentAllocator()
-      : heap->GetCurrentNonMovingAllocator();
+  DCHECK(!heap->IsNonMovable(h_this.Get()));
+  gc::AllocatorType allocator_type = heap->GetCurrentAllocator();
   const auto component_size = klass->GetComponentSize();
   const auto component_shift = klass->GetComponentSizeShift();
   ObjPtr<Array> new_array =

@@ -205,7 +205,7 @@ if [[ $build_target == "yes" ]]; then
   # Use fake implementations to prevent chroot tests from talking to the platform (e.g., through
   # libartpalette).
   for l in lib lib64; do
-    if [ ! -d "$ANDROID_PRODUCT_OUT/system/$l" ]; then
+    if [ ! -d "$ANDROID_PRODUCT_OUT/system/$l/art_fake" ]; then
       continue
     fi
     for lib in libartpalette-system heapprofd_client_api; do

@@ -129,7 +129,7 @@ enum HomogeneousSpaceCompactResult {
 static constexpr bool kUseRosAlloc = true;
 
 // If true, use thread-local allocation stack.
-static constexpr bool kUseThreadLocalAllocationStack = true;
+static constexpr bool kUseThreadLocalAllocationStack = false;
 
 class Heap {
  public:
@@ -383,8 +383,29 @@ class Heap {
                           bool sorted = false)
       REQUIRES_SHARED(Locks::heap_bitmap_lock_, Locks::mutator_lock_);
 
-  // Returns true if there is any chance that the object (obj) will move.
-  bool IsMovableObject(ObjPtr<mirror::Object> obj) const REQUIRES_SHARED(Locks::mutator_lock_);
+  // Approximates whether the object in question was explicitly requested to be nonmovable.
+  // May rarely err on the side of claiming immovability for objects that were allocated movable,
+  // but will not be moved.
+  // Returns true if and only if one of the following is true:
+  // 1) The object was allocated as nonmovable, whether or not it has been redirected to
+  //    ZygoteSpace or LargeObjectsSpace.
+  // 2) All objects are being allocated in a non-movable space.
+  // 3) The CC collector decided to spuriously allocate in non-moving space because it ran
+  //    out of memory at an inopportune time.
+  // This is used primarily to determine Object.clone() behavior, where (2)
+  // doesn't matter. (3) is unfortunate, but we can live with it.
+  // SHOULD NOT BE CALLED ON CLASS OBJECTS.
+  bool IsNonMovable(ObjPtr<mirror::Object> obj) const REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // The negation of the above, but resolves ambiguous cases in the direction of assuming
+  // movability. Used for partial error checking where an object must be movable.
+  EXPORT bool PossiblyAllocatedMovable(ObjPtr<mirror::Object> obj) const
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Returns true if there is any chance that the object (obj) will move. Returns false for image
+  // and zygote space, since we don't actually move objects in those spaces. Unlike the preceding
+  // function, the result here depends on whether the object was moved to zygote or image space.
+  bool ObjectMayMove(ObjPtr<mirror::Object> obj) const REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Enables us to compacting GC until objects are released.
   EXPORT void IncrementDisableMovingGC(Thread* self) REQUIRES(!*gc_complete_lock_);
@@ -684,7 +705,7 @@ class Heap {
     return allocation_stack_.get();
   }
 
-  void PreZygoteFork() NO_THREAD_SAFETY_ANALYSIS;
+  void PreZygoteFork();
 
   // Mark and empty stack.
   EXPORT void FlushAllocStack() REQUIRES_SHARED(Locks::mutator_lock_)
@@ -1027,6 +1048,18 @@ class Heap {
     return size < pud_size ? pmd_size : pud_size;
   }
 
+  // Add a reference to the set of preexisting zygote and LOS nonmovable objects.
+  void AddStrayNonMovableObject(mirror::Object* obj) REQUIRES(!stray_objects_lock_)
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
+  // Remove a reference from the set of preexisting zygote and LOS nonmovable objects.  Do nothing
+  // if it was not present. The argument should no longer be accessible to the mutator or
+  // subsequent GCs.
+  void RemoveStrayNonMovableObject(mirror::Object* obj) REQUIRES(!stray_objects_lock_);
+
+  bool ShouldAllocLargeObject(ObjPtr<mirror::Class> c, size_t byte_count) const
+      REQUIRES_SHARED(Locks::mutator_lock_);
+
  private:
   class ConcurrentGCTask;
   class CollectorTransitionTask;
@@ -1085,8 +1118,6 @@ class Heap {
         collector_type == kCollectorTypeCMCBackground ||
         collector_type == kCollectorTypeHomogeneousSpaceCompact;
   }
-  bool ShouldAllocLargeObject(ObjPtr<mirror::Class> c, size_t byte_count) const
-      REQUIRES_SHARED(Locks::mutator_lock_);
 
   // Checks whether we should garbage collect:
   ALWAYS_INLINE bool ShouldConcurrentGCForJava(size_t new_num_bytes_allocated);
@@ -1255,7 +1286,7 @@ class Heap {
   void PushOnAllocationStack(Thread* self, ObjPtr<mirror::Object>* obj)
       REQUIRES_SHARED(Locks::mutator_lock_)
       REQUIRES(!*gc_complete_lock_, !*pending_task_lock_, !process_state_update_lock_);
-  void PushOnAllocationStackWithInternalGC(Thread* self, ObjPtr<mirror::Object>* obj)
+  EXPORT void PushOnAllocationStackWithInternalGC(Thread* self, ObjPtr<mirror::Object>* obj)
       REQUIRES_SHARED(Locks::mutator_lock_)
       REQUIRES(!*gc_complete_lock_, !*pending_task_lock_, !process_state_update_lock_);
   EXPORT void PushOnThreadLocalAllocationStackWithInternalGC(Thread* thread,
@@ -1345,7 +1376,7 @@ class Heap {
   std::vector<space::AllocSpace*> alloc_spaces_;
 
   // A space where non-movable objects are allocated, when compaction is enabled it contains
-  // Classes, ArtMethods, ArtFields, and non moving objects.
+  // Classes, and non moving objects.
   space::MallocSpace* non_moving_space_;
 
   // Space which we use for the kAllocatorTypeROSAlloc.
@@ -1758,6 +1789,19 @@ class Heap {
   Atomic<GcPauseListener*> gc_pause_listener_;
 
   std::unique_ptr<Verification> verification_;
+
+  // Non-class immovable objects allocated in zygote soace or LOS instead of the nonmovable object
+  // space.
+  // TODO: We may need a smaller data structure. Unfortunately, HashSets minimum size is too big.
+  struct CRComparator {
+    bool operator()(mirror::CompressedReference<mirror::Object> x,
+                    mirror::CompressedReference<mirror::Object> y) const {
+      return x.AsVRegValue() < y.AsVRegValue();
+    }
+  };
+  std::set<mirror::CompressedReference<mirror::Object>, CRComparator> stray_non_movable_objects_
+      GUARDED_BY(stray_objects_lock_);
+  mutable Mutex stray_objects_lock_ DEFAULT_MUTEX_ACQUIRED_AFTER;
 
   friend class CollectorTransitionTask;
   friend class collector::GarbageCollector;

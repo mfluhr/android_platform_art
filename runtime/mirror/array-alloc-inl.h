@@ -143,16 +143,14 @@ inline ObjPtr<Array> Array::Alloc(Thread* self,
   ObjPtr<Array> result;
   if (!kFillUsable) {
     SetLengthVisitor visitor(component_count);
-    result = ObjPtr<Array>::DownCast(
-        heap->AllocObjectWithAllocator<kIsInstrumented>(
-            self, array_class, size, allocator_type, visitor));
+    result = ObjPtr<Array>::DownCast(heap->AllocObjectWithAllocator<kIsInstrumented>(
+        self, array_class, size, allocator_type, visitor));
   } else {
     SetLengthToUsableSizeVisitor visitor(component_count,
                                          DataOffset(1U << component_size_shift).SizeValue(),
                                          component_size_shift);
-    result = ObjPtr<Array>::DownCast(
-        heap->AllocObjectWithAllocator<kIsInstrumented>(
-            self, array_class, size, allocator_type, visitor));
+    result = ObjPtr<Array>::DownCast(heap->AllocObjectWithAllocator<kIsInstrumented>(
+        self, array_class, size, allocator_type, visitor));
   }
   if (kIsDebugBuild && result != nullptr && Runtime::Current()->IsStarted()) {
     array_class = result->GetClass();  // In case the array class moved.

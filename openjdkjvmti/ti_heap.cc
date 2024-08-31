@@ -1916,6 +1916,10 @@ jvmtiError HeapExtensions::ChangeArraySize(jvmtiEnv* env, jobject arr, jsize new
   art::StackHandleScope<2> hs(self);
   art::Handle<art::mirror::Array> old_arr(hs.NewHandle(soa.Decode<art::mirror::Array>(arr)));
   art::MutableHandle<art::mirror::Array> new_arr(hs.NewHandle<art::mirror::Array>(nullptr));
+  if (!art::Runtime::Current()->GetHeap()->PossiblyAllocatedMovable(old_arr.Get())) {
+    JVMTI_LOG(INFO, env) << "Cannot resize a nonmovable array";
+    return ERR(ILLEGAL_ARGUMENT);
+  }
   if (klass->IsObjectArrayClass()) {
     new_arr.Assign(
         art::mirror::ObjectArray<art::mirror::Object>::Alloc(self, old_arr->GetClass(), new_size));

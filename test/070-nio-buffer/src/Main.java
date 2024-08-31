@@ -32,6 +32,7 @@ public class Main {
         intFloatTest();
         basicShortTest();
         primTest();
+        largeBuffersTest();
     }
 
     /*
@@ -116,6 +117,29 @@ public class Main {
 
         directBuf.order(ByteOrder.LITTLE_ENDIAN);
         storeValues(directBuf);
+    }
+
+    /*
+     * Check that we can allocate half of maxMemory() in large direct ByteBuffers.
+     * Some apps need this in spite of the fact that we have a lower limit for smaller buffers.
+     */
+    public static void largeBuffersTest() {
+        final int bufSize = 4_000_000;
+        final int nBuffers = (int) (Runtime.getRuntime().maxMemory() / bufSize) / 2;
+        ByteBuffer[] directBufs = new ByteBuffer[nBuffers];
+        for (int i = 0; i < directBufs.length; ++i) {
+            directBufs[i] = ByteBuffer.allocateDirect(bufSize);
+            directBufs[i].asIntBuffer().put(i, i);
+        }
+        for (int i = 0; i < directBufs.length; ++i) {
+            if (directBufs[i].asIntBuffer().get(i) != i) {
+                System.out.println("ERROR: Contents check failed for " + i);
+            }
+            if (directBufs[i].asIntBuffer().get(50) != 0) {
+                System.out.println("ERROR: Zero check failed for buffer " + i);
+            }
+            directBufs[i] = null;
+        }
     }
 
     static void storeValues(ByteBuffer directBuf) {

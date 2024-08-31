@@ -50,8 +50,7 @@ class MANAGED Array : public Object {
                                            int32_t component_count,
                                            size_t component_size_shift,
                                            gc::AllocatorType allocator_type)
-      REQUIRES_SHARED(Locks::mutator_lock_)
-      REQUIRES(!Roles::uninterruptible_);
+      REQUIRES_SHARED(Locks::mutator_lock_) REQUIRES(!Roles::uninterruptible_);
 
   static ObjPtr<Array> CreateMultiArray(Thread* self,
                                         Handle<Class> element_class,
