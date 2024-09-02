@@ -18,6 +18,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.WrongMethodTypeException;
+import java.util.Objects;
 import java.util.Optional;
 
 public class Multi {
@@ -29,12 +30,18 @@ public class Multi {
     public static void $noinline$testMHFromMain(MethodHandle mh) throws Throwable {
         Optional<Integer> nonEmpty = Optional.<Integer>of(1001);
         Object result = (Object) mh.invokeExact(nonEmpty);
-        System.out.println("Multi: mh.invokeExact(nonEmpty)=" + result);
+        assertEquals("Expected 1001, but got " + result, 1001, result);
 
         try {
             mh.invokeExact(nonEmpty);
             fail("mh.type() is (Optional)Object, but callsite is (Optional)V");
         } catch (WrongMethodTypeException expected) {}
+    }
+
+    private static void assertEquals(String msg, Object expected, Object actual) {
+        if (!Objects.equals(expected, actual)) {
+            fail(msg);
+        }
     }
 
     private static void fail(String msg) {

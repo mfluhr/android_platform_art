@@ -3402,7 +3402,7 @@ std::ostream& operator<<(std::ostream& os, TypeCheckKind rhs) {
 #define CHECK_INTRINSICS_ENUM_VALUES(Name, InvokeType, _, SideEffects, Exceptions, ...) \
   static_assert( \
     static_cast<uint32_t>(Intrinsics::k ## Name) <= (kAccIntrinsicBits >> CTZ(kAccIntrinsicBits)), \
-    "Instrinsics enumeration space overflow.");
+    "Intrinsics enumeration space overflow.");
   ART_INTRINSICS_LIST(CHECK_INTRINSICS_ENUM_VALUES)
 #undef CHECK_INTRINSICS_ENUM_VALUES
 
@@ -3450,7 +3450,7 @@ static inline IntrinsicExceptions GetExceptionsIntrinsic(Intrinsics i) {
 
 void HInvoke::SetResolvedMethod(ArtMethod* method, bool enable_intrinsic_opt) {
   if (method != nullptr && method->IsIntrinsic() && enable_intrinsic_opt) {
-    Intrinsics intrinsic = static_cast<Intrinsics>(method->GetIntrinsic());
+    Intrinsics intrinsic = method->GetIntrinsic();
     SetIntrinsic(intrinsic,
                  NeedsEnvironmentIntrinsic(intrinsic),
                  GetSideEffectsIntrinsic(intrinsic),

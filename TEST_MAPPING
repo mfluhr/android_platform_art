@@ -506,7 +506,7 @@
       "name": "art-run-test-2268-checker-remove-dead-phis"
     },
     {
-      "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+      "name": "art-run-test-2269-checker-constant-folding-intrinsics"
     },
     {
       "name": "art-run-test-2273-checker-unreachable-intrinsics"
@@ -1976,7 +1976,7 @@
       "name": "art-run-test-2268-checker-remove-dead-phis[com.google.android.art.apex]"
     },
     {
-      "name": "art-run-test-2269-checker-constant-folding-instrinsics[com.google.android.art.apex]"
+      "name": "art-run-test-2269-checker-constant-folding-intrinsics[com.google.android.art.apex]"
     },
     {
       "name": "art-run-test-2273-checker-unreachable-intrinsics[com.google.android.art.apex]"
@@ -3461,7 +3461,7 @@
       "name": "art-run-test-2268-checker-remove-dead-phis"
     },
     {
-      "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+      "name": "art-run-test-2269-checker-constant-folding-intrinsics"
     },
     {
       "name": "art-run-test-2273-checker-unreachable-intrinsics"
@@ -4933,7 +4933,7 @@
       "name": "art-run-test-2268-checker-remove-dead-phis"
     },
     {
-      "name": "art-run-test-2269-checker-constant-folding-instrinsics"
+      "name": "art-run-test-2269-checker-constant-folding-intrinsics"
     },
     {
       "name": "art-run-test-2273-checker-unreachable-intrinsics"

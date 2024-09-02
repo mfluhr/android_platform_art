@@ -286,7 +286,7 @@ ALWAYS_INLINE inline uint32_t GetRuntimeFlags(ArtField* field)
 ALWAYS_INLINE inline uint32_t GetRuntimeFlags(ArtMethod* method)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   if (UNLIKELY(method->IsIntrinsic())) {
-    switch (static_cast<Intrinsics>(method->GetIntrinsic())) {
+    switch (method->GetIntrinsic()) {
       case Intrinsics::kSystemArrayCopyChar:
       case Intrinsics::kSystemArrayCopyByte:
       case Intrinsics::kSystemArrayCopyInt:

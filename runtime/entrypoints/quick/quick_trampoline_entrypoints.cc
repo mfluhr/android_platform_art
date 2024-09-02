@@ -2416,7 +2416,7 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
   // Call DoInvokePolymorphic with |is_range| = true, as shadow frame has argument registers in
   // consecutive order.
   RangeInstructionOperands operands(first_arg + 1, num_vregs - 1);
-  Intrinsics intrinsic = static_cast<Intrinsics>(resolved_method->GetIntrinsic());
+  Intrinsics intrinsic = resolved_method->GetIntrinsic();
   JValue result;
   bool success = false;
   if (resolved_method->GetDeclaringClass() == GetClassRoot<mirror::MethodHandle>(linker)) {

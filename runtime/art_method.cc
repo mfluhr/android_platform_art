@@ -38,6 +38,7 @@
 #include "gc/accounting/card_table-inl.h"
 #include "hidden_api.h"
 #include "interpreter/interpreter.h"
+#include "intrinsics_enum.h"
 #include "jit/jit.h"
 #include "jit/jit_code_cache.h"
 #include "jit/profiling_info.h"
@@ -717,14 +718,15 @@ const void* ArtMethod::GetOatMethodQuickCode(PointerSize pointer_size) {
   return nullptr;
 }
 
-void ArtMethod::SetIntrinsic(uint32_t intrinsic) {
+void ArtMethod::SetIntrinsic(Intrinsics intrinsic) {
   // Currently we only do intrinsics for static/final methods or methods of final
   // classes. We don't set kHasSingleImplementation for those methods.
   DCHECK(IsStatic() || IsFinal() || GetDeclaringClass()->IsFinal()) <<
       "Potential conflict with kAccSingleImplementation";
   static const int kAccFlagsShift = CTZ(kAccIntrinsicBits);
-  DCHECK_LE(intrinsic, kAccIntrinsicBits >> kAccFlagsShift);
-  uint32_t intrinsic_bits = intrinsic << kAccFlagsShift;
+  uint32_t intrinsic_u32 = enum_cast<uint32_t>(intrinsic);
+  DCHECK_LE(intrinsic_u32, kAccIntrinsicBits >> kAccFlagsShift);
+  uint32_t intrinsic_bits = intrinsic_u32 << kAccFlagsShift;
   uint32_t new_value = (GetAccessFlags() & ~kAccIntrinsicBits) | kAccIntrinsic | intrinsic_bits;
   if (kIsDebugBuild) {
     uint32_t java_flags = (GetAccessFlags() & kAccJavaFlagsMask);

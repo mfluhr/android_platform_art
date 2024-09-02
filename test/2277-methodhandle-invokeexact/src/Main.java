@@ -20,9 +20,12 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.WrongMethodTypeException;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 
 public class Main {
+
+    private static String STATUS = "";
 
     public static void main(String[] args) throws Throwable {
       $noinline$testNoArgsCalls();
@@ -35,8 +38,7 @@ public class Main {
       MethodHandle mh = Multi.$noinline$getMethodHandle();
       Optional<String> nonEmpty = Optional.<String>of("hello");
       Object returnedObject = mh.invokeExact(nonEmpty);
-      System.out.println(
-        "Multi.$noinline$getMethodHandle().invokeExact(nonEmpty)=" + returnedObject);
+      assertEquals("hello", returnedObject);
 
       try {
         mh.invokeExact(nonEmpty);
@@ -46,10 +48,13 @@ public class Main {
 
     private static void $noinline$testNoArgsCalls() throws Throwable {
       VOID_METHOD.invokeExact(new A());
+      assertEquals("A.voidMethod", STATUS);
+
       int returnedInt = (int) RETURN_INT.invokeExact(new A());
-      System.out.println("A.returnInt()=" + returnedInt);
+      assertEquals(42, returnedInt);
+
       double returnedDouble = (double) RETURN_DOUBLE.invokeExact(new A());
-      System.out.println("A.returnDouble()=" + returnedDouble);
+      assertEquals(42.0d, returnedDouble);
 
       try {
         INTERFACE_DEFAULT_METHOD.invokeExact(new A());
@@ -57,23 +62,27 @@ public class Main {
       } catch (WrongMethodTypeException ignored) {}
 
       INTERFACE_DEFAULT_METHOD.invokeExact((I) new A());
-      OVERWRITTEN_INTERFACE_DEFAULT_METHOD.invokeExact((I) new A());
+      assertEquals("I.defaultMethod", STATUS);
 
-      System.out.println((String) PRIVATE_INTERFACE_METHOD.invokeExact((I) new A()));
+      OVERWRITTEN_INTERFACE_DEFAULT_METHOD.invokeExact((I) new A());
+      assertEquals("A.overrideMe", STATUS);
+
+      assertEquals("boo", (String) PRIVATE_INTERFACE_METHOD.invokeExact((I) new A()));
 
       int privateIntA = (int) A_PRIVATE_RETURN_INT.invokeExact(new A());
-      System.out.println("A.privateReturnInt()=" + privateIntA);
+      assertEquals(1042, privateIntA);
 
       int privateIntB = (int) B_PRIVATE_RETURN_INT.invokeExact(new B());
-      System.out.println("B.privateReturnInt()=" + privateIntB);
+      assertEquals(9999, privateIntB);
+
       privateIntB = (int) B_PRIVATE_RETURN_INT.invokeExact((B) new A());
-      System.out.println("((B) new A()).privateReturnInt()=" + privateIntB);
+      assertEquals(9999, privateIntB);
 
       try {
         EXCEPTION_THROWING_METHOD.invokeExact(new A());
         unreachable("Target method always throws");
-      } catch (RuntimeException e) {
-        System.out.println(e.getMessage());
+      } catch (MyRuntimeException expected) {
+        assertEquals("A.throwException", STATUS);
       }
 
       try {
@@ -82,54 +91,78 @@ public class Main {
       } catch (WrongMethodTypeException ignored) {}
 
       String returnedString = (String) STATIC_METHOD.invokeExact(new A());
-      System.out.println("A.staticMethod()=" + returnedString);
+      assertEquals("staticMethod", returnedString);
     }
 
     private static void $noinline$testWithArgs() throws Throwable {
       int sum = (int) SUM_I.invokeExact(new Sums(), 1);
-      System.out.println("Sums.sum(1)=" + sum);
+      assertEquals(1, sum);
 
       sum = (int) SUM_2I.invokeExact(new Sums(), 1, 2);
-      System.out.println("Sums.sum(1, 2)=" + sum);
+      assertEquals(3, sum);
 
       sum = (int) SUM_3I.invokeExact(new Sums(), 1, 2, 3);
-      System.out.println("Sums.sum(1, 2, 3)=" + sum);
+      assertEquals(6, sum);
 
       sum = (int) SUM_4I.invokeExact(new Sums(), 1, 2, 3, 4);
-      System.out.println("Sums.sum(1, 2, 3, 4)=" + sum);
+      assertEquals(10, sum);
 
       sum = (int) SUM_5I.invokeExact(new Sums(), 1, 2, 3, 4, 5);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5)=" + sum);
+      assertEquals(15, sum);
 
       sum = (int) SUM_6I.invokeExact(new Sums(), 1, 2, 3, 4, 5, 6);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5, 6)=" + sum);
+      assertEquals(21, sum);
 
       sum = (int) SUM_7I.invokeExact(new Sums(), 1, 2, 3, 4, 5, 6, 7);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5, 6, 7)=" + sum);
+      assertEquals(28, sum);
 
       sum = (int) SUM_8I.invokeExact(new Sums(), 1, 2, 3, 4, 5, 6, 7, 8);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5, 6, 7, 8)=" + sum);
+      assertEquals(36, sum);
 
       sum = (int) SUM_9I.invokeExact(new Sums(), 1, 2, 3, 4, 5, 6, 7, 8, 9);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5, 6, 7, 8, 9)=" + sum);
+      assertEquals(45, sum);
 
       sum = (int) SUM_10I.invokeExact(new Sums(), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-      System.out.println("Sums.sum(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)=" + sum);
+      assertEquals(55, sum);
 
       long lsum = (long) SUM_IJ.invokeExact(new Sums(), 1, 2L);
-      System.out.println("Sums.sum(1, 2L)=" + lsum);
+      assertEquals(3L, lsum);
 
       lsum = (long) SUM_2IJ.invokeExact(new Sums(), 1, 2L, 3, 4L);
-      System.out.println("Sums.sum(1, 2L, 3, 4L)=" + lsum);
+      assertEquals(10L, lsum);
 
       lsum = (long) SUM_3IJ.invokeExact(new Sums(), 1, 2L, 3, 4L, 5, 6L);
-      System.out.println("Sums.sum(1, 2L, 3, 4L, 5, 6L)=" + lsum);
+      assertEquals(21L, lsum);
 
       lsum = (long) SUM_4IJ.invokeExact(new Sums(), 1, 2L, 3, 4L, 5, 6L, 7, 8L);
-      System.out.println("Sums.sum(1, 2L, 3, 4L, 5, 6L, 7, 8L)=" + lsum);
+      assertEquals(36L, lsum);
 
       lsum = (long) SUM_5IJ.invokeExact(new Sums(), 1, 2L, 3, 4L, 5, 6L, 7, 8L, 9, 10L);
-      System.out.println("Sums.sum(1, 2L, 3, 4L, 5, 6L, 7, 8L, 9, 10L)=" + lsum);
+      assertEquals(55L, lsum);
+    }
+
+    private static void assertEquals(Object expected, Object actual) {
+      if (!Objects.equals(expected, actual)) {
+        throw new AssertionError("Expected: " + expected + ", got: " + actual);
+      }
+    }
+
+    private static void assertEquals(int expected, int actual) {
+      if (expected != actual) {
+        throw new AssertionError("Expected: " + expected + ", got: " + actual);
+      }
+    }
+
+    private static void assertEquals(long expected, long actual) {
+      if (expected != actual) {
+        throw new AssertionError("Expected: " + expected + ", got: " + actual);
+      }
+    }
+
+    private static void assertEquals(double expected, double actual) {
+      if (expected != actual) {
+        throw new AssertionError("Expected: " + expected + ", got: " + actual);
+      }
     }
 
     private static void unreachable(String msg) {
@@ -251,7 +284,7 @@ public class Main {
 
     static interface I {
       public default void defaultMethod() {
-        System.out.println("in I.defaultMethod");
+        STATUS = "I.defaultMethod";
       }
 
       public default void overrideMe() {
@@ -259,23 +292,26 @@ public class Main {
       }
 
       private String innerPrivateMethod() {
-        return "I'm private interface method";
+        return "boo";
       }
     }
+
+    static class MyRuntimeException extends RuntimeException {}
 
     static class A extends B implements I {
         public int field;
         public void voidMethod() {
-          System.out.println("in voidMethod");
-        }
-
-        public void throwException() {
-          throw new RuntimeException("I am from throwException");
+          STATUS = "A.voidMethod";
         }
 
         @Override
         public void overrideMe() {
-          System.out.println("in A.overrideMe");
+          STATUS = "A.overrideMe";
+        }
+
+        public void throwException() {
+          STATUS = "A.throwException";
+          throw new MyRuntimeException();
         }
 
         public double returnDouble() {

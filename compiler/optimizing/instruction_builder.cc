@@ -1391,9 +1391,13 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
 
   MethodReference method_reference(&graph_->GetDexFile(), method_idx);
 
+  // MethodHandle.invokeExact intrinsic needs to check whether call-site matches with MethodHandle's
+  // type. To do that, MethodType corresponding to the call-site is passed as an extra input.
+  // Other invoke-polymorphic calls do not need it.
   bool is_invoke_exact =
       static_cast<Intrinsics>(resolved_method->GetIntrinsic()) ==
           Intrinsics::kMethodHandleInvokeExact;
+  // Currently intrinsic works for MethodHandle targeting invoke-virtual calls only.
   bool can_be_virtual = number_of_arguments >= 2 &&
       DataType::FromShorty(shorty[1]) == DataType::Type::kReference;
 
@@ -1414,7 +1418,7 @@ bool HInstructionBuilder::BuildInvokePolymorphic(uint32_t dex_pc,
     return false;
   }
 
-  DCHECK_EQ(invoke->AsInvokePolymorphic()->CanTargetInvokeVirtual(), can_be_intrinsified);
+  DCHECK_EQ(invoke->AsInvokePolymorphic()->CanHaveFastPath(), can_be_intrinsified);
 
   if (invoke->GetIntrinsic() != Intrinsics::kNone &&
       invoke->GetIntrinsic() != Intrinsics::kMethodHandleInvoke &&
@@ -1896,7 +1900,9 @@ bool HInstructionBuilder::SetupInvokeArguments(HInstruction* invoke,
   if (invoke->IsInvokePolymorphic()) {
     HInvokePolymorphic* invoke_polymorphic = invoke->AsInvokePolymorphic();
 
-    if (invoke_polymorphic->CanTargetInvokeVirtual()) {
+    // MethodHandle.invokeExact intrinsic expects MethodType corresponding to the call-site as an
+    // extra input to determine whether to throw WrongMethodTypeException or execute target method.
+    if (invoke_polymorphic->CanHaveFastPath()) {
       HLoadMethodType* load_method_type =
           new (allocator_) HLoadMethodType(graph_->GetCurrentMethod(),
                                            invoke_polymorphic->GetProtoIndex(),
@@ -1938,7 +1944,7 @@ bool HInstructionBuilder::BuildSimpleIntrinsic(ArtMethod* method,
                                                uint32_t dex_pc,
                                                const InstructionOperands& operands,
                                                const char* shorty) {
-  Intrinsics intrinsic = static_cast<Intrinsics>(method->GetIntrinsic());
+  Intrinsics intrinsic = method->GetIntrinsic();
   DCHECK_NE(intrinsic, Intrinsics::kNone);
   constexpr DataType::Type kInt32 = DataType::Type::kInt32;
   constexpr DataType::Type kInt64 = DataType::Type::kInt64;

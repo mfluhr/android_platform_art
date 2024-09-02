@@ -15,16 +15,6 @@
 package: "com.android.art.flags"
 container: "com.android.art"
 
-# TODO(b/352723620): Ramp this fully, then add tests with it.
-flag {
-  name: "test"
-  namespace: "art_mainline"
-  description: "Permanent test flag."
-  bug: "352723620"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
 # Flag for the experimental feature of on-demand method tracing
 flag {
   name: "always_enable_profile_code"
@@ -35,69 +25,12 @@ flag {
   is_exported: true
 }
 
-# Generic flags that ramp for upcoming Mainline trains
-#
-# These may be used for any feature where the ramp schedule fits - see
-# go/art-monthly-flags for details and go/art-monthly-flag-schedule for exact
-# dates. The feature may target the respective train or any later one. These
-# flags should never be exported.
-
-# Trunkfood ramp early June 2024
+# TODO(b/352723620): Ramp this fully, then add tests with it.
 flag {
-  name: "m2024_09_ramp"
+  name: "test"
   namespace: "art_mainline"
-  description: "Flag ramped to target M-2024-09."
-  bug: "349082752"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
-# Trunkfood ramp early July 2024
-flag {
-  name: "m2024_10_ramp"
-  namespace: "art_mainline"
-  description: "Flag ramped to target M-2024-10."
-  bug: "349082752"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
-# Trunkfood ramp early August 2024
-flag {
-  name: "m2024_11_ramp"
-  namespace: "art_mainline"
-  description: "Flag ramped to target M-2024-11."
-  bug: "349082752"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
-# Trunkfood ramp early September 2024
-flag {
-  name: "m2024_12_ramp"
-  namespace: "art_mainline"
-  description: "Flag ramped to target M-2024-12."
-  bug: "349082752"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
-# Trunkfood ramp early October 2024
-flag {
-  name: "m2025_01_ramp"
-  namespace: "art_mainline"
-  description: "Flag ramped to target M-2025-01."
-  bug: "349082752"
-  is_fixed_read_only: true
-  is_exported: false
-}
-
-# Trunkfood ramp early November 2024
-flag {
-  name: "m2025_02_ramp"
-  namespace: "art_mainline"
-  description: "Flag ramped to target M-2025-02."
-  bug: "349082752"
+  description: "Permanent test flag."
+  bug: "352723620"
   is_fixed_read_only: true
   is_exported: false
 }

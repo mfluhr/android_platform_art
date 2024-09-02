@@ -57,7 +57,6 @@ class GcRoot;
 namespace x86_64 {
 
 static constexpr int kCurrentMethodStackOffset = 0;
-static constexpr Register kMethodRegisterArgument = RDI;
 // The compare/jump sequence will generate about (1.5 * num_entries) instructions. A jump
 // table version generates 7 instructions and num_entries literals. Compare/jump sequence will
 // generates less code/data with a small num_entries.

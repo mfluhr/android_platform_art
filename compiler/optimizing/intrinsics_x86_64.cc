@@ -145,10 +145,12 @@ class ReadBarrierSystemArrayCopySlowPathX86_64 : public SlowPathCode {
   DISALLOW_COPY_AND_ASSIGN(ReadBarrierSystemArrayCopySlowPathX86_64);
 };
 
-// invoke-polymorphic's slow-path which does not move arguments.
+// The MethodHandle.invokeExact intrinsic sets up arguments to match the target method call. If we
+// need to go to the slow path, we call art_quick_invoke_polymorphic_with_hidden_receiver, which
+// expects the MethodHandle object in RDI (in place of the actual ArtMethod).
 class InvokePolymorphicSlowPathX86_64 : public SlowPathCode {
  public:
-  explicit InvokePolymorphicSlowPathX86_64(HInstruction* instruction, CpuRegister method_handle)
+  InvokePolymorphicSlowPathX86_64(HInstruction* instruction, CpuRegister method_handle)
       : SlowPathCode(instruction), method_handle_(method_handle) {
     DCHECK(instruction->IsInvokePolymorphic());
   }
@@ -159,6 +161,7 @@ class InvokePolymorphicSlowPathX86_64 : public SlowPathCode {
     __ Bind(GetEntryLabel());
     SaveLiveRegisters(codegen, instruction_->GetLocations());
 
+    // Passing `MethodHandle` object as hidden argument.
     __ movq(CpuRegister(RDI), method_handle_);
     x86_64_codegen->InvokeRuntime(QuickEntrypointEnum::kQuickInvokePolymorphicWithHiddenReceiver,
                                   instruction_,
@@ -4099,7 +4102,7 @@ void IntrinsicLocationsBuilderX86_64::VisitMethodHandleInvokeExact(HInvoke* invo
   // Don't emit intrinsic code for MethodHandle.invokeExact when it certainly does not target
   // invoke-virtual: if invokeExact is called w/o arguments or if the first argument in that
   // call is not a reference.
-  if (!invoke->AsInvokePolymorphic()->CanTargetInvokeVirtual()) {
+  if (!invoke->AsInvokePolymorphic()->CanHaveFastPath()) {
     return;
   }
   ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
@@ -4120,13 +4123,11 @@ void IntrinsicLocationsBuilderX86_64::VisitMethodHandleInvokeExact(HInvoke* invo
   // The last input is MethodType object corresponding to the call-site.
   locations->SetInAt(number_of_args, Location::RequiresRegister());
 
-  // We use a fixed-register temporary to pass the target method.
-  locations->AddTemp(calling_convention.GetMethodLocation());
   locations->AddTemp(Location::RequiresRegister());
 }
 
 void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke) {
-  DCHECK(invoke->AsInvokePolymorphic()->CanTargetInvokeVirtual());
+  DCHECK(invoke->AsInvokePolymorphic()->CanHaveFastPath());
   LocationSummary* locations = invoke->GetLocations();
 
   CpuRegister method_handle = locations->InAt(0).AsRegister<CpuRegister>();
@@ -4139,9 +4140,10 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
   Address method_handle_kind = Address(method_handle, mirror::MethodHandle::HandleKindOffset());
 
   // If it is not InvokeVirtual then go to slow path.
-  // Even if MethodHandle's kind is kInvokeVirtual underlying method still can be an interface or
-  // direct method (that's what current `MethodHandles$Lookup.findVirtual` is doing). We don't check
-  // whether `method` is an interface method explicitly: in that case the subtype check will fail.
+  // Even if MethodHandle's kind is kInvokeVirtual, the underlying method can still be an interface
+  // or a direct method (that's what current `MethodHandles$Lookup.findVirtual` is doing). We don't
+  // check whether `method` is an interface method explicitly: in that case the subtype check below
+  // will fail.
   // TODO(b/297147201): check whether it can be more precise and what d8/r8 can produce.
   __ cmpl(method_handle_kind, Immediate(mirror::MethodHandle::Kind::kInvokeVirtual));
   __ j(kNotEqual, slow_path->GetEntryLabel());
@@ -4153,16 +4155,17 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
   __ cmpl(call_site_type, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
   __ j(kNotEqual, slow_path->GetEntryLabel());
 
-  CpuRegister method = locations->GetTemp(0).AsRegister<CpuRegister>();
+  CpuRegister method = CpuRegister(kMethodRegisterArgument);
 
-  // Find method to call.
+  // Get method to call.
   __ movq(method, Address(method_handle, mirror::MethodHandle::ArtFieldOrMethodOffset()));
 
   CpuRegister receiver = locations->InAt(1).AsRegister<CpuRegister>();
 
   // Using vtable_index register as temporary in subtype check. It will be overridden later.
   // If `method` is an interface method this check will fail.
-  CpuRegister vtable_index = locations->GetTemp(1).AsRegister<CpuRegister>();
+  CpuRegister vtable_index = locations->GetTemp(0).AsRegister<CpuRegister>();
+  // We deliberately avoid the read barrier, letting the slow path handle the false negatives.
   GenerateSubTypeObjectCheckNoReadBarrier(codegen_,
                                           slow_path,
                                           receiver,

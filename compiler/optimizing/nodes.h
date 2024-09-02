@@ -4939,7 +4939,8 @@ class HInvokePolymorphic final : public HInvoke {
 
   dex::ProtoIndex GetProtoIndex() { return proto_idx_; }
 
-  bool CanTargetInvokeVirtual() const {
+  // Whether we can do direct invocation of the method handle.
+  bool CanHaveFastPath() const {
     return GetIntrinsic() == Intrinsics::kMethodHandleInvokeExact &&
         GetNumberOfArguments() >= 2 &&
         InputAt(1)->GetType() == DataType::Type::kReference;

@@ -35,6 +35,7 @@
 #include "dex/primitive.h"
 #include "interpreter/mterp/nterp.h"
 #include "gc_root.h"
+#include "intrinsics_enum.h"
 #include "obj_ptr.h"
 #include "offsets.h"
 #include "read_barrier_option.h"
@@ -246,16 +247,16 @@ class EXPORT ArtMethod final {
     return (access_flags & kAccIntrinsic) != 0;
   }
 
-  ALWAYS_INLINE void SetIntrinsic(uint32_t intrinsic) REQUIRES_SHARED(Locks::mutator_lock_);
+  ALWAYS_INLINE void SetIntrinsic(Intrinsics intrinsic) REQUIRES_SHARED(Locks::mutator_lock_);
 
-  uint32_t GetIntrinsic() const {
+  Intrinsics GetIntrinsic() const {
     static const int kAccFlagsShift = CTZ(kAccIntrinsicBits);
     static_assert(IsPowerOfTwo((kAccIntrinsicBits >> kAccFlagsShift) + 1),
                   "kAccIntrinsicBits are not continuous");
     static_assert((kAccIntrinsic & kAccIntrinsicBits) == 0,
                   "kAccIntrinsic overlaps kAccIntrinsicBits");
     DCHECK(IsIntrinsic());
-    return (GetAccessFlags() & kAccIntrinsicBits) >> kAccFlagsShift;
+    return static_cast<Intrinsics>((GetAccessFlags() & kAccIntrinsicBits) >> kAccFlagsShift);
   }
 
   void SetNotIntrinsic() REQUIRES_SHARED(Locks::mutator_lock_);

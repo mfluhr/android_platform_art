@@ -28,6 +28,8 @@
 namespace art HIDDEN {
 namespace x86_64 {
 
+static constexpr Register kMethodRegisterArgument = RDI;
+
 // Use a local definition to prevent copying mistakes.
 static constexpr size_t kX86_64WordSize = static_cast<size_t>(kX86_64PointerSize);
 

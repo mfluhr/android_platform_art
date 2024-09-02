@@ -159,15 +159,15 @@ class Dex2oatTest : public Dex2oatEnvironmentTest {
       dex_locations.push_back(dex_location);
     }
 
-    int status = UNWRAP_OR_DO(
-        res,
-        GenerateOdexForTestWithStatus(dex_locations, odex_location, filter, extra_args, use_fd),
-        { return AssertionFailure() << res.error(); });
+    Result<int> status =
+        GenerateOdexForTestWithStatus(dex_locations, odex_location, filter, extra_args, use_fd);
 
-    bool success = status == 0;
+    bool success = status.ok() && status.value() == 0;
     if (expect_success) {
       if (!success) {
-        return AssertionFailure() << "Failed to compile odex (status=" << status
+        return AssertionFailure() << "Failed to compile odex ("
+                                  << (status.ok() ? StringPrintf("status=%d", status.value()) :
+                                                    status.error().message())
                                   << "): " << output_;
       }
 
@@ -1007,10 +1007,10 @@ class Dex2oatWatchdogTest : public Dex2oatTest {
 
 TEST_F(Dex2oatWatchdogTest, TestWatchdogOK) {
   // Check with default.
-  RunTest(true);
+  RunTest(/*expect_success=*/true);
 
   // Check with ten minutes.
-  RunTest(true, {"--watchdog-timeout=600000"});
+  RunTest(/*expect_success=*/true, {"--watchdog-timeout=600000"});
 }
 
 TEST_F(Dex2oatWatchdogTest, TestWatchdogTrigger) {
@@ -1024,14 +1024,14 @@ TEST_F(Dex2oatWatchdogTest, TestWatchdogTrigger) {
   test_accepts_odex_file_on_failure = true;
 
   // Check with ten milliseconds.
-  RunTest(false, {"--watchdog-timeout=10"});
+  RunTest(/*expect_success=*/false, {"--watchdog-timeout=10"});
 }
 
 class Dex2oatClassLoaderContextTest : public Dex2oatTest {
  protected:
   void RunTest(const char* class_loader_context,
                const char* expected_classpath_key,
-               bool expected_success,
+               bool expect_success,
                bool use_second_source = false,
                bool generate_image = false) {
     std::string dex_location = GetUsedDexLocation();
@@ -1057,7 +1057,7 @@ class Dex2oatClassLoaderContextTest : public Dex2oatTest {
                                     odex_location,
                                     CompilerFilter::kVerify,
                                     extra_args,
-                                    expected_success,
+                                    expect_success,
                                     /*use_fd=*/false,
                                     /*use_zip_fd=*/false,
                                     check_oat));
@@ -1073,16 +1073,16 @@ class Dex2oatClassLoaderContextTest : public Dex2oatTest {
 };
 
 TEST_F(Dex2oatClassLoaderContextTest, InvalidContext) {
-  RunTest("Invalid[]", /*expected_classpath_key*/ nullptr, /*expected_success*/ false);
+  RunTest("Invalid[]", /*expected_classpath_key=*/nullptr, /*expect_success=*/false);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, EmptyContext) {
-  RunTest("PCL[]", kEmptyClassPathKey, /*expected_success*/ true);
+  RunTest("PCL[]", kEmptyClassPathKey, /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithTheSourceDexFiles) {
   std::string context = "PCL[" + GetUsedDexLocation() + "]";
-  RunTest(context.c_str(), kEmptyClassPathKey, /*expected_success*/ true);
+  RunTest(context.c_str(), kEmptyClassPathKey, /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithOtherDexFiles) {
@@ -1093,7 +1093,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithOtherDexFiles) {
   std::string context = "PCL[" + dex_files[0]->GetLocation() + "]";
   std::string expected_classpath_key =
       "PCL[" + dex_files[0]->GetLocation() + "*" + std::to_string(expected_checksum) + "]";
-  RunTest(context.c_str(), expected_classpath_key.c_str(), true);
+  RunTest(context.c_str(), expected_classpath_key.c_str(), /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithResourceOnlyDexFiles) {
@@ -1102,13 +1102,13 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithResourceOnlyDexFiles) {
 
   std::string context = "PCL[" + resource_only_classpath + "]";
   // Expect an empty context because resource only dex files cannot be open.
-  RunTest(context.c_str(), kEmptyClassPathKey, /*expected_success*/ true);
+  RunTest(context.c_str(), kEmptyClassPathKey, /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithNotExistentDexFiles) {
   std::string context = "PCL[does_not_exists.dex]";
   // Expect an empty context because stripped dex files cannot be open.
-  RunTest(context.c_str(), kEmptyClassPathKey, /*expected_success*/ true);
+  RunTest(context.c_str(), kEmptyClassPathKey, /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ChainContext) {
@@ -1120,7 +1120,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ChainContext) {
   std::string expected_classpath_key = "PCL[" + CreateClassPathWithChecksums(dex_files1) + "];" +
                                        "DLC[" + CreateClassPathWithChecksums(dex_files2) + "]";
 
-  RunTest(context.c_str(), expected_classpath_key.c_str(), true);
+  RunTest(context.c_str(), expected_classpath_key.c_str(), /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithSharedLibrary) {
@@ -1131,7 +1131,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithSharedLibrary) {
       "PCL[" + GetTestDexFileName("Nested") + "]" + "{PCL[" + GetTestDexFileName("MultiDex") + "]}";
   std::string expected_classpath_key = "PCL[" + CreateClassPathWithChecksums(dex_files1) + "]" +
                                        "{PCL[" + CreateClassPathWithChecksums(dex_files2) + "]}";
-  RunTest(context.c_str(), expected_classpath_key.c_str(), true);
+  RunTest(context.c_str(), expected_classpath_key.c_str(), /*expect_success=*/true);
 }
 
 TEST_F(Dex2oatClassLoaderContextTest, ContextWithSharedLibraryAndImage) {
@@ -1144,7 +1144,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithSharedLibraryAndImage) {
                                        "{PCL[" + CreateClassPathWithChecksums(dex_files2) + "]}";
   RunTest(context.c_str(),
           expected_classpath_key.c_str(),
-          /*expected_success=*/true,
+          /*expect_success=*/true,
           /*use_second_source=*/false,
           /*generate_image=*/true);
 }
@@ -1161,7 +1161,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithSameSharedLibrariesAndImage) {
                                        "#PCL[" + CreateClassPathWithChecksums(dex_files2) + "]}";
   RunTest(context.c_str(),
           expected_classpath_key.c_str(),
-          /*expected_success=*/true,
+          /*expect_success=*/true,
           /*use_second_source=*/false,
           /*generate_image=*/true);
 }
@@ -1178,7 +1178,7 @@ TEST_F(Dex2oatClassLoaderContextTest, ContextWithSharedLibrariesDependenciesAndI
                                        "{PCL[" + CreateClassPathWithChecksums(dex_files1) + "]}}";
   RunTest(context.c_str(),
           expected_classpath_key.c_str(),
-          /*expected_success=*/true,
+          /*expect_success=*/true,
           /*use_second_source=*/false,
           /*generate_image=*/true);
 }
@@ -1349,7 +1349,7 @@ TEST_F(Dex2oatTest, StderrLoggerOutput) {
                                   odex_location,
                                   CompilerFilter::kVerify,
                                   {"--runtime-arg", "-Xuse-stderr-logger"},
-                                  true));
+                                  /*expect_success=*/true));
   // Look for some random part of dex2oat logging. With the stderr logger this should be captured,
   // even on device.
   EXPECT_NE(std::string::npos, output_.find("dex2oat took"));
@@ -1366,7 +1366,7 @@ TEST_F(Dex2oatTest, VerifyCompilationReason) {
                                   odex_location,
                                   CompilerFilter::kVerify,
                                   {"--compilation-reason=install"},
-                                  true));
+                                  /*expect_success=*/true));
   std::string error_msg;
   std::unique_ptr<OatFile> odex_file(OatFile::Open(/*zip_fd=*/-1,
                                                    odex_location,
@@ -1386,7 +1386,11 @@ TEST_F(Dex2oatTest, VerifyNoCompilationReason) {
   // Test file doesn't matter.
   Copy(GetDexSrc1(), dex_location);
 
-  ASSERT_TRUE(GenerateOdexForTest(dex_location, odex_location, CompilerFilter::kVerify, {}, true));
+  ASSERT_TRUE(GenerateOdexForTest(dex_location,
+                                  odex_location,
+                                  CompilerFilter::kVerify,
+                                  /*extra_args=*/{},
+                                  /*expect_success=*/true));
   std::string error_msg;
   std::unique_ptr<OatFile> odex_file(OatFile::Open(/*zip_fd=*/-1,
                                                    odex_location,
@@ -1741,7 +1745,7 @@ TEST_F(Dex2oatTest, DontCopyPlainDex) {
   ASSERT_TRUE(GenerateOdexForTest(dex_location,
                                   odex_location,
                                   CompilerFilter::Filter::kVerify,
-                                  {},
+                                  /*extra_args=*/{},
                                   /*expect_success=*/true,
                                   /*use_fd=*/false,
                                   /*use_zip_fd=*/false,

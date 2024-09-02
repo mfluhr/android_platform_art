@@ -580,7 +580,7 @@ bool DoInvokePolymorphic(Thread* self,
   DCHECK(invoke_method->IsIntrinsic());
 
   // Dispatch based on intrinsic identifier associated with method.
-  switch (static_cast<art::Intrinsics>(invoke_method->GetIntrinsic())) {
+  switch (invoke_method->GetIntrinsic()) {
 #define CASE_SIGNATURE_POLYMORPHIC_INTRINSIC(Name, ...) \
     case Intrinsics::k##Name:                           \
       return Do ## Name(self, shadow_frame, inst, inst_data, result);
