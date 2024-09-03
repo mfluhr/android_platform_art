@@ -115,17 +115,12 @@ static jobject VMRuntime_newNonMovableArray(JNIEnv* env, jobject, jclass javaEle
   if (UNLIKELY(array_class == nullptr)) {
     return nullptr;
   }
-  gc::Heap* heap = runtime->GetHeap();
-  gc::AllocatorType allocator = heap->GetCurrentNonMovingAllocator();
-  bool is_large = heap->ShouldAllocLargeObject(array_class, length);
-  ObjPtr<mirror::Array> result = mirror::Array::Alloc(
-      soa.Self(), array_class, length, array_class->GetComponentSizeShift(), allocator);
-  if (is_large) {
-    // We cannot easily avoid this by leaving these in the NonMovable space.
-    // Empirically it is important to unmap these promptly once collected. (b/360363656)
-    DCHECK(heap->GetLargeObjectsSpace()->Contains(result.Ptr()));
-    heap->AddStrayNonMovableObject(result.Ptr());
-  }
+  gc::AllocatorType allocator = runtime->GetHeap()->GetCurrentNonMovingAllocator();
+  ObjPtr<mirror::Array> result = mirror::Array::Alloc(soa.Self(),
+                                                      array_class,
+                                                      length,
+                                                      array_class->GetComponentSizeShift(),
+                                                      allocator);
   return soa.AddLocalReference<jobject>(result);
 }
 
@@ -172,11 +167,10 @@ static jlong VMRuntime_addressOf(JNIEnv* env, jobject, jobject javaArray) {
     ThrowIllegalArgumentException("not a primitive array");
     return 0;
   }
-  if (!Runtime::Current()->GetHeap()->IsNonMovable(array)) {
+  if (Runtime::Current()->GetHeap()->IsMovableObject(array)) {
     ThrowRuntimeException("Trying to get address of movable array object");
     return 0;
   }
-  DCHECK(!Runtime::Current()->GetHeap()->ObjectMayMove(array));
   return reinterpret_cast<uintptr_t>(array->GetRawData(array->GetClass()->GetComponentSize(), 0));
 }
 
