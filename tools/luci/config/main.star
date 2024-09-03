@@ -102,6 +102,27 @@ luci.binding(
 luci.realm(name = "pools/ci")
 luci.bucket(name = "ci")
 
+# Shadow bucket is needed for LED.
+luci.bucket(
+    name = "ci.shadow",
+    shadows = "ci",
+    bindings = [
+        luci.binding(
+            roles = "role/buildbucket.creator",
+            users = ["art-ci-builder@chops-service-accounts.iam.gserviceaccount.com"],
+        ),
+        luci.binding(
+            roles = "role/buildbucket.triggerer",
+            users = ["art-ci-builder@chops-service-accounts.iam.gserviceaccount.com"],
+        ),
+    ],
+    constraints = luci.bucket_constraints(
+        pools = ["luci.art.ci"],
+        service_accounts = ["art-ci-builder@chops-service-accounts.iam.gserviceaccount.com"],
+    ),
+    dynamic = True,
+)
+
 luci.notifier_template(
     name = "default",
     body = io.read_file("luci-notify.template"),
