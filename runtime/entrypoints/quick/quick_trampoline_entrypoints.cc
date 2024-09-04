@@ -2380,14 +2380,6 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
   ArtMethod* resolved_method = linker->ResolveMethod<ClassLinker::ResolveMode::kCheckICCEAndIAE>(
       self, inst.VRegB(), caller_method, kVirtual);
 
-  Handle<mirror::MethodType> method_type(
-      hs.NewHandle(linker->ResolveMethodType(self, proto_idx, caller_method)));
-  if (UNLIKELY(method_type.IsNull())) {
-    // This implies we couldn't resolve one or more types in this method handle.
-    CHECK(self->IsExceptionPending());
-    return 0UL;
-  }
-
   DCHECK_EQ(ArtMethod::NumArgRegisters(shorty) + 1u, (uint32_t)inst.VRegA());
   DCHECK_EQ(resolved_method->IsStatic(), kMethodIsStatic);
 
@@ -2420,6 +2412,14 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
   JValue result;
   bool success = false;
   if (resolved_method->GetDeclaringClass() == GetClassRoot<mirror::MethodHandle>(linker)) {
+    Handle<mirror::MethodType> method_type(
+        hs.NewHandle(linker->ResolveMethodType(self, proto_idx, caller_method)));
+    if (UNLIKELY(method_type.IsNull())) {
+      // This implies we couldn't resolve one or more types in this method handle.
+      CHECK(self->IsExceptionPending());
+      return 0UL;
+    }
+
     Handle<mirror::MethodHandle> method_handle(hs.NewHandle(
         ObjPtr<mirror::MethodHandle>::DownCast(receiver_handle.Get())));
     if (intrinsic == Intrinsics::kMethodHandleInvokeExact) {
@@ -2445,10 +2445,12 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
         ObjPtr<mirror::VarHandle>::DownCast(receiver_handle.Get())));
     mirror::VarHandle::AccessMode access_mode =
         mirror::VarHandle::GetAccessModeByIntrinsic(intrinsic);
+
     success = VarHandleInvokeAccessor(self,
                                       *shadow_frame,
+                                      caller_method,
                                       var_handle,
-                                      method_type,
+                                      proto_idx,
                                       access_mode,
                                       &operands,
                                       &result);
