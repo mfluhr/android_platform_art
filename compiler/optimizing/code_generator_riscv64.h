@@ -89,7 +89,9 @@ static constexpr int32_t kFClassNaNMinValue = 0x100;
   V(CRC32UpdateBytes)                           \
   V(CRC32UpdateByteBuffer)                      \
   V(MethodHandleInvokeExact)                    \
-  V(MethodHandleInvoke)
+  V(MethodHandleInvoke)                         \
+  V(UnsafeArrayBaseOffset)                      \
+  V(JdkUnsafeArrayBaseOffset)                   \
 
 // Method register on invoke.
 static const XRegister kArtMethodRegister = A0;

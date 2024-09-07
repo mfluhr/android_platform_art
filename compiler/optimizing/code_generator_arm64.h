@@ -150,9 +150,12 @@ Location ARM64ReturnLocation(DataType::Type return_type);
   V(StringBuilderToString)                    \
   V(SystemArrayCopyByte)                      \
   V(SystemArrayCopyInt)                       \
+  V(UnsafeArrayBaseOffset)                    \
   /* 1.8 */                                   \
   V(MethodHandleInvokeExact)                  \
-  V(MethodHandleInvoke)
+  V(MethodHandleInvoke)                       \
+  /* OpenJDK 11 */                            \
+  V(JdkUnsafeArrayBaseOffset)
 
 class SlowPathCodeARM64 : public SlowPathCode {
  public:

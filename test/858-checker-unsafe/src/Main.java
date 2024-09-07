@@ -34,7 +34,7 @@ public class Main {
   }
 
   /// CHECK-START-ARM64: void Main.testPutZero() disassembly (after)
-  /// CHECK:                  str wzr, [x{{[0-9]+}}, x{{[0-9]+}}]
+  /// CHECK:                  str wzr, [x{{[0-9]+}}, #12]
   private static void testPutZero() {
     int[] object = new int[42];
     unsafe.putInt(object, unsafe.arrayBaseOffset(int[].class), 0);
@@ -45,5 +45,23 @@ public class Main {
   private static void testPutFixedOffset() {
     int[] object = new int[42];
     unsafe.putInt(object, 38, 12);
+  }
+
+  /// CHECK-START: int Main.testArrayBaseOffsetObject() instruction_simplifier (after)
+  /// CHECK:                  IntConstant 12
+  private static int testArrayBaseOffsetObject() {
+    return unsafe.arrayBaseOffset(Object[].class);
+  }
+
+  /// CHECK-START: int Main.testArrayBaseOffsetInt() instruction_simplifier (after)
+  /// CHECK:                  IntConstant 12
+  private static int testArrayBaseOffsetInt() {
+    return unsafe.arrayBaseOffset(int[].class);
+  }
+
+  /// CHECK-START: int Main.testArrayBaseOffsetDouble() instruction_simplifier (after)
+  /// CHECK:                  IntConstant 16
+  private static int testArrayBaseOffsetDouble() {
+    return unsafe.arrayBaseOffset(double[].class);
   }
 }

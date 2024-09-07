@@ -93,33 +93,23 @@ inline mirror::Object* Heap::AllocObjectWithAllocator(Thread* self,
 
     // Need to check that we aren't the large object allocator since the large object allocation
     // code path includes this function. If we didn't check we would have an infinite loop.
-    if (kCheckLargeObject && UNLIKELY(byte_count >= large_object_threshold_)) {
-      // Any not non-movable large object allocation should get here exactly once.
-      static constexpr size_t WARN_THRESHOLD = 50'000'000;
-      if (byte_count >= WARN_THRESHOLD) {
-        // The zeroing cost here is substantial, so we claim there is no way to do this
-        // frequently enough to cause disastrous log spam.
-        LOG(WARNING) << "Allocating huge object, klass = " << klass->PrettyClass()
-                     << ", byte count = " << byte_count;
+    if (kCheckLargeObject && UNLIKELY(ShouldAllocLargeObject(klass, byte_count))) {
+      // AllocLargeObject can suspend and will recall PreObjectAllocated if needed.
+      obj = AllocLargeObject<kInstrumented, PreFenceVisitor>(self, &klass, byte_count,
+                                                             pre_fence_visitor);
+      if (obj != nullptr) {
+        return obj.Ptr();
       }
-      if (ShouldAllocLargeObject(klass, byte_count)) {
-        // AllocLargeObject can suspend and will recall PreObjectAllocated if needed.
-        obj = AllocLargeObject<kInstrumented, PreFenceVisitor>(
-            self, &klass, byte_count, pre_fence_visitor);
-        if (obj != nullptr) {
-          return obj.Ptr();
-        }
-        // There should be an OOM exception, since we are retrying, clear it.
-        self->ClearException();
+      // There should be an OOM exception, since we are retrying, clear it.
+      self->ClearException();
 
-        // If the large object allocation failed, try to use the normal spaces (main space,
-        // non moving space). This can happen if there is significant virtual address space
-        // fragmentation.
-        // kInstrumented may be out of date, so recurse without large object checking, rather
-        // than continue.
-        return AllocObjectWithAllocator</*kInstrumented=*/true, /*kCheckLargeObject=*/false>(
-            self, klass, byte_count, GetUpdatedAllocator(allocator), pre_fence_visitor);
-      }
+      // If the large object allocation failed, try to use the normal spaces (main space,
+      // non moving space). This can happen if there is significant virtual address space
+      // fragmentation.
+      // kInstrumented may be out of date, so recurse without large object checking, rather than
+      // continue.
+      return AllocObjectWithAllocator</*kInstrumented=*/ true, /*kCheckLargeObject=*/ false>
+          (self, klass, byte_count, GetUpdatedAllocator(allocator), pre_fence_visitor);
     }
     ScopedAssertNoThreadSuspension ants("Called PreObjectAllocated, no suspend until alloc");
     if (IsTLABAllocator(allocator)) {
@@ -447,6 +437,8 @@ inline mirror::Object* Heap::TryToAllocate(Thread* self,
 }
 
 inline bool Heap::ShouldAllocLargeObject(ObjPtr<mirror::Class> c, size_t byte_count) const {
+  // We need to have a zygote space or else our newly allocated large object can end up in the
+  // Zygote resulting in it being prematurely freed.
   // We can only do this for primitive objects since large objects will not be within the card table
   // range. This also means that we rely on SetClass not dirtying the object's card.
   return byte_count >= large_object_threshold_ && (c->IsPrimitiveArray() || c->IsStringClass());

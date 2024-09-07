@@ -166,12 +166,14 @@ using VIXLUInt32Literal = vixl::aarch32::Literal<uint32_t>;
   V(StringBuilderToString)                                                 \
   V(SystemArrayCopyByte)                                                   \
   V(SystemArrayCopyInt)                                                    \
+  V(UnsafeArrayBaseOffset)                                                 \
   /* 1.8 */                                                                \
   V(MathFmaDouble)                                                         \
   V(MathFmaFloat)                                                          \
   V(MethodHandleInvokeExact)                                               \
   V(MethodHandleInvoke)                                                    \
   /* OpenJDK 11 */                                                         \
+  V(JdkUnsafeArrayBaseOffset)                                              \
   V(JdkUnsafeCASLong) /* High register pressure */                         \
   V(JdkUnsafeCompareAndSetLong)
 

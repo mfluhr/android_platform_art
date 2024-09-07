@@ -127,6 +127,7 @@ class InstructionSimplifierVisitor final : public HGraphDelegateVisitor {
   void SimplifyReturnThis(HInvoke* invoke);
   void SimplifyAllocationIntrinsic(HInvoke* invoke);
   void SimplifyVarHandleIntrinsic(HInvoke* invoke);
+  void SimplifyArrayBaseOffset(HInvoke* invoke);
 
   bool CanUseKnownImageVarHandle(HInvoke* invoke);
   static bool CanEnsureNotNullAt(HInstruction* input, HInstruction* at);
@@ -3439,9 +3440,34 @@ void InstructionSimplifierVisitor::VisitInvoke(HInvoke* instruction) {
     case Intrinsics::kVarHandleWeakCompareAndSetRelease:
       SimplifyVarHandleIntrinsic(instruction);
       break;
+    case Intrinsics::kUnsafeArrayBaseOffset:
+    case Intrinsics::kJdkUnsafeArrayBaseOffset:
+      SimplifyArrayBaseOffset(instruction);
+      break;
     default:
       break;
   }
+}
+
+void InstructionSimplifierVisitor::SimplifyArrayBaseOffset(HInvoke* invoke) {
+  if (!invoke->InputAt(1)->IsLoadClass()) {
+    return;
+  }
+  HLoadClass* load_class = invoke->InputAt(1)->AsLoadClass();
+  ReferenceTypeInfo info = load_class->GetLoadedClassRTI();
+  if (!info.IsValid()) {
+    return;
+  }
+  ScopedObjectAccess soa(Thread::Current());
+  ObjPtr<mirror::Class> cls = info.GetTypeHandle()->GetComponentType();
+  if (cls == nullptr) {
+    return;
+  }
+  uint32_t base_offset =
+      mirror::Array::DataOffset(Primitive::ComponentSize(cls->GetPrimitiveType())).Int32Value();
+  invoke->ReplaceWith(GetGraph()->GetIntConstant(base_offset));
+  RecordSimplification();
+  return;
 }
 
 void InstructionSimplifierVisitor::VisitDeoptimize(HDeoptimize* deoptimize) {
