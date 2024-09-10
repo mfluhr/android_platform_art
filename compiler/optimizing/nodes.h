@@ -1593,6 +1593,7 @@ class HLoopInformationOutwardIterator : public ValueObject {
   M(Rem, BinaryOperation)                                               \
   M(Return, Instruction)                                                \
   M(ReturnVoid, Instruction)                                            \
+  M(Rol, BinaryOperation)                                               \
   M(Ror, BinaryOperation)                                               \
   M(Shl, BinaryOperation)                                               \
   M(Shr, BinaryOperation)                                               \
@@ -5996,6 +5997,31 @@ class HRor final : public HBinaryOperation {
 
  protected:
   DEFAULT_COPY_CONSTRUCTOR(Ror);
+};
+
+class HRol final : public HBinaryOperation {
+ public:
+  HRol(DataType::Type result_type, HInstruction* value, HInstruction* distance)
+      : HBinaryOperation(kRol, result_type, value, distance) {}
+
+  template <typename T>
+  static T Compute(T value, int32_t distance, int32_t max_shift_value) {
+    return HRor::Compute(value, -distance, max_shift_value);
+  }
+
+  HConstant* Evaluate(HIntConstant* value, HIntConstant* distance) const override {
+    return GetBlock()->GetGraph()->GetIntConstant(
+        Compute(value->GetValue(), distance->GetValue(), kMaxIntShiftDistance), GetDexPc());
+  }
+  HConstant* Evaluate(HLongConstant* value, HIntConstant* distance) const override {
+    return GetBlock()->GetGraph()->GetLongConstant(
+        Compute(value->GetValue(), distance->GetValue(), kMaxLongShiftDistance), GetDexPc());
+  }
+
+  DECLARE_INSTRUCTION(Rol);
+
+ protected:
+  DEFAULT_COPY_CONSTRUCTOR(Rol);
 };
 
 // The value of a parameter in this method. Its location depends on

@@ -197,8 +197,9 @@ cc_test {
     defaults: ["art_standalone_test_defaults"],
     static_libs: [
         "libbase",
-        "libnativebridge_lazy",
     ],
+    shared_libs: ["libnativebridge_lazy"],
+    data_libs: ["libnativebridge_lazy"],
     srcs: ["libnativebridge_api_test.cpp"],
     test_suites: [
         "general-tests",

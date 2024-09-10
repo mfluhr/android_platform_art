@@ -380,6 +380,7 @@ art_cc_binary {
         "libcrypto_for_art",
         "libdex2oat_static",
     ],
+    visibility: ["//tools/vendor/google_prebuilts/arc"],
 }
 
 art_cc_binary {

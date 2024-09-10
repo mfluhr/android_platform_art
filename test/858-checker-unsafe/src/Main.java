@@ -27,10 +27,18 @@ public class Main {
 
   private static Unsafe unsafe;
 
+  static void assertEquals(int expected, int actual) {
+    if (expected != actual) {
+      throw new Error("Expected " + expected + ", got " + actual);
+    }
+  }
+
   public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
     unsafe = getUnsafe();
     testPutZero();
     testPutFixedOffset();
+    assertEquals(0, testGet());
+    assertEquals(42, testGetFar());
   }
 
   /// CHECK-START-ARM64: void Main.testPutZero() disassembly (after)
@@ -45,6 +53,21 @@ public class Main {
   private static void testPutFixedOffset() {
     int[] object = new int[42];
     unsafe.putInt(object, 38, 12);
+  }
+
+  /// CHECK-START-ARM64: int Main.testGet() disassembly (after)
+  /// CHECK:                  ldur w{{[0-9]+}}, [x{{[0-9]+}}, #38]
+  private static int testGet() {
+    int[] object = new int[42];
+    return unsafe.getInt(object, 38);
+  }
+
+  private static int testGetFar() {
+    int offset = 32 * 1024;
+    int arraySize = offset / 4;
+    int[] object = new int[arraySize];
+    unsafe.putInt(object, offset, 42);
+    return unsafe.getInt(object, offset);
   }
 
   /// CHECK-START: int Main.testArrayBaseOffsetObject() instruction_simplifier (after)

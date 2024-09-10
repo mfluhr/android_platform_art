@@ -1953,14 +1953,16 @@ bool HInstructionBuilder::BuildSimpleIntrinsic(ArtMethod* method,
   ReceiverArg receiver_arg = method->IsStatic() ? ReceiverArg::kNone : ReceiverArg::kNullCheckedArg;
   HInstruction* instruction = nullptr;
   switch (intrinsic) {
-    case Intrinsics::kIntegerRotateRight:
     case Intrinsics::kIntegerRotateLeft:
-      // For rotate left, we negate the distance below.
+      instruction = new (allocator_) HRol(kInt32, /*value=*/ nullptr, /*distance=*/ nullptr);
+      break;
+    case Intrinsics::kIntegerRotateRight:
       instruction = new (allocator_) HRor(kInt32, /*value=*/ nullptr, /*distance=*/ nullptr);
       break;
-    case Intrinsics::kLongRotateRight:
     case Intrinsics::kLongRotateLeft:
-      // For rotate left, we negate the distance below.
+      instruction = new (allocator_) HRol(kInt64, /*value=*/ nullptr, /*distance=*/ nullptr);
+      break;
+    case Intrinsics::kLongRotateRight:
       instruction = new (allocator_) HRor(kInt64, /*value=*/ nullptr, /*distance=*/ nullptr);
       break;
     case Intrinsics::kIntegerCompare:
@@ -2079,15 +2081,6 @@ bool HInstructionBuilder::BuildSimpleIntrinsic(ArtMethod* method,
   }
 
   switch (intrinsic) {
-    case Intrinsics::kIntegerRotateLeft:
-    case Intrinsics::kLongRotateLeft: {
-      // Negate the distance value for rotate left.
-      DCHECK(instruction->IsRor());
-      HNeg* neg = new (allocator_) HNeg(kInt32, instruction->InputAt(1u));
-      AppendInstruction(neg);
-      instruction->SetRawInputAt(1u, neg);
-      break;
-    }
     case Intrinsics::kFloatIsNaN:
     case Intrinsics::kDoubleIsNaN:
       // Set the second input to be the same as first.

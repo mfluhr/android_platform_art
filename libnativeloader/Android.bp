@@ -93,7 +93,7 @@ art_cc_library {
 // inversion in places like in early boot where libnativeloader and/or
 // libnativebridge aren't available.
 // TODO(b/124250621) eliminate the need for this library
-cc_library {
+cc_library_shared {
     name: "libnativeloader_lazy",
     defaults: ["art_defaults"],
     visibility: [
@@ -112,6 +112,11 @@ cc_library {
     shared_libs: ["liblog"],
     header_libs: ["libnativeloader-headers"],
     export_header_lib_headers: ["libnativeloader-headers"],
+
+    // Apply the libnativeloader stub symbol file to the exported symbols from
+    // this shim library, to ensure that any symbols exposed here are also
+    // available as an exported API.
+    version_script: "libnativeloader.map.txt",
 }
 
 // native_loader_test.cpp mocks functions from libdl_android and
@@ -195,9 +200,8 @@ art_cc_test {
 art_cc_test {
     name: "libnativeloader_lazy_test",
     defaults: ["libnativeloader_api_test_defaults"],
-    static_libs: [
-        "libnativeloader_lazy",
-    ],
+    shared_libs: ["libnativeloader_lazy"],
+    data_libs: ["libnativeloader_lazy"],
     test_suites: [
         "general-tests",
         "mts-art",

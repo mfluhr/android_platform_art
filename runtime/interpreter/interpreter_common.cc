@@ -443,8 +443,6 @@ static bool DoVarHandleInvokeCommon(Thread* self,
   Handle<mirror::VarHandle> var_handle = hs.NewHandle(
       ObjPtr<mirror::VarHandle>::DownCast(shadow_frame.GetVRegReference(vRegC)));
   ArtMethod* method = shadow_frame.GetMethod();
-  Handle<mirror::DexCache> dex_cache = hs.NewHandle(method->GetDexCache());
-  Handle<mirror::ClassLoader> class_loader = hs.NewHandle(method->GetClassLoader());
   uint32_t var_args[Instruction::kMaxVarArgRegs];
   std::optional<VarArgsInstructionOperands> var_args_operands(std::nullopt);
   std::optional<RangeInstructionOperands> range_operands(std::nullopt);

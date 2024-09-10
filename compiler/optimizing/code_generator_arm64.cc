@@ -103,12 +103,6 @@ uint16_t SYS_CNTVCT_EL0 = SystemRegisterEncoder<1, 3, 14, 0, 2>::value;
 // generates less code/data with a small num_entries.
 static constexpr uint32_t kPackedSwitchCompareJumpThreshold = 7;
 
-// Reference load (except object array loads) is using LDR Wt, [Xn, #offset] which can handle
-// offset < 16KiB. For offsets >= 16KiB, the load shall be emitted as two or more instructions.
-// For the Baker read barrier implementation using link-time generated thunks we need to split
-// the offset explicitly.
-constexpr uint32_t kReferenceLoadMinFarOffset = 16 * KB;
-
 inline Condition ARM64Condition(IfCondition cond) {
   switch (cond) {
     case kCondEQ: return eq;
@@ -2436,6 +2430,22 @@ void InstructionCodeGeneratorARM64::HandleBinaryOp(HBinaryOperation* instr) {
         __ Orr(dst, lhs, rhs);
       } else if (instr->IsSub()) {
         __ Sub(dst, lhs, rhs);
+      } else if (instr->IsRol()) {
+        if (rhs.IsImmediate()) {
+          uint32_t shift = (-rhs.GetImmediate()) & (lhs.GetSizeInBits() - 1);
+          __ Ror(dst, lhs, shift);
+        } else {
+          UseScratchRegisterScope temps(GetVIXLAssembler());
+
+          // Ensure shift distance is in the same size register as the result. If
+          // we are rotating a long and the shift comes in a w register originally,
+          // we don't need to sxtw for use as an x since the shift distances are
+          // all & reg_bits - 1.
+          Register right = RegisterFrom(instr->GetLocations()->InAt(1), type);
+          Register negated = (type == DataType::Type::kInt32) ? temps.AcquireW() : temps.AcquireX();
+          __ Neg(negated, right);
+          __ Ror(dst, lhs, negated);
+        }
       } else if (instr->IsRor()) {
         if (rhs.IsImmediate()) {
           uint32_t shift = rhs.GetImmediate() & (lhs.GetSizeInBits() - 1);
@@ -6415,6 +6425,14 @@ void LocationsBuilderARM64::VisitReturnVoid(HReturnVoid* instruction) {
 
 void InstructionCodeGeneratorARM64::VisitReturnVoid([[maybe_unused]] HReturnVoid* instruction) {
   codegen_->GenerateFrameExit();
+}
+
+void LocationsBuilderARM64::VisitRol(HRol* rol) {
+  HandleBinaryOp(rol);
+}
+
+void InstructionCodeGeneratorARM64::VisitRol(HRol* rol) {
+  HandleBinaryOp(rol);
 }
 
 void LocationsBuilderARM64::VisitRor(HRor* ror) {
