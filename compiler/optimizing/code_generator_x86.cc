@@ -5052,19 +5052,11 @@ void InstructionCodeGeneratorX86::GenerateUShrLong(const Location& loc, Register
   __ Bind(&done);
 }
 
-void LocationsBuilderX86::VisitRol(HRol* rol) {
-  HandleRotate(rol);
-}
-
 void LocationsBuilderX86::VisitRor(HRor* ror) {
-  HandleRotate(ror);
-}
-
-void LocationsBuilderX86::HandleRotate(HBinaryOperation* rotate) {
   LocationSummary* locations =
-      new (GetGraph()->GetAllocator()) LocationSummary(rotate, LocationSummary::kNoCall);
+      new (GetGraph()->GetAllocator()) LocationSummary(ror, LocationSummary::kNoCall);
 
-  switch (rotate->GetResultType()) {
+  switch (ror->GetResultType()) {
     case DataType::Type::kInt64:
       // Add the temporary needed.
       locations->AddTemp(Location::RequiresRegister());
@@ -5072,62 +5064,39 @@ void LocationsBuilderX86::HandleRotate(HBinaryOperation* rotate) {
     case DataType::Type::kInt32:
       locations->SetInAt(0, Location::RequiresRegister());
       // The shift count needs to be in CL (unless it is a constant).
-      locations->SetInAt(1, Location::ByteRegisterOrConstant(ECX, rotate->InputAt(1)));
+      locations->SetInAt(1, Location::ByteRegisterOrConstant(ECX, ror->InputAt(1)));
       locations->SetOut(Location::SameAsFirstInput());
       break;
     default:
-      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
+      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
       UNREACHABLE();
   }
 }
 
-void InstructionCodeGeneratorX86::VisitRol(HRol* rol) {
-  HandleRotate(rol);
-}
-
 void InstructionCodeGeneratorX86::VisitRor(HRor* ror) {
-  HandleRotate(ror);
-}
-
-void InstructionCodeGeneratorX86::HandleRotate(HBinaryOperation* rotate) {
-  LocationSummary* locations = rotate->GetLocations();
+  LocationSummary* locations = ror->GetLocations();
   Location first = locations->InAt(0);
   Location second = locations->InAt(1);
 
-  if (rotate->GetResultType() == DataType::Type::kInt32) {
+  if (ror->GetResultType() == DataType::Type::kInt32) {
     Register first_reg = first.AsRegister<Register>();
     if (second.IsRegister()) {
       Register second_reg = second.AsRegister<Register>();
-      if (rotate->IsRol()) {
-        __ roll(first_reg, second_reg);
-      } else {
-        DCHECK(rotate->IsRor());
-        __ rorl(first_reg, second_reg);
-      }
+      __ rorl(first_reg, second_reg);
     } else {
       Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxIntShiftDistance);
-      if (rotate->IsRol()) {
-        __ roll(first_reg, imm);
-      } else {
-        DCHECK(rotate->IsRor());
-        __ rorl(first_reg, imm);
-      }
+      __ rorl(first_reg, imm);
     }
     return;
   }
 
-  DCHECK_EQ(rotate->GetResultType(), DataType::Type::kInt64);
+  DCHECK_EQ(ror->GetResultType(), DataType::Type::kInt64);
   Register first_reg_lo = first.AsRegisterPairLow<Register>();
   Register first_reg_hi = first.AsRegisterPairHigh<Register>();
   Register temp_reg = locations->GetTemp(0).AsRegister<Register>();
   if (second.IsRegister()) {
     Register second_reg = second.AsRegister<Register>();
     DCHECK_EQ(second_reg, ECX);
-
-    if (rotate->IsRol()) {
-      __ negl(second_reg);
-    }
-
     __ movl(temp_reg, first_reg_hi);
     __ shrd(first_reg_hi, first_reg_lo, second_reg);
     __ shrd(first_reg_lo, temp_reg, second_reg);
@@ -5136,12 +5105,7 @@ void InstructionCodeGeneratorX86::HandleRotate(HBinaryOperation* rotate) {
     __ cmovl(kNotEqual, first_reg_hi, first_reg_lo);
     __ cmovl(kNotEqual, first_reg_lo, temp_reg);
   } else {
-    int32_t value = second.GetConstant()->AsIntConstant()->GetValue();
-    if (rotate->IsRol()) {
-      value = -value;
-    }
-    int32_t shift_amt = value & kMaxLongShiftDistance;
-
+    int32_t shift_amt = second.GetConstant()->AsIntConstant()->GetValue() & kMaxLongShiftDistance;
     if (shift_amt == 0) {
       // Already fine.
       return;

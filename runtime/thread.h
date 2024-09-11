@@ -1366,10 +1366,10 @@ class EXPORT Thread {
 
   void SetMethodTraceBuffer(uintptr_t* buffer, int init_index) {
     tlsPtr_.method_trace_buffer = buffer;
-    SetTraceBufferCurrentEntry(init_index);
+    SetMethodTraceBufferCurrentEntry(init_index);
   }
 
-  void SetTraceBufferCurrentEntry(int index) {
+  void SetMethodTraceBufferCurrentEntry(int index) {
     uintptr_t* buffer = tlsPtr_.method_trace_buffer;
     if (buffer == nullptr) {
       tlsPtr_.method_trace_buffer_curr_entry = nullptr;

@@ -249,7 +249,6 @@ class LocationsBuilderX86 : public HGraphVisitor {
   void HandleBitwiseOperation(HBinaryOperation* instruction);
   void HandleInvoke(HInvoke* invoke);
   void HandleCondition(HCondition* condition);
-  void HandleRotate(HBinaryOperation* rotate);
   void HandleShift(HBinaryOperation* instruction);
   void HandleFieldSet(HInstruction* instruction,
                       const FieldInfo& field_info,
@@ -340,7 +339,6 @@ class InstructionCodeGeneratorX86 : public InstructionCodeGenerator {
                       bool value_can_be_null,
                       WriteBarrierKind write_barrier_kind);
   void HandleFieldGet(HInstruction* instruction, const FieldInfo& field_info);
-  void HandleRotate(HBinaryOperation* rotate);
 
   // Generate a heap reference load using one register `out`:
   //

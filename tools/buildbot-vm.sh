@@ -104,7 +104,7 @@ elif [[ $action = boot ]]; then
     cp "$(dirname $0)/user-data.img" "$ART_TEST_VM_DIR/user-data.img"
     cd "$ART_TEST_VM_DIR"
     if [[ "$TARGET_ARCH" = "riscv64" ]]; then
-        ($ANDROID_BUILD_TOP/prebuilts/runtime/mainline/local_riscv64/qemu/x86_64-linux-gnu/bin/qemu-system-riscv64 \
+        ($ANDROID_BUILD_TOP/device/google/cuttlefish_vmm/qemu/x86_64-linux-gnu/bin/qemu-system-riscv64 \
             -M virt \
             -nographic \
             -m 16G \

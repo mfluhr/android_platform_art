@@ -50,6 +50,7 @@
 #include "stack.h"
 #include "thread.h"
 #include "thread_list.h"
+#include "trace_profile.h"
 
 namespace art HIDDEN {
 
@@ -77,20 +78,6 @@ static const uint16_t kTraceRecordSizeSingleClock = 10;  // using v2
 static const uint16_t kTraceRecordSizeDualClock   = 14;  // using v3 with two timestamps
 static const size_t kNumTracePoolBuffers = 32;
 
-// Packet type encoding for the new method tracing format.
-static const int kThreadInfoHeaderV2 = 0;
-static const int kMethodInfoHeaderV2 = 1;
-static const int kEntryHeaderV2 = 2;
-static const int kSummaryHeaderV2 = 3;
-
-// Packet sizes for the new method trace format.
-static const uint16_t kTraceHeaderLengthV2 = 32;
-static const uint16_t kTraceRecordSizeSingleClockV2 = 6;
-static const uint16_t kTraceRecordSizeDualClockV2 = kTraceRecordSizeSingleClockV2 + 2;
-static const uint16_t kEntryHeaderSizeV2 = 12;
-
-static const uint16_t kTraceVersionSingleClockV2 = 4;
-static const uint16_t kTraceVersionDualClockV2 = 5;
 
 static constexpr size_t kMinBufSize = 18U;  // Trace header is up to 18B.
 // Size of per-thread buffer size. The value is chosen arbitrarily. This value
@@ -458,39 +445,6 @@ uint32_t Trace::GetClockOverheadNanoSeconds() {
   return static_cast<uint32_t>(elapsed_us / 32);
 }
 
-// TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static void Append2LE(uint8_t* buf, uint16_t val) {
-  *buf++ = static_cast<uint8_t>(val);
-  *buf++ = static_cast<uint8_t>(val >> 8);
-}
-
-// TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static void Append3LE(uint8_t* buf, uint16_t val) {
-  *buf++ = static_cast<uint8_t>(val);
-  *buf++ = static_cast<uint8_t>(val >> 8);
-  *buf++ = static_cast<uint8_t>(val >> 16);
-}
-
-// TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static void Append4LE(uint8_t* buf, uint32_t val) {
-  *buf++ = static_cast<uint8_t>(val);
-  *buf++ = static_cast<uint8_t>(val >> 8);
-  *buf++ = static_cast<uint8_t>(val >> 16);
-  *buf++ = static_cast<uint8_t>(val >> 24);
-}
-
-// TODO: put this somewhere with the big-endian equivalent used by JDWP.
-static void Append8LE(uint8_t* buf, uint64_t val) {
-  *buf++ = static_cast<uint8_t>(val);
-  *buf++ = static_cast<uint8_t>(val >> 8);
-  *buf++ = static_cast<uint8_t>(val >> 16);
-  *buf++ = static_cast<uint8_t>(val >> 24);
-  *buf++ = static_cast<uint8_t>(val >> 32);
-  *buf++ = static_cast<uint8_t>(val >> 40);
-  *buf++ = static_cast<uint8_t>(val >> 48);
-  *buf++ = static_cast<uint8_t>(val >> 56);
-}
-
 static void GetSample(Thread* thread, void* arg) REQUIRES_SHARED(Locks::mutator_lock_) {
   std::vector<ArtMethod*>* const stack_trace = Trace::AllocStackTrace();
   StackVisitor::WalkStack(
@@ -839,52 +793,58 @@ void Trace::Start(std::unique_ptr<File>&& trace_file_in,
                                     gc::kCollectorTypeInstrumentation);
     ScopedSuspendAll ssa(__FUNCTION__);
     MutexLock mu(self, *Locks::trace_lock_);
-    if (the_trace_ != nullptr) {
+    if (TraceProfiler::IsTraceProfileInProgress()) {
+      LOG(ERROR) << "On-demand profile in progress, ignoring this request";
+      return;
+    }
+
+    if (Trace::IsTracingEnabledLocked()) {
       LOG(ERROR) << "Trace already in progress, ignoring this request";
+      return;
+    }
+
+    enable_stats = (flags & kTraceCountAllocs) != 0;
+    bool is_trace_format_v2 = GetTraceFormatVersionFromFlags(flags) == Trace::kFormatV2;
+    the_trace_ = new Trace(trace_file.release(), buffer_size, flags, output_mode, trace_mode);
+    num_trace_starts_++;
+    if (is_trace_format_v2) {
+      // Record all the methods that are currently loaded. We log all methods when any new class
+      // is loaded. This will allow us to process the trace entries without requiring a mutator
+      // lock.
+      RecordMethodInfoClassVisitor visitor(the_trace_);
+      runtime->GetClassLinker()->VisitClasses(&visitor);
+      visitor.FlushBuffer();
+    }
+    if (trace_mode == TraceMode::kSampling) {
+      CHECK_PTHREAD_CALL(pthread_create, (&sampling_pthread_, nullptr, &RunSamplingThread,
+                                          reinterpret_cast<void*>(interval_us)),
+                         "Sampling profiler thread");
+      the_trace_->interval_us_ = interval_us;
     } else {
-      enable_stats = (flags & kTraceCountAllocs) != 0;
-      int trace_format_version = GetTraceFormatVersionFromFlags(flags);
-      the_trace_ = new Trace(trace_file.release(), buffer_size, flags, output_mode, trace_mode);
-      num_trace_starts_++;
-      if (trace_format_version == Trace::kFormatV2) {
-        // Record all the methods that are currently loaded. We log all methods when any new class
-        // is loaded. This will allow us to process the trace entries without requiring a mutator
-        // lock.
-        RecordMethodInfoClassVisitor visitor(the_trace_);
-        runtime->GetClassLinker()->VisitClasses(&visitor);
-        visitor.FlushBuffer();
-      }
-      if (trace_mode == TraceMode::kSampling) {
-        CHECK_PTHREAD_CALL(pthread_create, (&sampling_pthread_, nullptr, &RunSamplingThread,
-                                            reinterpret_cast<void*>(interval_us)),
-                                            "Sampling profiler thread");
-        the_trace_->interval_us_ = interval_us;
-      } else {
-        if (!runtime->IsJavaDebuggable()) {
-          art::jit::Jit* jit = runtime->GetJit();
-          if (jit != nullptr) {
-            jit->GetCodeCache()->InvalidateAllCompiledCode();
-            jit->GetCodeCache()->TransitionToDebuggable();
-            jit->GetJitCompiler()->SetDebuggableCompilerOption(true);
-          }
-          runtime->SetRuntimeDebugState(art::Runtime::RuntimeDebugState::kJavaDebuggable);
-          runtime->GetInstrumentation()->UpdateEntrypointsForDebuggable();
-          runtime->DeoptimizeBootImage();
+      if (!runtime->IsJavaDebuggable()) {
+        art::jit::Jit* jit = runtime->GetJit();
+        if (jit != nullptr) {
+          jit->GetCodeCache()->InvalidateAllCompiledCode();
+          jit->GetCodeCache()->TransitionToDebuggable();
+          jit->GetJitCompiler()->SetDebuggableCompilerOption(true);
         }
-        if (trace_format_version == Trace::kFormatV2) {
-          // Add ClassLoadCallback to record methods on class load.
-          runtime->GetRuntimeCallbacks()->AddClassLoadCallback(the_trace_);
-        }
-        runtime->GetInstrumentation()->AddListener(
-            the_trace_,
-            instrumentation::Instrumentation::kMethodEntered |
-                instrumentation::Instrumentation::kMethodExited |
-                instrumentation::Instrumentation::kMethodUnwind,
-            UseFastTraceListeners(the_trace_->GetClockSource()));
-        runtime->GetInstrumentation()->EnableMethodTracing(kTracerInstrumentationKey,
-                                                           the_trace_,
-                                                           /*needs_interpreter=*/false);
+        runtime->SetRuntimeDebugState(art::Runtime::RuntimeDebugState::kJavaDebuggable);
+        runtime->GetInstrumentation()->UpdateEntrypointsForDebuggable();
+        runtime->DeoptimizeBootImage();
       }
+      if (is_trace_format_v2) {
+        // Add ClassLoadCallback to record methods on class load.
+        runtime->GetRuntimeCallbacks()->AddClassLoadCallback(the_trace_);
+      }
+      runtime->GetInstrumentation()->AddListener(
+          the_trace_,
+          instrumentation::Instrumentation::kMethodEntered |
+              instrumentation::Instrumentation::kMethodExited |
+              instrumentation::Instrumentation::kMethodUnwind,
+          UseFastTraceListeners(the_trace_->GetClockSource()));
+      runtime->GetInstrumentation()->EnableMethodTracing(kTracerInstrumentationKey,
+                                                         the_trace_,
+                                                         /*needs_interpreter=*/false);
     }
   }
 
@@ -1679,7 +1639,7 @@ void TraceWriter::FlushBuffer(Thread* thread, bool is_sync, bool release) {
     if (release) {
       thread->SetMethodTraceBuffer(nullptr, 0);
     } else {
-      thread->SetTraceBufferCurrentEntry(kPerThreadBufSize);
+      thread->SetMethodTraceBufferCurrentEntry(kPerThreadBufSize);
     }
   } else {
     int old_index = GetMethodTraceIndex(method_trace_entries);
@@ -1892,7 +1852,7 @@ void Trace::LogMethodTraceEvent(Thread* thread,
   if (trace_writer_->HasOverflow()) {
     // In non-streaming modes, we stop recoding events once the buffer is full. Just reset the
     // index, so we don't go to runtime for each method.
-    thread->SetTraceBufferCurrentEntry(kPerThreadBufSize);
+    thread->SetMethodTraceBufferCurrentEntry(kPerThreadBufSize);
     return;
   }
 
@@ -1902,7 +1862,7 @@ void Trace::LogMethodTraceEvent(Thread* thread,
     // more entries. In streaming mode, it returns nullptr if it fails to allocate a new buffer.
     method_trace_buffer = trace_writer_->PrepareBufferForNewEntries(thread);
     if (method_trace_buffer == nullptr) {
-      thread->SetTraceBufferCurrentEntry(kPerThreadBufSize);
+      thread->SetMethodTraceBufferCurrentEntry(kPerThreadBufSize);
       return;
     }
   }
@@ -2020,6 +1980,10 @@ size_t Trace::GetBufferSize() {
 
 bool Trace::IsTracingEnabled() {
   MutexLock mu(Thread::Current(), *Locks::trace_lock_);
+  return the_trace_ != nullptr;
+}
+
+bool Trace::IsTracingEnabledLocked() {
   return the_trace_ != nullptr;
 }
 

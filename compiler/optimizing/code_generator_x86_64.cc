@@ -5035,89 +5035,53 @@ void InstructionCodeGeneratorX86_64::HandleShift(HBinaryOperation* op) {
   }
 }
 
-void LocationsBuilderX86_64::HandleRotate(HBinaryOperation* rotate) {
+void LocationsBuilderX86_64::VisitRor(HRor* ror) {
   LocationSummary* locations =
-      new (GetGraph()->GetAllocator()) LocationSummary(rotate, LocationSummary::kNoCall);
+      new (GetGraph()->GetAllocator()) LocationSummary(ror, LocationSummary::kNoCall);
 
-  switch (rotate->GetResultType()) {
+  switch (ror->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
       locations->SetInAt(0, Location::RequiresRegister());
       // The shift count needs to be in CL (unless it is a constant).
-      locations->SetInAt(1, Location::ByteRegisterOrConstant(RCX, rotate->InputAt(1)));
+      locations->SetInAt(1, Location::ByteRegisterOrConstant(RCX, ror->InputAt(1)));
       locations->SetOut(Location::SameAsFirstInput());
       break;
     }
     default:
-      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
-      UNREACHABLE();
-  }
-}
-
-void InstructionCodeGeneratorX86_64::HandleRotate(HBinaryOperation* rotate) {
-  LocationSummary* locations = rotate->GetLocations();
-  CpuRegister first_reg = locations->InAt(0).AsRegister<CpuRegister>();
-  Location second = locations->InAt(1);
-
-  switch (rotate->GetResultType()) {
-    case DataType::Type::kInt32:
-      if (second.IsRegister()) {
-        CpuRegister second_reg = second.AsRegister<CpuRegister>();
-        if (rotate->IsRor()) {
-          __ rorl(first_reg, second_reg);
-        } else {
-          DCHECK(rotate->IsRol());
-          __ roll(first_reg, second_reg);
-        }
-      } else {
-        Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxIntShiftDistance);
-        if (rotate->IsRor()) {
-          __ rorl(first_reg, imm);
-        } else {
-          DCHECK(rotate->IsRol());
-          __ roll(first_reg, imm);
-        }
-      }
-      break;
-    case DataType::Type::kInt64:
-      if (second.IsRegister()) {
-        CpuRegister second_reg = second.AsRegister<CpuRegister>();
-        if (rotate->IsRor()) {
-          __ rorq(first_reg, second_reg);
-        } else {
-          DCHECK(rotate->IsRol());
-          __ rolq(first_reg, second_reg);
-        }
-      } else {
-        Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxLongShiftDistance);
-        if (rotate->IsRor()) {
-          __ rorq(first_reg, imm);
-        } else {
-          DCHECK(rotate->IsRol());
-          __ rolq(first_reg, imm);
-        }
-      }
-      break;
-    default:
-      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
+      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
       UNREACHABLE();
   }
 }
 
 void InstructionCodeGeneratorX86_64::VisitRor(HRor* ror) {
-  HandleRotate(ror);
-}
+  LocationSummary* locations = ror->GetLocations();
+  CpuRegister first_reg = locations->InAt(0).AsRegister<CpuRegister>();
+  Location second = locations->InAt(1);
 
-void LocationsBuilderX86_64::VisitRol(HRol* rol) {
-  HandleRotate(rol);
-}
-
-void LocationsBuilderX86_64::VisitRor(HRor* ror) {
-  HandleRotate(ror);
-}
-
-void InstructionCodeGeneratorX86_64::VisitRol(HRol* rol) {
-  HandleRotate(rol);
+  switch (ror->GetResultType()) {
+    case DataType::Type::kInt32:
+      if (second.IsRegister()) {
+        CpuRegister second_reg = second.AsRegister<CpuRegister>();
+        __ rorl(first_reg, second_reg);
+      } else {
+        Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxIntShiftDistance);
+        __ rorl(first_reg, imm);
+      }
+      break;
+    case DataType::Type::kInt64:
+      if (second.IsRegister()) {
+        CpuRegister second_reg = second.AsRegister<CpuRegister>();
+        __ rorq(first_reg, second_reg);
+      } else {
+        Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxLongShiftDistance);
+        __ rorq(first_reg, imm);
+      }
+      break;
+    default:
+      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
+      UNREACHABLE();
+  }
 }
 
 void LocationsBuilderX86_64::VisitShl(HShl* shl) {

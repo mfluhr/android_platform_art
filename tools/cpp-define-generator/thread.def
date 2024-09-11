@@ -17,7 +17,7 @@
 #if ASM_DEFINE_INCLUDE_DEPENDENCIES
 #include "entrypoints/quick/quick_entrypoints_enum.h"
 #include "thread.h"
-#include "trace.h"
+#include "trace_profile.h"
 #endif
 
 ASM_DEFINE(THREAD_CARD_TABLE_OFFSET,

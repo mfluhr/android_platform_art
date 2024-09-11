@@ -1829,7 +1829,7 @@ HConstant* HBinaryOperation::TryStaticEvaluation(HInstruction* left, HInstructio
   } else if (left->IsLongConstant()) {
     if (right->IsIntConstant()) {
       // The binop(long, int) case is only valid for shifts and rotations.
-      DCHECK(IsShl() || IsShr() || IsUShr() || IsRol() || IsRor()) << DebugName();
+      DCHECK(IsShl() || IsShr() || IsUShr() || IsRor()) << DebugName();
       return Evaluate(left->AsLongConstant(), right->AsIntConstant());
     } else if (right->IsLongConstant()) {
       return Evaluate(left->AsLongConstant(), right->AsLongConstant());

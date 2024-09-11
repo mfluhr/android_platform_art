@@ -5280,22 +5280,17 @@ void InstructionCodeGeneratorARMVIXL::VisitDivZeroCheck(HDivZeroCheck* instructi
   }
 }
 
-void InstructionCodeGeneratorARMVIXL::HandleIntegerRotate(HBinaryOperation* rotate) {
-  LocationSummary* locations = rotate->GetLocations();
-  vixl32::Register in = InputRegisterAt(rotate, 0);
+void InstructionCodeGeneratorARMVIXL::HandleIntegerRotate(HRor* ror) {
+  LocationSummary* locations = ror->GetLocations();
+  vixl32::Register in = InputRegisterAt(ror, 0);
   Location rhs = locations->InAt(1);
-  vixl32::Register out = OutputRegister(rotate);
+  vixl32::Register out = OutputRegister(ror);
 
   if (rhs.IsConstant()) {
     // Arm32 and Thumb2 assemblers require a rotation on the interval [1,31],
     // so map all rotations to a +ve. equivalent in that range.
     // (e.g. left *or* right by -2 bits == 30 bits in the same direction.)
     uint32_t rot = CodeGenerator::GetInt32ValueOf(rhs.GetConstant()) & 0x1F;
-
-    if (rotate->IsRol()) {
-      rot = -rot;
-    }
-
     if (rot) {
       // Rotate, mapping left rotations to right equivalents if necessary.
       // (e.g. left by 2 bits == right by 30.)
@@ -5304,16 +5299,7 @@ void InstructionCodeGeneratorARMVIXL::HandleIntegerRotate(HBinaryOperation* rota
       __ Mov(out, in);
     }
   } else {
-    if (rotate->IsRol()) {
-      UseScratchRegisterScope temps(GetVIXLAssembler());
-
-      vixl32::Register negated = temps.Acquire();
-      __ Rsb(negated, RegisterFrom(rhs), 0);
-      __ Ror(out, in, negated);
-    } else {
-      DCHECK(rotate->IsRor());
-      __ Ror(out, in, RegisterFrom(rhs));
-    }
+    __ Ror(out, in, RegisterFrom(rhs));
   }
 }
 
@@ -5321,8 +5307,8 @@ void InstructionCodeGeneratorARMVIXL::HandleIntegerRotate(HBinaryOperation* rota
 // rotates by swapping input regs (effectively rotating by the first 32-bits of
 // a larger rotation) or flipping direction (thus treating larger right/left
 // rotations as sub-word sized rotations in the other direction) as appropriate.
-void InstructionCodeGeneratorARMVIXL::HandleLongRotate(HBinaryOperation* rotate) {
-  LocationSummary* locations = rotate->GetLocations();
+void InstructionCodeGeneratorARMVIXL::HandleLongRotate(HRor* ror) {
+  LocationSummary* locations = ror->GetLocations();
   vixl32::Register in_reg_lo = LowRegisterFrom(locations->InAt(0));
   vixl32::Register in_reg_hi = HighRegisterFrom(locations->InAt(0));
   Location rhs = locations->InAt(1);
@@ -5331,11 +5317,6 @@ void InstructionCodeGeneratorARMVIXL::HandleLongRotate(HBinaryOperation* rotate)
 
   if (rhs.IsConstant()) {
     uint64_t rot = CodeGenerator::GetInt64ValueOf(rhs.GetConstant());
-
-    if (rotate->IsRol()) {
-      rot = -rot;
-    }
-
     // Map all rotations to +ve. equivalents on the interval [0,63].
     rot &= kMaxLongShiftDistance;
     // For rotates over a word in size, 'pre-rotate' by 32-bits to keep rotate
@@ -5360,17 +5341,7 @@ void InstructionCodeGeneratorARMVIXL::HandleLongRotate(HBinaryOperation* rotate)
     vixl32::Register shift_left = RegisterFrom(locations->GetTemp(1));
     vixl32::Label end;
     vixl32::Label shift_by_32_plus_shift_right;
-    vixl32::Label* final_label = codegen_->GetFinalLabel(rotate, &end);
-
-    // Negate rhs, taken from VisitNeg
-    if (rotate->IsRol()) {
-      Location negated = locations->GetTemp(2);
-      Location in = rhs;
-
-      __ Rsb(RegisterFrom(negated), RegisterFrom(in), 0);
-
-      rhs = negated;
-    }
+    vixl32::Label* final_label = codegen_->GetFinalLabel(ror, &end);
 
     __ And(shift_right, RegisterFrom(rhs), 0x1F);
     __ Lsrs(shift_left, RegisterFrom(rhs), 6);
@@ -5403,11 +5374,11 @@ void InstructionCodeGeneratorARMVIXL::HandleLongRotate(HBinaryOperation* rotate)
   }
 }
 
-void LocationsBuilderARMVIXL::HandleRotate(HBinaryOperation* rotate) {
+void LocationsBuilderARMVIXL::VisitRor(HRor* ror) {
   LocationSummary* locations =
-      new (GetGraph()->GetAllocator()) LocationSummary(rotate, LocationSummary::kNoCall);
-  HInstruction* shift = rotate->InputAt(1);
-  switch (rotate->GetResultType()) {
+      new (GetGraph()->GetAllocator()) LocationSummary(ror, LocationSummary::kNoCall);
+  HInstruction* shift = ror->InputAt(1);
+  switch (ror->GetResultType()) {
     case DataType::Type::kInt32: {
       locations->SetInAt(0, Location::RequiresRegister());
       locations->SetInAt(1, Location::RegisterOrConstant(shift));
@@ -5420,53 +5391,31 @@ void LocationsBuilderARMVIXL::HandleRotate(HBinaryOperation* rotate) {
         locations->SetInAt(1, Location::ConstantLocation(shift));
       } else {
         locations->SetInAt(1, Location::RequiresRegister());
-
-        if (rotate->IsRor()) {
-          locations->AddRegisterTemps(2);
-        } else {
-          DCHECK(rotate->IsRol());
-          locations->AddRegisterTemps(3);
-        }
+        locations->AddRegisterTemps(2);
       }
       locations->SetOut(Location::RequiresRegister(), Location::kOutputOverlap);
       break;
     }
     default:
-      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
+      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
   }
 }
 
-void LocationsBuilderARMVIXL::VisitRol(HRol* rol) {
-  HandleRotate(rol);
-}
-
-void LocationsBuilderARMVIXL::VisitRor(HRor* ror) {
-  HandleRotate(ror);
-}
-
-void InstructionCodeGeneratorARMVIXL::HandleRotate(HBinaryOperation* rotate) {
-  DataType::Type type = rotate->GetResultType();
+void InstructionCodeGeneratorARMVIXL::VisitRor(HRor* ror) {
+  DataType::Type type = ror->GetResultType();
   switch (type) {
     case DataType::Type::kInt32: {
-      HandleIntegerRotate(rotate);
+      HandleIntegerRotate(ror);
       break;
     }
     case DataType::Type::kInt64: {
-      HandleLongRotate(rotate);
+      HandleLongRotate(ror);
       break;
     }
     default:
       LOG(FATAL) << "Unexpected operation type " << type;
       UNREACHABLE();
   }
-}
-
-void InstructionCodeGeneratorARMVIXL::VisitRol(HRol* rol) {
-  HandleRotate(rol);
-}
-
-void InstructionCodeGeneratorARMVIXL::VisitRor(HRor* ror) {
-  HandleRotate(ror);
 }
 
 void LocationsBuilderARMVIXL::HandleShift(HBinaryOperation* op) {

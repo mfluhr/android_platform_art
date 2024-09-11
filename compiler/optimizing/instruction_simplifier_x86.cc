@@ -48,7 +48,6 @@ class InstructionSimplifierX86Visitor final : public HGraphVisitor {
   }
 
   void VisitAnd(HAnd * instruction) override;
-  void VisitRol(HRol* instruction) override;
   void VisitXor(HXor* instruction) override;
 
  private:
@@ -58,10 +57,6 @@ class InstructionSimplifierX86Visitor final : public HGraphVisitor {
 
 
 void InstructionSimplifierX86Visitor::VisitAnd(HAnd* instruction) {
-  if (!HasAVX2()) {
-    return;
-  }
-
   if (TryCombineAndNot(instruction)) {
     RecordSimplification();
   } else if (instruction->GetResultType() == DataType::Type::kInt32) {
@@ -71,26 +66,7 @@ void InstructionSimplifierX86Visitor::VisitAnd(HAnd* instruction) {
   }
 }
 
-void InstructionSimplifierX86Visitor::VisitRol(HRol* rol) {
-  if (rol->GetType() != DataType::Type::kInt64) {
-    return;
-  }
-
-  HBasicBlock* block = rol->GetBlock();
-  HGraph* graph = block->GetGraph();
-  ArenaAllocator* allocator = graph->GetAllocator();
-
-  HNeg* neg = new (allocator) HNeg(DataType::Type::kInt32, rol->GetRight());
-  block->InsertInstructionBefore(neg, rol);
-  HRor* ror = new (allocator) HRor(rol->GetType(), rol->GetLeft(), neg);
-  block->ReplaceAndRemoveInstructionWith(rol, ror);
-}
-
 void InstructionSimplifierX86Visitor::VisitXor(HXor* instruction) {
-  if (!HasAVX2()) {
-    return;
-  }
-
   if (instruction->GetResultType() == DataType::Type::kInt32) {
     if (TryGenerateMaskUptoLeastSetBit(instruction)) {
       RecordSimplification();
@@ -100,8 +76,11 @@ void InstructionSimplifierX86Visitor::VisitXor(HXor* instruction) {
 
 bool InstructionSimplifierX86::Run() {
   InstructionSimplifierX86Visitor visitor(graph_, codegen_, stats_);
-  visitor.VisitReversePostOrder();
-  return true;
+  if (visitor.HasAVX2()) {
+    visitor.VisitReversePostOrder();
+    return true;
+  }
+  return false;
 }
 
 }  // namespace x86
