@@ -2448,8 +2448,8 @@ extern "C" uint64_t artInvokePolymorphic(mirror::Object* raw_receiver, Thread* s
 
     success = VarHandleInvokeAccessor(self,
                                       *shadow_frame,
-                                      caller_method,
                                       var_handle,
+                                      caller_method,
                                       proto_idx,
                                       access_mode,
                                       &operands,

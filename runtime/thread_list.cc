@@ -314,7 +314,6 @@ size_t ThreadList::RunCheckpoint(Closure* checkpoint_function,
   }
 
   std::vector<Thread*> remaining_threads;
-  ThreadExitFlag* tefs;  // ith entry corresponds to remaining_threads[i].
   size_t count = 0;
   bool mutator_lock_held = Locks::mutator_lock_->IsSharedHeld(self);
   ThreadState old_thread_state = self->GetState();
@@ -350,8 +349,10 @@ size_t ThreadList::RunCheckpoint(Closure* checkpoint_function,
     // remaining_threads.
   }
 
+  // ith entry corresponds to remaining_threads[i]:
+  std::unique_ptr<ThreadExitFlag[]> tefs(new ThreadExitFlag[remaining_threads.size()]);
+
   // Register a ThreadExitFlag for each remaining thread.
-  tefs = new ThreadExitFlag[remaining_threads.size()];
   for (size_t i = 0; i < remaining_threads.size(); ++i) {
     remaining_threads[i]->NotifyOnThreadExit(&tefs[i]);
   }
@@ -463,7 +464,6 @@ size_t ThreadList::RunCheckpoint(Closure* checkpoint_function,
     return thread == nullptr;
   }));
   Thread::DCheckUnregisteredEverywhere(&tefs[0], &tefs[nthreads - 1]);
-  delete[] tefs;
 
   if (kIsDebugBuild && allow_lock_checking & !acquire_mutator_lock) {
     self->AllowPreMonitorMutexes();
