@@ -1404,7 +1404,7 @@ void GraphChecker::VisitBinaryOperation(HBinaryOperation* op) {
   DataType::Type result_type = op->GetType();
 
   // Type consistency between inputs.
-  if (op->IsUShr() || op->IsShr() || op->IsShl() || op->IsRor()) {
+  if (op->IsUShr() || op->IsShr() || op->IsShl() || op->IsRol() || op->IsRor()) {
     if (DataType::Kind(rhs_type) != DataType::Type::kInt32) {
       AddError(StringPrintf("Shift/rotate operation %s %d has a non-int kind second input: "
                             "%s of type %s.",
@@ -1428,7 +1428,7 @@ void GraphChecker::VisitBinaryOperation(HBinaryOperation* op) {
                             op->GetId(),
                             DataType::PrettyDescriptor(result_type)));
     }
-  } else if (op->IsUShr() || op->IsShr() || op->IsShl() || op->IsRor()) {
+  } else if (op->IsUShr() || op->IsShr() || op->IsShl() || op->IsRol() || op->IsRor()) {
     // Only check the first input (value), as the second one (distance)
     // must invariably be of kind `int`.
     if (result_type != DataType::Kind(lhs_type)) {

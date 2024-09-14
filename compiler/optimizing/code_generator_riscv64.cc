@@ -2331,6 +2331,7 @@ void LocationsBuilderRISCV64::HandleShift(HBinaryOperation* instruction) {
   DCHECK(instruction->IsShl() ||
          instruction->IsShr() ||
          instruction->IsUShr() ||
+         instruction->IsRol() ||
          instruction->IsRor());
 
   LocationSummary* locations = new (GetGraph()->GetAllocator()) LocationSummary(instruction);
@@ -2353,7 +2354,9 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
   DCHECK(instruction->IsShl() ||
          instruction->IsShr() ||
          instruction->IsUShr() ||
+         instruction->IsRol() ||
          instruction->IsRor());
+
   LocationSummary* locations = instruction->GetLocations();
   DataType::Type type = instruction->GetType();
 
@@ -2366,6 +2369,9 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
 
       if (rs2_location.IsConstant()) {
         int64_t imm = CodeGenerator::GetInt64ValueOf(rs2_location.GetConstant());
+        if (instruction->IsRol()) {
+          imm = -imm;
+        }
         uint32_t shamt =
             imm & (type == DataType::Type::kInt32 ? kMaxIntShiftDistance : kMaxLongShiftDistance);
 
@@ -2380,6 +2386,8 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
             __ Sraiw(rd, rs1, shamt);
           } else if (instruction->IsUShr()) {
             __ Srliw(rd, rs1, shamt);
+          } else if (instruction->IsRol()) {
+            __ Roriw(rd, rs1, shamt);
           } else {
             DCHECK(instruction->IsRor());
             __ Roriw(rd, rs1, shamt);
@@ -2391,6 +2399,8 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
             __ Srai(rd, rs1, shamt);
           } else if (instruction->IsUShr()) {
             __ Srli(rd, rs1, shamt);
+          } else if (instruction->IsRol()) {
+            __ Rori(rd, rs1, shamt);
           } else {
             DCHECK(instruction->IsRor());
             __ Rori(rd, rs1, shamt);
@@ -2405,6 +2415,8 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
             __ Sraw(rd, rs1, rs2);
           } else if (instruction->IsUShr()) {
             __ Srlw(rd, rs1, rs2);
+          } else if (instruction->IsRol()) {
+            __ Rolw(rd, rs1, rs2);
           } else {
             DCHECK(instruction->IsRor());
             __ Rorw(rd, rs1, rs2);
@@ -2416,6 +2428,8 @@ void InstructionCodeGeneratorRISCV64::HandleShift(HBinaryOperation* instruction)
             __ Sra(rd, rs1, rs2);
           } else if (instruction->IsUShr()) {
             __ Srl(rd, rs1, rs2);
+          } else if (instruction->IsRol()) {
+            __ Rol(rd, rs1, rs2);
           } else {
             DCHECK(instruction->IsRor());
             __ Ror(rd, rs1, rs2);
@@ -5004,6 +5018,14 @@ void LocationsBuilderRISCV64::VisitReturnVoid(HReturnVoid* instruction) {
 
 void InstructionCodeGeneratorRISCV64::VisitReturnVoid([[maybe_unused]] HReturnVoid* instruction) {
   codegen_->GenerateFrameExit();
+}
+
+void LocationsBuilderRISCV64::VisitRol(HRol* instruction) {
+  HandleShift(instruction);
+}
+
+void InstructionCodeGeneratorRISCV64::VisitRol(HRol* instruction) {
+  HandleShift(instruction);
 }
 
 void LocationsBuilderRISCV64::VisitRor(HRor* instruction) {

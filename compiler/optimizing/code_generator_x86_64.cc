@@ -5035,53 +5035,89 @@ void InstructionCodeGeneratorX86_64::HandleShift(HBinaryOperation* op) {
   }
 }
 
-void LocationsBuilderX86_64::VisitRor(HRor* ror) {
+void LocationsBuilderX86_64::HandleRotate(HBinaryOperation* rotate) {
   LocationSummary* locations =
-      new (GetGraph()->GetAllocator()) LocationSummary(ror, LocationSummary::kNoCall);
+      new (GetGraph()->GetAllocator()) LocationSummary(rotate, LocationSummary::kNoCall);
 
-  switch (ror->GetResultType()) {
+  switch (rotate->GetResultType()) {
     case DataType::Type::kInt32:
     case DataType::Type::kInt64: {
       locations->SetInAt(0, Location::RequiresRegister());
       // The shift count needs to be in CL (unless it is a constant).
-      locations->SetInAt(1, Location::ByteRegisterOrConstant(RCX, ror->InputAt(1)));
+      locations->SetInAt(1, Location::ByteRegisterOrConstant(RCX, rotate->InputAt(1)));
       locations->SetOut(Location::SameAsFirstInput());
       break;
     }
     default:
-      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
+      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
       UNREACHABLE();
   }
 }
 
-void InstructionCodeGeneratorX86_64::VisitRor(HRor* ror) {
-  LocationSummary* locations = ror->GetLocations();
+void InstructionCodeGeneratorX86_64::HandleRotate(HBinaryOperation* rotate) {
+  LocationSummary* locations = rotate->GetLocations();
   CpuRegister first_reg = locations->InAt(0).AsRegister<CpuRegister>();
   Location second = locations->InAt(1);
 
-  switch (ror->GetResultType()) {
+  switch (rotate->GetResultType()) {
     case DataType::Type::kInt32:
       if (second.IsRegister()) {
         CpuRegister second_reg = second.AsRegister<CpuRegister>();
-        __ rorl(first_reg, second_reg);
+        if (rotate->IsRor()) {
+          __ rorl(first_reg, second_reg);
+        } else {
+          DCHECK(rotate->IsRol());
+          __ roll(first_reg, second_reg);
+        }
       } else {
         Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxIntShiftDistance);
-        __ rorl(first_reg, imm);
+        if (rotate->IsRor()) {
+          __ rorl(first_reg, imm);
+        } else {
+          DCHECK(rotate->IsRol());
+          __ roll(first_reg, imm);
+        }
       }
       break;
     case DataType::Type::kInt64:
       if (second.IsRegister()) {
         CpuRegister second_reg = second.AsRegister<CpuRegister>();
-        __ rorq(first_reg, second_reg);
+        if (rotate->IsRor()) {
+          __ rorq(first_reg, second_reg);
+        } else {
+          DCHECK(rotate->IsRol());
+          __ rolq(first_reg, second_reg);
+        }
       } else {
         Immediate imm(second.GetConstant()->AsIntConstant()->GetValue() & kMaxLongShiftDistance);
-        __ rorq(first_reg, imm);
+        if (rotate->IsRor()) {
+          __ rorq(first_reg, imm);
+        } else {
+          DCHECK(rotate->IsRol());
+          __ rolq(first_reg, imm);
+        }
       }
       break;
     default:
-      LOG(FATAL) << "Unexpected operation type " << ror->GetResultType();
+      LOG(FATAL) << "Unexpected operation type " << rotate->GetResultType();
       UNREACHABLE();
   }
+}
+
+void InstructionCodeGeneratorX86_64::VisitRor(HRor* ror) {
+  HandleRotate(ror);
+}
+
+void LocationsBuilderX86_64::VisitRol(HRol* rol) {
+  HandleRotate(rol);
+}
+
+void LocationsBuilderX86_64::VisitRor(HRor* ror) {
+  HandleRotate(ror);
+}
+
+void InstructionCodeGeneratorX86_64::VisitRol(HRol* rol) {
+  HandleRotate(rol);
 }
 
 void LocationsBuilderX86_64::VisitShl(HShl* shl) {
