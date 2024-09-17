@@ -131,7 +131,7 @@ func globalFlags(ctx android.LoadHookContext) ([]string, []string) {
 
 func deviceFlags(ctx android.LoadHookContext) []string {
 	var cflags []string
-	deviceFrameSizeLimit := 1736
+	deviceFrameSizeLimit := 1744
 	if len(ctx.Config().SanitizeDevice()) > 0 {
 		deviceFrameSizeLimit = 7400
 	}
@@ -151,7 +151,7 @@ func deviceFlags(ctx android.LoadHookContext) []string {
 
 func hostFlags(ctx android.LoadHookContext) []string {
 	var cflags []string
-	hostFrameSizeLimit := 1736
+	hostFrameSizeLimit := 1744
 	if len(ctx.Config().SanitizeHost()) > 0 {
 		// art/test/137-cfi/cfi.cc
 		// error: stack frame size of 1944 bytes in function 'Java_Main_unwindInProcess'

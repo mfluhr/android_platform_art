@@ -1518,6 +1518,7 @@ class ClassLinker {
   friend class linker::ImageWriter;  // for GetClassRoots
   friend class JniCompilerTest;  // for GetRuntimeQuickGenericJniStub
   friend class JniInternalTest;  // for GetRuntimeQuickGenericJniStub
+  friend class VerifyClassesFuzzerHelper;  // for FindDexCacheDataLocked.
   friend class VMClassLoader;  // for LookupClass and FindClassInBaseDexClassLoader.
   ART_FRIEND_TEST(ClassLinkerTest, RegisterDexFileName);  // for DexLock, and RegisterDexFileLocked
   ART_FRIEND_TEST(mirror::DexCacheMethodHandlesTest, Open);  // for AllocDexCache

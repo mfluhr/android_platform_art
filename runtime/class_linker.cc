@@ -9602,7 +9602,7 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
   RecordAnnotationVisitor() {}
 
   bool ValidateCounts() {
-    if (is_error_) {
+    if (has_error_) {
       return false;
     }
 
@@ -9634,15 +9634,13 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
                                names_count_));
     }
 
-    return !is_error_;
+    return !has_error_;
   }
-
-  const std::string& GetErrorMsg() { return error_msg_; }
 
   bool IsRecordAnnotationFound() { return count_ != 0; }
 
   annotations::VisitorStatus VisitAnnotation(const char* descriptor, uint8_t visibility) override {
-    if (is_error_) {
+    if (has_error_) {
       return annotations::VisitorStatus::kVisitBreak;
     }
 
@@ -9664,7 +9662,7 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
   annotations::VisitorStatus VisitAnnotationElement(const char* element_name,
                                                     uint8_t type,
                                                     [[maybe_unused]] const JValue& value) override {
-    if (is_error_) {
+    if (has_error_) {
       return annotations::VisitorStatus::kVisitBreak;
     }
 
@@ -9710,7 +9708,7 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
                                                uint32_t index,
                                                uint8_t type,
                                                [[maybe_unused]] const JValue& value) override {
-    if (is_error_) {
+    if (has_error_) {
       return annotations::VisitorStatus::kVisitBreak;
     }
     switch (visiting_type_) {
@@ -9794,14 +9792,12 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
   }
 
  private:
-  bool is_error_ = false;
   uint32_t count_ = 0;
   uint32_t names_count_ = UINT32_MAX;
   uint32_t types_count_ = UINT32_MAX;
   uint32_t signatures_count_ = UINT32_MAX;
   uint32_t visibilities_count_ = UINT32_MAX;
   uint32_t annotations_count_ = UINT32_MAX;
-  std::string error_msg_;
   RecordElementType visiting_type_;
 
   inline bool ExpectedTypeOrError(uint8_t type,
@@ -9821,11 +9817,6 @@ class RecordAnnotationVisitor final : public annotations::AnnotationVisitor {
         depth,
         kRecordElementNames[static_cast<uint8_t>(visiting_type)]));
     return false;
-  }
-
-  void SetErrorMsg(const std::string& msg) {
-    is_error_ = true;
-    error_msg_ = msg;
   }
 
   DISALLOW_COPY_AND_ASSIGN(RecordAnnotationVisitor);
@@ -9871,6 +9862,11 @@ bool ClassLinker::VerifyRecordClass(Handle<mirror::Class> klass, ObjPtr<mirror::
   // optional, but should have the same size if it exists.
   RecordAnnotationVisitor visitor;
   annotations::VisitClassAnnotations(klass, &visitor);
+  if (UNLIKELY(visitor.HasError())) {
+    ThrowClassFormatError(klass.Get(), "%s", visitor.GetErrorMsg().c_str());
+    return false;
+  }
+
   if (!visitor.IsRecordAnnotationFound()) {
     return true;
   }

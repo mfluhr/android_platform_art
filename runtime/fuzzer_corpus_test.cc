@@ -19,6 +19,7 @@
 #include <unordered_set>
 
 #include "android-base/file.h"
+#include "android-base/macros.h"
 #include "common_runtime_test.h"
 #include "dex/class_accessor-inl.h"
 #include "dex/dex_file_verifier.h"
@@ -96,21 +97,22 @@ class FuzzerCorpusTest : public CommonRuntimeTest {
       art::StackHandleScope<3> scope(soa.Self());
       art::Handle<art::mirror::ClassLoader> h_loader =
           scope.NewHandle(soa.Decode<art::mirror::ClassLoader>(class_loader));
+      art::MutableHandle<art::mirror::Class> h_klass(scope.NewHandle<art::mirror::Class>(nullptr));
+      art::MutableHandle<art::mirror::DexCache> h_dex_cache(
+          scope.NewHandle<art::mirror::DexCache>(nullptr));
 
-      for (ClassAccessor accessor : dex_file.GetClasses()) {
+      for (art::ClassAccessor accessor : dex_file.GetClasses()) {
         const char* descriptor = accessor.GetDescriptor();
-        const art::Handle<art::mirror::Class> h_klass(scope.NewHandle<art::mirror::Class>(
-            class_linker->FindClass(soa.Self(), descriptor, h_loader)));
-        const art::Handle<art::mirror::DexCache> h_dex_cache(
-            scope.NewHandle<art::mirror::DexCache>(h_klass->GetDexCache()));
-
+        h_klass.Assign(class_linker->FindClass(soa.Self(), descriptor, h_loader));
         // Ignore classes that couldn't be loaded since we are looking for crashes during
         // class/method verification.
         if (h_klass == nullptr || h_klass->IsErroneous()) {
+          // Treat as failure to pass verification
+          passed_class_verification = false;
           soa.Self()->ClearException();
           continue;
         }
-
+        h_dex_cache.Assign(h_klass->GetDexCache());
         verifier::FailureKind failure =
             art::verifier::ClassVerifier::VerifyClass(soa.Self(),
                                                       /* verifier_deps= */ nullptr,

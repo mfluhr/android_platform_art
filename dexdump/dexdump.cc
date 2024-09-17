@@ -47,13 +47,13 @@
 #include "android-base/file.h"
 #include "android-base/logging.h"
 #include "android-base/stringprintf.h"
-
 #include "base/bit_utils.h"
 #include "dex/class_accessor-inl.h"
 #include "dex/code_item_accessors-inl.h"
 #include "dex/dex_file-inl.h"
 #include "dex/dex_file_exception_helpers.h"
 #include "dex/dex_file_loader.h"
+#include "dex/dex_file_structs.h"
 #include "dex/dex_file_types.h"
 #include "dex/dex_instruction-inl.h"
 #include "dexdump_cfg.h"
@@ -576,6 +576,17 @@ static void dumpEncodedValue(const DexFile* pDexFile, const u1** data, u1 type, 
       } conv;
       conv.data = readVarWidth(data, arg, false) << (7 - arg) * 8;
       fprintf(gOutFile, "%g", conv.d);
+      break;
+    }
+    case DexFile::kDexAnnotationMethodType: {
+      const u4 proto_idx = static_cast<u4>(readVarWidth(data, arg, false));
+      const dex::ProtoId& pProtoId = pDexFile->GetProtoId(dex::ProtoIndex(proto_idx));
+      fputs(pDexFile->GetProtoSignature(pProtoId).ToString().c_str(), gOutFile);
+      break;
+    }
+    case DexFile::kDexAnnotationMethodHandle: {
+      const u4 method_handle_idx = static_cast<u4>(readVarWidth(data, arg, false));
+      fprintf(gOutFile, "method_handle@%u", method_handle_idx);
       break;
     }
     case DexFile::kDexAnnotationString: {
