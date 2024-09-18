@@ -31,6 +31,28 @@
 #include "ziparchive/zip_archive.h"
 
 namespace art {
+// Global variable to count how many DEX files passed DEX file verification and they were
+// registered, since these are the cases for which we would be running the GC.
+int skipped_gc_iterations = 0;
+// Global variable to call the GC once every maximum number of iterations.
+// TODO: These values were obtained from local experimenting. They can be changed after
+// further investigation.
+static constexpr int kMaxSkipGCIterations = 100;
+
+// A class to be friends with ClassLinker and access the internal FindDexCacheDataLocked method.
+// TODO: Deduplicate this since it is the same with tools/fuzzer/libart_verify_classes_fuzzer.cc.
+class VerifyClassesFuzzerCorpusTestHelper {
+ public:
+  static const ClassLinker::DexCacheData* GetDexCacheData(Runtime* runtime, const DexFile* dex_file)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    Thread* self = Thread::Current();
+    ReaderMutexLock mu(self, *Locks::dex_lock_);
+    ClassLinker* class_linker = runtime->GetClassLinker();
+    const ClassLinker::DexCacheData* cached_data = class_linker->FindDexCacheDataLocked(*dex_file);
+    return cached_data;
+  }
+};
+
 // Manages the ZipArchiveHandle liveness.
 class ZipArchiveHandleScope {
  public:
@@ -51,16 +73,16 @@ class FuzzerCorpusTest : public CommonRuntimeTest {
     // and know that the checksum would probably be erroneous (i.e. random).
     constexpr bool kVerify = false;
 
-    auto container = std::make_shared<art::MemoryDexFileContainer>(data, size);
-    art::StandardDexFile dex_file(data,
-                                  /*location=*/name,
-                                  /*location_checksum=*/0,
-                                  /*oat_dex_file=*/nullptr,
-                                  container);
+    auto container = std::make_shared<MemoryDexFileContainer>(data, size);
+    StandardDexFile dex_file(data,
+                             /*location=*/name,
+                             /*location_checksum=*/0,
+                             /*oat_dex_file=*/nullptr,
+                             container);
 
     std::string error_msg;
     bool is_valid_dex_file =
-        art::dex::Verify(&dex_file, dex_file.GetLocation().c_str(), kVerify, &error_msg);
+        dex::Verify(&dex_file, dex_file.GetLocation().c_str(), kVerify, &error_msg);
     ASSERT_EQ(is_valid_dex_file, expected_success) << " Failed for " << name;
   }
 
@@ -73,23 +95,23 @@ class FuzzerCorpusTest : public CommonRuntimeTest {
     constexpr bool kVerify = false;
     bool passed_class_verification = true;
 
-    auto container = std::make_shared<art::MemoryDexFileContainer>(data, size);
-    art::StandardDexFile dex_file(data,
-                                  /*location=*/name,
-                                  /*location_checksum=*/0,
-                                  /*oat_dex_file=*/nullptr,
-                                  container);
+    auto container = std::make_shared<MemoryDexFileContainer>(data, size);
+    StandardDexFile dex_file(data,
+                             /*location=*/name,
+                             /*location_checksum=*/0,
+                             /*oat_dex_file=*/nullptr,
+                             container);
 
     std::string error_msg;
     const bool success_dex =
-        art::dex::Verify(&dex_file, dex_file.GetLocation().c_str(), kVerify, &error_msg);
+        dex::Verify(&dex_file, dex_file.GetLocation().c_str(), kVerify, &error_msg);
     ASSERT_EQ(success_dex, true) << " Failed for " << name;
 
-    art::Runtime* runtime = art::Runtime::Current();
+    Runtime* runtime = Runtime::Current();
     CHECK(runtime != nullptr);
 
-    art::ScopedObjectAccess soa(art::Thread::Current());
-    art::ClassLinker* class_linker = runtime->GetClassLinker();
+    ScopedObjectAccess soa(Thread::Current());
+    ClassLinker* class_linker = runtime->GetClassLinker();
     jobject class_loader = RegisterDexFileAndGetClassLoader(runtime, &dex_file);
 
     // Scope for the handles
@@ -114,27 +136,40 @@ class FuzzerCorpusTest : public CommonRuntimeTest {
         }
         h_dex_cache.Assign(h_klass->GetDexCache());
         verifier::FailureKind failure =
-            art::verifier::ClassVerifier::VerifyClass(soa.Self(),
-                                                      /* verifier_deps= */ nullptr,
-                                                      h_dex_cache->GetDexFile(),
-                                                      h_klass,
-                                                      h_dex_cache,
-                                                      h_loader,
-                                                      *h_klass->GetClassDef(),
-                                                      runtime->GetCompilerCallbacks(),
-                                                      art::verifier::HardFailLogMode::kLogWarning,
-                                                      /* api_level= */ 0,
-                                                      &error_msg);
+            verifier::ClassVerifier::VerifyClass(soa.Self(),
+                                                 /* verifier_deps= */ nullptr,
+                                                 h_dex_cache->GetDexFile(),
+                                                 h_klass,
+                                                 h_dex_cache,
+                                                 h_loader,
+                                                 *h_klass->GetClassDef(),
+                                                 runtime->GetCompilerCallbacks(),
+                                                 verifier::HardFailLogMode::kLogWarning,
+                                                 /* api_level= */ 0,
+                                                 &error_msg);
         if (failure != verifier::FailureKind::kNoFailure) {
           passed_class_verification = false;
         }
       }
     }
+    skipped_gc_iterations++;
+
+    // Delete weak root to the DexCache before removing a DEX file from the cache. This is usually
+    // handled by the GC, but since we are not calling it every iteration, we need to delete them
+    // manually.
+    const ClassLinker::DexCacheData* dex_cache_data =
+        VerifyClassesFuzzerCorpusTestHelper::GetDexCacheData(runtime, &dex_file);
+    soa.Env()->GetVm()->DeleteWeakGlobalRef(soa.Self(), dex_cache_data->weak_root);
+
+    class_linker->RemoveDexFromCaches(dex_file);
 
     // Delete global ref and unload class loader to free RAM.
     soa.Env()->GetVm()->DeleteGlobalRef(soa.Self(), class_loader);
-    // Do a GC to unregister the dex files.
-    runtime->GetHeap()->CollectGarbage(/* clear_soft_references= */ true);
+
+    if (skipped_gc_iterations == kMaxSkipGCIterations) {
+      runtime->GetHeap()->CollectGarbage(/* clear_soft_references */ true);
+      skipped_gc_iterations = 0;
+    }
 
     ASSERT_EQ(passed_class_verification, expected_success) << " Failed for " << name;
   }
@@ -191,14 +226,13 @@ class FuzzerCorpusTest : public CommonRuntimeTest {
   }
 
  private:
-  static jobject RegisterDexFileAndGetClassLoader(art::Runtime* runtime,
-                                                  art::StandardDexFile* dex_file)
-      REQUIRES_SHARED(art::Locks::mutator_lock_) {
-    art::Thread* self = art::Thread::Current();
-    art::ClassLinker* class_linker = runtime->GetClassLinker();
-    const std::vector<const art::DexFile*> dex_files = {dex_file};
+  static jobject RegisterDexFileAndGetClassLoader(Runtime* runtime, StandardDexFile* dex_file)
+      REQUIRES_SHARED(Locks::mutator_lock_) {
+    Thread* self = Thread::Current();
+    ClassLinker* class_linker = runtime->GetClassLinker();
+    const std::vector<const DexFile*> dex_files = {dex_file};
     jobject class_loader = class_linker->CreatePathClassLoader(self, dex_files);
-    art::ObjPtr<art::mirror::ClassLoader> cl = self->DecodeJObject(class_loader)->AsClassLoader();
+    ObjPtr<mirror::ClassLoader> cl = self->DecodeJObject(class_loader)->AsClassLoader();
     class_linker->RegisterDexFile(*dex_file, cl);
     return class_loader;
   }

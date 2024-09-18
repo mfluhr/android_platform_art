@@ -862,8 +862,9 @@ void Trace::StopTracing(bool flush_entries) {
   {
     MutexLock mu(self, *Locks::trace_lock_);
     num_trace_stops_initiated_++;
-    if (the_trace_ == nullptr) {
-      LOG(ERROR) << "Trace stop requested, but no trace currently running";
+    if (the_trace_ == nullptr || the_trace_->stop_tracing_) {
+      LOG(ERROR) << "Trace stop requested, but no trace currently running or trace is being"
+                 << " stopped concurrently on another thread";
       return;
     }
     // Tell sampling_pthread_ to stop tracing.

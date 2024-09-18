@@ -424,11 +424,10 @@ endef
 # ART APEX.
 #
 # TODO(b/129332183): This approach is flawed: We mix DSOs from prebuilt APEXes
-# and prebuilts/runtime/mainline/platform/impl with source built ones, and both
-# may depend on the same DSOs, and some of them don't have stable ABIs.
-# libbase.so in particular is such a problematic dependency. When those
-# dependencies eventually don't work anymore we don't have much choice but to
-# update all prebuilts.
+# with source built ones, and some of them don't have stable ABIs. libbase.so in
+# particular is such a problematic dependency. When those dependencies
+# eventually don't work anymore we don't have much choice but to update all
+# prebuilts.
 .PHONY: standalone-apex-files
 standalone-apex-files: deapexer \
                        $(RELEASE_ART_APEX) \
@@ -438,19 +437,21 @@ standalone-apex-files: deapexer \
                        $(STATSD_APEX) \
                        $(TZDATA_APEX) \
                        $(HOST_OUT)/bin/generate-boot-image64 \
-                       $(HOST_OUT)/bin/dex2oat64
+                       $(HOST_OUT)/bin/dex2oat64 \
+                       libartpalette_fake \
+                       art_fake_heapprofd_client_api
 	$(call extract-from-apex,$(RELEASE_ART_APEX),\
 	  $(PRIVATE_ART_APEX_DEPENDENCY_LIBS) $(PRIVATE_ART_APEX_DEPENDENCY_FILES))
 	# The Runtime APEX has the Bionic libs in ${LIB}/bionic subdirectories,
 	# so we need to move them up a level after extraction.
-	# Also, platform libraries are installed in prebuilts, so copy them over.
+	# Also, copy fake platform libraries.
 	$(call extract-from-apex,$(RUNTIME_APEX),\
 	  $(PRIVATE_RUNTIME_APEX_DEPENDENCY_FILES)) && \
 	  libdir=$(TARGET_OUT)/lib$$(expr $(TARGET_ARCH) : '.*\(64\)' || :) && \
 	  if [ -d $$libdir/bionic ]; then \
 	    mv -f $$libdir/bionic/*.so $$libdir; \
 	  fi && \
-	  cp prebuilts/runtime/mainline/platform/impl/$(TARGET_ARCH)/*.so $$libdir
+	  cp $$libdir/art_fake/*.so $$libdir
 	$(call extract-from-apex,$(CONSCRYPT_APEX),\
 	  $(PRIVATE_CONSCRYPT_APEX_DEPENDENCY_LIBS))
 	$(call extract-from-apex,$(I18N_APEX),\
