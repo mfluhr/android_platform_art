@@ -477,6 +477,7 @@ void UnstartedRuntime::UnstartedClassGetEnclosingClass(
   Handle<mirror::Class> klass(hs.NewHandle(shadow_frame->GetVRegReference(arg_offset)->AsClass()));
   if (klass->IsProxyClass() || klass->GetDexCache() == nullptr) {
     result->SetL(nullptr);
+    return;
   }
   result->SetL(annotations::GetEnclosingClass(klass));
 }

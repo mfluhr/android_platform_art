@@ -471,7 +471,7 @@ bool ProcessAnnotationValue(const ClassData& klass,
     case DexFile::kDexAnnotationMethodType:
     case DexFile::kDexAnnotationMethodHandle:
       // These annotations are unexpected here. Don't process them.
-      LOG(ERROR) << StringPrintf("Unexpected annotation of type 0x%02x", value_type);
+      LOG(WARNING) << StringPrintf("Unexpected annotation of type 0x%02x", value_type);
       return false;
     case DexFile::kDexAnnotationString: {
       uint32_t index = DexFile::ReadUnsignedInt(annotation, value_arg, false);

@@ -48,6 +48,10 @@ class CustomDisassembler final : public vixl::aarch64::Disassembler {
   void AppendRegisterNameToOutput(const vixl::aarch64::Instruction* instr,
                                   const vixl::aarch64::CPURegister& reg) override;
 
+  // Overriding to print the address with trailing zeroes e.g. 0x00004074 instead of 0x4074.
+  void AppendCodeRelativeAddressToOutput(const vixl::aarch64::Instruction* instr,
+                                         const void* addr) override;
+
   // Intercepts the instruction flow captured by the parent method,
   // to specially instrument for particular instruction types.
   void Visit(vixl::aarch64::Metadata* metadata, const vixl::aarch64::Instruction* instr) override;
