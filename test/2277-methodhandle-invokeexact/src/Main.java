@@ -32,6 +32,25 @@ public class Main {
       $noinline$testMethodHandleFromOtherDex();
       Multi.$noinline$testMHFromMain(OPTIONAL_GET);
       $noinline$testWithArgs();
+      $noinline$nullchecks();
+    }
+
+    private static void $noinline$nullchecks() throws Throwable {
+      try {
+        VOID_METHOD.invokeExact((A) null);
+        unreachable("Receiver is null, should throw NPE");
+      } catch (NullPointerException expected) {}
+
+      try {
+        VOID_METHOD.invokeExact((Main) null);
+        unreachable("Should throw WMTE: input is of wrong type");
+      } catch (WrongMethodTypeException expected) {}
+
+      try {
+        MethodHandle mh = null;
+        mh.invokeExact();
+        unreachable("MethodHandle object is null, should throw NPE");
+      } catch (NullPointerException expected) {}
     }
 
     private static void $noinline$testMethodHandleFromOtherDex() throws Throwable {
@@ -59,7 +78,7 @@ public class Main {
       try {
         INTERFACE_DEFAULT_METHOD.invokeExact(new A());
         unreachable("MethodHandle's type is (Main$I)V, but callsite is (Main$A)V");
-      } catch (WrongMethodTypeException ignored) {}
+      } catch (WrongMethodTypeException expected) {}
 
       INTERFACE_DEFAULT_METHOD.invokeExact((I) new A());
       assertEquals("I.defaultMethod", STATUS);
@@ -88,7 +107,7 @@ public class Main {
       try {
         RETURN_INT.invokeExact(new A());
         unreachable("MethodHandle's type is (Main$A)I, but callsite type is (Main$A)V");
-      } catch (WrongMethodTypeException ignored) {}
+      } catch (WrongMethodTypeException expected) {}
 
       String returnedString = (String) STATIC_METHOD.invokeExact(new A());
       assertEquals("staticMethod", returnedString);

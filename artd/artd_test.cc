@@ -313,8 +313,9 @@ class MockExecUtils : public ExecUtils {
     Result<int> code = DoExecAndReturnCode(arg_vector, callbacks, stat);
     if (code.ok()) {
       return {.status = ExecResult::kExited, .exit_code = code.value()};
+    } else {
+      return {.status = ExecResult::kSignaled, .signal = SIGKILL};
     }
-    return {.status = ExecResult::kUnknown};
   }
 
   MOCK_METHOD(Result<int>,
@@ -1113,14 +1114,29 @@ TEST_F(ArtdTest, dexoptAllResourceControlBackground) {
   RunDexopt();
 }
 
+TEST_F(ArtdTest, dexoptTerminatedBySignal) {
+  EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _))
+      .WillOnce(Return(Result<int>(Error())));
+  RunDexopt(AllOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_SERVICE_SPECIFIC),
+                  Property(&ndk::ScopedAStatus::getMessage,
+                           HasSubstr(ART_FORMAT("[status={},exit_code=-1,signal={}]",
+                                                static_cast<int>(ExecResult::kSignaled),
+                                                SIGKILL)))));
+}
+
 TEST_F(ArtdTest, dexoptFailed) {
   dexopt_options_.generateAppImage = true;
+  constexpr int kExitCode = 135;
   EXPECT_CALL(*mock_exec_utils_, DoExecAndReturnCode(_, _, _))
       .WillOnce(DoAll(WithArg<0>(WriteToFdFlag("--oat-fd=", "new_oat")),
                       WithArg<0>(WriteToFdFlag("--output-vdex-fd=", "new_vdex")),
                       WithArg<0>(WriteToFdFlag("--app-image-fd=", "new_art")),
-                      Return(1)));
-  RunDexopt(EX_SERVICE_SPECIFIC);
+                      Return(kExitCode)));
+  RunDexopt(AllOf(Property(&ndk::ScopedAStatus::getExceptionCode, EX_SERVICE_SPECIFIC),
+                  Property(&ndk::ScopedAStatus::getMessage,
+                           HasSubstr(ART_FORMAT("[status={},exit_code={},signal=0]",
+                                                static_cast<int>(ExecResult::kExited),
+                                                kExitCode)))));
 
   CheckContent(scratch_path_ + "/a/oat/arm64/b.odex", "old_oat");
   CheckContent(scratch_path_ + "/a/oat/arm64/b.vdex", "old_vdex");

@@ -310,9 +310,6 @@ def add_builder(name,
         "testrunner_args": testrunner_args,
     }
 
-    if name == "qemu-armv8-ndebug":
-      properties["manifest_branch"] = "main"  # Full tree.
-
     ci_builder(name,
                category="|".join(short_name.split("-")[:-1]),
                short_name=short_name.split("-")[-1],

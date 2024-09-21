@@ -90,6 +90,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     /**
      * Offloads `onStartJob` and `onStopJob` calls from the main thread while keeping the execution
      * order as the main thread does.
+     * Also offloads `onUpdateReady` calls from the package manager thread. We reuse this executor
+     * just for simplicity. The execution order does not matter.
      */
     @NonNull
     private final ThreadPoolExecutor mSerializedExecutor =
@@ -181,7 +183,14 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
      * @param otaSlot The slot that contains the OTA update, "_a" or "_b", or null for a Mainline
      *         update.
      */
-    public synchronized @ScheduleStatus int onUpdateReady(@Nullable String otaSlot) {
+    public synchronized void onUpdateReady(@Nullable String otaSlot) {
+        // `onUpdateReadyImpl` can take time, especially on `resetLocked` when there are staged
+        // files from a previous run to be cleaned up, so we put it on a separate thread.
+        mSerializedExecutor.execute(() -> onUpdateReadyImpl(otaSlot));
+    }
+
+    /** For internal and testing use only. */
+    public synchronized @ScheduleStatus int onUpdateReadyImpl(@Nullable String otaSlot) {
         cancelAnyLocked();
         resetLocked();
         updateOtaSlotLocked(otaSlot);
@@ -190,7 +199,8 @@ public class PreRebootDexoptJob implements ArtServiceJobInterface {
     }
 
     /**
-     * Same as above, but starts the job immediately, instead of going through the job scheduler.
+     * Same as {@link #onUpdateReady}, but starts the job immediately, instead of going through the
+     * job scheduler.
      *
      * @param mapSnapshotsForOta whether to map/unmap snapshots. Only applicable to an OTA update.
      * @return The future of the job, or null if Pre-reboot Dexopt is not enabled.

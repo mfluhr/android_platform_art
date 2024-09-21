@@ -2893,6 +2893,14 @@ void MarkCompact::KernelPreparation() {
       }
       // Register the moving space with userfaultfd.
       RegisterUffd(moving_space_begin, moving_space_register_sz);
+      // madvise ensures that if any page gets mapped (only possible if some
+      // thread is reading the page(s) without trying to make sense as we hold
+      // mutator-lock exclusively) between mremap and uffd-registration, then
+      // it gets zapped so that the map is empty and ready for userfaults. If
+      // we could mremap after uffd-registration (like in case of linear-alloc
+      // space below) then we wouldn't need it. But since we don't register the
+      // entire space, we can't do that.
+      madvise(moving_space_begin, moving_space_register_sz, MADV_DONTNEED);
     }
     // Prepare linear-alloc for concurrent compaction.
     for (auto& data : linear_alloc_spaces_data_) {

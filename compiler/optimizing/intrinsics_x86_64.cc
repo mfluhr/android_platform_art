@@ -4162,6 +4162,9 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
 
   CpuRegister receiver = locations->InAt(1).AsRegister<CpuRegister>();
 
+  __ testl(receiver, receiver);
+  __ j(kEqual, slow_path->GetEntryLabel());
+
   // Using vtable_index register as temporary in subtype check. It will be overridden later.
   // If `method` is an interface method this check will fail.
   CpuRegister vtable_index = locations->GetTemp(0).AsRegister<CpuRegister>();

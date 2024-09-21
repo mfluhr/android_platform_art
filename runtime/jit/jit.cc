@@ -568,6 +568,7 @@ void Jit::NotifyZygoteCompilationDone() {
       /* start= */ 0,
       /* low_4gb= */ false,
       "boot-image-methods",
+      /* reuse= */ true,  // The mapping will be reused by the mremaps below.
       &error_str);
 
   if (!child_mapping_methods.IsValid()) {
@@ -640,10 +641,6 @@ void Jit::NotifyZygoteCompilationDone() {
   // Mark that compilation of boot classpath is done, and memory can now be
   // shared. Other processes will pick up this information.
   code_cache_->GetZygoteMap()->SetCompilationState(ZygoteCompilationState::kNotifiedOk);
-
-  // The private mapping created for this process has been mremaped. We can
-  // reset it.
-  child_mapping_methods.Reset();
 }
 
 class JitCompileTask final : public Task {
@@ -975,6 +972,7 @@ void Jit::MapBootImageMethods() {
       /* start= */ 0,
       /* low_4gb= */ false,
       "boot-image-methods",
+      /* reuse= */ true,  // The mapping will be reused by the mremaps below.
       &error_str);
 
   // We don't need the fd anymore.
@@ -1071,9 +1069,6 @@ void Jit::MapBootImageMethods() {
     offset += capacity;
   }
 
-  // The private mapping created for this process has been mremaped. We can
-  // reset it.
-  child_mapping_methods.Reset();
   LOG(INFO) << "Successfully mapped boot image methods";
 }
 
