@@ -768,15 +768,22 @@ std::optional<std::string> ThreadList::WaitForSuspendBarrier(AtomicInteger* barr
 #endif
   uint64_t timeout_ns =
       attempt_of_4 == 0 ? thread_suspend_timeout_ns_ : thread_suspend_timeout_ns_ / 4;
-  if (attempt_of_4 != 1 && getpriority(PRIO_PROCESS, 0 /* this thread */) > 0) {
-    // We're a low priority thread, and thus have a longer ANR timeout. Double the suspend
-    // timeout. To avoid the getpriority system call in the common case, we fail to double the
-    // first of 4 waits, but then triple the third one to compensate.
-    if (attempt_of_4 == 3) {
-      timeout_ns *= 3;
-    } else {
-      timeout_ns *= 2;
+
+  uint64_t avg_wait_multiplier = 1;
+  uint64_t wait_multiplier = 1;
+  if (attempt_of_4 != 1) {
+    // TODO: RequestSynchronousCheckpoint routinely passes attempt_of_4 = 0. Can
+    // we avoid the getpriority() call?
+    if (getpriority(PRIO_PROCESS, 0 /* this thread */) > 0) {
+      // We're a low priority thread, and thus have a longer ANR timeout. Increase the suspend
+      // timeout.
+      avg_wait_multiplier = 3;
     }
+    // To avoid the system calls in the common case, we fail to increase the first of 4 waits, but
+    // then compensate during the last one. This also allows somewhat longer thread monitoring
+    // before we time out.
+    wait_multiplier = attempt_of_4 == 4 ? 2 * avg_wait_multiplier - 1 : avg_wait_multiplier;
+    timeout_ns *= wait_multiplier;
   }
   bool collect_state = (t != 0 && (attempt_of_4 == 0 || attempt_of_4 == 4));
   int32_t cur_val = barrier->load(std::memory_order_acquire);
@@ -811,9 +818,14 @@ std::optional<std::string> ThreadList::WaitForSuspendBarrier(AtomicInteger* barr
       return std::nullopt;
     }
   }
+  uint64_t final_wait_time = NanoTime() - start_time;
+  uint64_t total_wait_time = attempt_of_4 == 0 ?
+                                 final_wait_time :
+                                 4 * final_wait_time * avg_wait_multiplier / wait_multiplier;
   return collect_state ? "Target states: [" + sampled_state + ", " + GetOsThreadStatQuick(t) + "]" +
-                             std::to_string(cur_val) + "@" + std::to_string((uintptr_t)barrier) +
-                             " Final wait time: " + PrettyDuration(NanoTime() - start_time) :
+                             (cur_val == 0 ? "(barrier now passed)" : "") +
+                             " Final wait time: " + PrettyDuration(final_wait_time) +
+                             "; appr. total wait time: " + PrettyDuration(total_wait_time) :
                          "";
 }
 
@@ -972,7 +984,7 @@ void ThreadList::SuspendAllInternal(Thread* self, SuspendReason reason) {
       // Second to the last attempt; Try to gather more information in case we time out.
       MutexLock mu(self, *Locks::thread_list_lock_);
       MutexLock mu2(self, *Locks::thread_suspend_count_lock_);
-      oss << "Unsuspended threads: ";
+      oss << "remaining threads: ";
       for (const auto& thread : list_) {
         if (thread != self && !thread->IsSuspended()) {
           culprit = thread;
@@ -989,16 +1001,15 @@ void ThreadList::SuspendAllInternal(Thread* self, SuspendReason reason) {
       } else {
         std::string name;
         culprit->GetThreadName(name);
-        oss << "Info for " << *culprit << ":";
+        oss << "Info for " << name << ": ";
         std::string thr_descr =
-            StringPrintf("%s tid: %d, state&flags: 0x%x, priority: %d,  barrier value: %d, ",
-                         name.c_str(),
-                         tid,
+            StringPrintf("state&flags: 0x%x, Java/native priority: %d/%d, barrier value: %d, ",
                          culprit->GetStateAndFlags(std::memory_order_relaxed).GetValue(),
                          culprit->GetNativePriority(),
+                         getpriority(PRIO_PROCESS /* really thread */, culprit->GetTid()),
                          pending_threads.load());
         oss << thr_descr << result.value();
-        culprit->AbortInThis("SuspendAll timeout: " + oss.str());
+        culprit->AbortInThis("SuspendAll timeout; " + oss.str());
       }
     }
   }
@@ -1204,13 +1215,13 @@ bool ThreadList::SuspendThread(Thread* self,
     // 'thread' should still have a suspend request pending, and hence stick around. Try to abort
     // there, since its stack trace is much more interesting than ours.
     std::string message = StringPrintf(
-        "%s timed out: %d (%s), state&flags: 0x%x, priority: %d,"
+        "%s timed out: %s: state&flags: 0x%x, Java/native priority: %d/%d,"
         " barriers: %p, ours: %p, barrier value: %d, nsusps: %d, ncheckpts: %d, thread_info: %s",
         func_name,
-        thread->GetTid(),
         name.c_str(),
         thread->GetStateAndFlags(std::memory_order_relaxed).GetValue(),
         thread->GetNativePriority(),
+        getpriority(PRIO_PROCESS /* really thread */, thread->GetTid()),
         first_barrier,
         &wrapped_barrier,
         wrapped_barrier.barrier_.load(),
