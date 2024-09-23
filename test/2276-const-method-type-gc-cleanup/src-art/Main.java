@@ -26,6 +26,8 @@ public class Main {
     private static final String LIBRARY_SEARCH_PATH = System.getProperty("java.library.path");
 
     public static void main(String[] args) throws Throwable {
+        System.loadLibrary(args[0]);
+
         Class<?> pathClassLoader = Class.forName("dalvik.system.PathClassLoader");
         if (pathClassLoader == null) {
             throw new AssertionError("Couldn't find path class loader class");
@@ -44,6 +46,16 @@ public class Main {
     }
 
     private static void callDoWork(Constructor constructor) throws Throwable {
+        WeakReference loaderRef = $noinline$doRealWork(constructor);
+
+        doUnload();
+
+        if (loaderRef.refersTo(null)) {
+            System.out.println("ClassLoader was unloaded");
+        }
+    }
+
+    private static WeakReference $noinline$doRealWork(Constructor constructor) throws Throwable {
         ClassLoader loader = (ClassLoader) constructor.newInstance(
                 DEX_FILE, LIBRARY_SEARCH_PATH, ClassLoader.getSystemClassLoader());
 
@@ -52,6 +64,8 @@ public class Main {
         if (workerClass.getClassLoader() != loader) {
             throw new AssertionError("The class was loaded by a wrong ClassLoader");
         }
+
+        ensureJitCompiled(workerClass, "doWork");
 
         Method m = workerClass.getDeclaredMethod("doWork");
         m.invoke(null);
@@ -62,16 +76,15 @@ public class Main {
         workerClass = null;
         loader = null;
 
-        doUnload();
-
-        if (loaderRef.refersTo(null)) {
-            System.out.println("ClassLoader was unloaded");
-        }
+        return loaderRef;
     }
 
     private static void doUnload() {
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 3; ++i) {
             Runtime.getRuntime().gc();
+            System.runFinalization();
         }
     }
+
+    public static native void ensureJitCompiled(Class<?> cls, String methodName);
 }

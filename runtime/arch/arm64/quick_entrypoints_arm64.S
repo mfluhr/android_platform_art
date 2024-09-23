@@ -2561,8 +2561,8 @@ ENTRY art_quick_record_entry_trace_event
     mov xIP1, #TRACE_BUFFER_SIZE
     add xIP1, xIP0, xIP1
 .Lupdate_entry:
-    str x0, [xIP1]
     sub xIP1, xIP1, 8
+    str x0, [xIP1]
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     ret
 END art_quick_record_entry_trace_event
@@ -2576,9 +2576,9 @@ ENTRY art_quick_record_exit_trace_event
     mov xIP1, #TRACE_BUFFER_SIZE
     add xIP1, xIP0, xIP1
 .Lupdate_entry_exit:
+    sub xIP1, xIP1, 8
     mov xIP0, #1
     str xIP0, [xIP1]
-    sub xIP1, xIP1, 8
     str xIP1, [xSELF, #TRACE_BUFFER_CURRENT_OFFSET]
     ret
 END art_quick_record_exit_trace_event

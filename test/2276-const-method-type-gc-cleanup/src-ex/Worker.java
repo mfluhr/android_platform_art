@@ -22,14 +22,12 @@ import java.lang.invoke.MethodType;
 
 public class Worker {
 
-    private static final int ITERATIONS_FOR_JIT = 30_000;
-
     private static void unreachable() {
         throw new Error("unreachable!");
     }
 
     private static void assertSame(Object lhs, Object rhs) {
-        if (lhs == rhs) {
+        if (lhs != rhs) {
             throw new AssertionError(lhs + " is not equal to " + rhs);
         }
     }
@@ -40,7 +38,7 @@ public class Worker {
         }
     }
 
-    public String workerToString(Worker worker) {
+    public static String workerToString(Worker worker) {
         return worker.toString();
     }
 
@@ -61,7 +59,7 @@ public class Worker {
     }
 
     @ConstantMethodHandle(
-        kind = ConstantMethodHandle.INVOKE_VIRTUAL,
+        kind = ConstantMethodHandle.INVOKE_STATIC,
         owner = "Worker",
         fieldOrMethodName = "workerToString",
         descriptor = "(LWorker;)Ljava/lang/String;")
@@ -72,15 +70,13 @@ public class Worker {
 
     public static void doWork() {
         System.out.println("doWork()");
-        for (int i = 0; i < ITERATIONS_FOR_JIT; ++i) {
-            MethodType methodType = methodType();
-            MethodHandle methodHandle = methodHandle();
+        MethodType methodType = methodType();
+        MethodHandle methodHandle = methodHandle();
 
-            assertNonNull(methodType);
-            assertNonNull(methodHandle);
-            assertSame(methodType, methodHandle.type());
+        assertNonNull(methodType);
+        assertNonNull(methodHandle);
+        assertSame(methodType, methodHandle.type());
 
-            assertNonNull(returnStringMethodType());
-        }
+        assertNonNull(returnStringMethodType());
     }
 }
