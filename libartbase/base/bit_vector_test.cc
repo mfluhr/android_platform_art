@@ -29,7 +29,7 @@ template <typename StorageType, StorageType kWord0, StorageType kWord1>
 void TestBitVectorViewSetBitAndClearBit() {
   static constexpr StorageType kStorage[2] = { kWord0, kWord1 };
   static constexpr size_t kSizeInBits = 2 * BitSizeOf<StorageType>();
-  static constexpr BitVectorView<const StorageType> kRbv(kStorage, kSizeInBits);
+  static constexpr BitVectorView<const StorageType> kBvv(kStorage, kSizeInBits);
   auto get_bit_from_params = [](size_t index) constexpr {
     StorageType word = (index < BitSizeOf<StorageType>()) ? kWord0 : kWord1;
     size_t shift = index % BitSizeOf<StorageType>();
@@ -38,42 +38,46 @@ void TestBitVectorViewSetBitAndClearBit() {
   auto verify_is_bit_set = [get_bit_from_params]() constexpr {
     for (size_t index = 0; index != kSizeInBits; ++index) {
       // If the `CHECK_EQ()` fails, the `static_assert` evaluation fails at compile time.
-      CHECK_EQ(get_bit_from_params(index), kRbv.IsBitSet(index)) << index;
+      CHECK_EQ(get_bit_from_params(index), kBvv.IsBitSet(index)) << index;
     }
     return true;
   };
   static_assert(verify_is_bit_set());
 
-  auto verify_size_in_bits = []() constexpr {
+  auto verify_size = []() constexpr {
     for (size_t size = 0; size != kSizeInBits; ++size) {
       // If the `CHECK_EQ()` fails, the `static_assert` evaluation fails at compile time.
       CHECK_EQ(size, BitVectorView(kStorage, size).SizeInBits());
+      size_t words = RoundUp(size, BitSizeOf<StorageType>()) / BitSizeOf<StorageType>();
+      CHECK_EQ(words, BitVectorView(kStorage, size).SizeInWords());
     }
     return true;
   };
-  static_assert(verify_size_in_bits());
+  static_assert(verify_size());
 
   StorageType storage[2] = {0u, 0u};
   size_t size_in_bits = 2 * BitSizeOf<StorageType>();
-  BitVectorView<StorageType> rbv(storage, size_in_bits);
+  BitVectorView<StorageType> bvv(storage, size_in_bits);
   for (size_t index = 0; index != size_in_bits; ++index) {
-    ASSERT_FALSE(rbv.IsBitSet(index));
+    ASSERT_FALSE(bvv.IsBitSet(index));
   }
   // Set one bit at a time, then clear it.
   for (size_t bit_to_set = 0; bit_to_set != size_in_bits; ++bit_to_set) {
-    rbv.SetBit(bit_to_set);
+    bvv.SetBit(bit_to_set);
     for (size_t index = 0; index != size_in_bits; ++index) {
-      ASSERT_EQ(index == bit_to_set, rbv.IsBitSet(index));
+      ASSERT_EQ(index == bit_to_set, bvv.IsBitSet(index));
     }
-    rbv.ClearBit(bit_to_set);
+    ASSERT_TRUE(bvv.IsAnyBitSet());
+    bvv.ClearBit(bit_to_set);
     for (size_t index = 0; index != size_in_bits; ++index) {
-      ASSERT_FALSE(rbv.IsBitSet(index));
+      ASSERT_FALSE(bvv.IsBitSet(index));
     }
+    ASSERT_FALSE(bvv.IsAnyBitSet());
   }
   // Set bits for `kWord0` and `kWord1`.
   for (size_t index = 0; index != size_in_bits; ++index) {
     if (get_bit_from_params(index)) {
-      rbv.SetBit(index);
+      bvv.SetBit(index);
     }
   }
   ASSERT_EQ(kWord0, storage[0]);
@@ -81,7 +85,7 @@ void TestBitVectorViewSetBitAndClearBit() {
   // Clear all bits that are already clear.
   for (size_t index = 0; index != size_in_bits; ++index) {
     if (!get_bit_from_params(index)) {
-      rbv.ClearBit(index);
+      bvv.ClearBit(index);
     }
   }
   ASSERT_EQ(kWord0, storage[0]);
@@ -89,7 +93,7 @@ void TestBitVectorViewSetBitAndClearBit() {
   // Clear all bits that are set.
   for (size_t index = 0; index != size_in_bits; ++index) {
     if (get_bit_from_params(index)) {
-      rbv.ClearBit(index);
+      bvv.ClearBit(index);
     }
   }
   ASSERT_EQ(0u, storage[0]);
@@ -111,6 +115,66 @@ TEST(BitVectorView, SizeT) {
   TestBitVectorViewSetBitAndClearBit<size_t,
                                      static_cast<size_t>(UINT64_C(0xfedcba0987654321)),
                                      static_cast<size_t>(UINT64_C(0x1234567890abcdef))>();
+}
+
+TEST(BitVectorView, ConversionToConstStorage) {
+  uint32_t storage[] = {1u, 2u, 3u};
+  size_t size = 2 * BitSizeOf<uint32_t>() + MinimumBitsToStore(storage[2]);
+  BitVectorView<uint32_t> bvv(storage, size);
+  auto is_bit_set = [](BitVectorView<const uint32_t> cbvv, size_t index) {
+    return cbvv.IsBitSet(index);
+  };
+  for (size_t index = 0; index != size; ++index) {
+    ASSERT_EQ(bvv.IsBitSet(index), is_bit_set(bvv, index));
+  }
+}
+
+TEST(BitVectorView, DefaultConstructor) {
+  BitVectorView<> bvv;
+  ASSERT_EQ(0u, bvv.SizeInBits());
+  ASSERT_EQ(0u, bvv.SizeInWords());
+}
+
+TEST(BitVectorView, ClearAllBits) {
+  uint32_t storage[] = {1u, 2u, 0xffffffffu};
+  size_t size = 2 * BitSizeOf<uint32_t>() + 1u;
+  BitVectorView<uint32_t> bvv(storage, size);  // Construction allowed with bogus trailing bits.
+  ASSERT_EQ(1u, storage[0]);
+  ASSERT_EQ(2u, storage[1]);
+  ASSERT_EQ(0xffffffffu, storage[2]);
+  bvv.ClearAllBits();
+  ASSERT_EQ(0u, storage[0]);
+  ASSERT_EQ(0u, storage[1]);
+  ASSERT_EQ(0u, storage[2]);
+}
+
+TEST(BitVectorView, SetInitialBits) {
+  uint32_t storage[] = {1u, 2u, 0xffffffffu};
+  size_t size = 2 * BitSizeOf<uint32_t>() + 1u;
+  BitVectorView<uint32_t> bvv(storage, size);  // Construction allowed with bogus trailing bits.
+  ASSERT_EQ(1u, storage[0]);
+  ASSERT_EQ(2u, storage[1]);
+  ASSERT_EQ(0xffffffffu, storage[2]);
+  bvv.SetInitialBits(40u);
+  ASSERT_EQ(0xffffffffu, storage[0]);
+  ASSERT_EQ(0xffu, storage[1]);
+  ASSERT_EQ(0u, storage[2]);
+  bvv.SetInitialBits(0u);
+  ASSERT_EQ(0u, storage[0]);
+  ASSERT_EQ(0u, storage[1]);
+  ASSERT_EQ(0u, storage[2]);
+  bvv.SetInitialBits(17u);
+  ASSERT_EQ(0x1ffffu, storage[0]);
+  ASSERT_EQ(0u, storage[1]);
+  ASSERT_EQ(0u, storage[2]);
+  bvv.SetInitialBits(64u);
+  ASSERT_EQ(0xffffffffu, storage[0]);
+  ASSERT_EQ(0xffffffffu, storage[1]);
+  ASSERT_EQ(0u, storage[2]);
+  bvv.SetInitialBits(65u);
+  ASSERT_EQ(0xffffffffu, storage[0]);
+  ASSERT_EQ(0xffffffffu, storage[1]);
+  ASSERT_EQ(1u, storage[2]);
 }
 
 TEST(BitVector, Test) {

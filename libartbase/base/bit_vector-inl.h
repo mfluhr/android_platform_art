@@ -20,10 +20,35 @@
 #include "bit_vector.h"
 
 #include <android-base/logging.h>
+#include <cstring>
 
 #include "bit_utils.h"
 
 namespace art {
+
+template <typename StorageType>
+inline void BitVectorView<StorageType>::ClearAllBits() {
+  // Note: We do not `DCheckTrailingBitsClear()` here as this may be the initial call
+  // to clear the storage and the trailing bits may not be clear after allocation.
+  memset(storage_, 0, SizeInWords() * sizeof(WordType));
+}
+
+template <typename StorageType>
+inline void BitVectorView<StorageType>::SetInitialBits(uint32_t num_bits) {
+  // Note: We do not `DCheckTrailingBitsClear()` here as this may be the initial call
+  // to clear the storage and the trailing bits may not be clear after allocation.
+  DCHECK_LE(num_bits, SizeInBits());
+  size_t words = WordIndex(num_bits);
+  // Set initial full words.
+  std::fill_n(storage_, words, std::numeric_limits<WordType>::max());
+  if (num_bits % kWordBits != 0) {
+    // Set all bits below the first clear bit in the boundary storage word.
+    storage_[words] = BitMask(num_bits) - static_cast<StorageType>(1u);
+    ++words;
+  }
+  // Set clear words if any.
+  std::fill_n(storage_ + words, SizeInWords() - words, static_cast<StorageType>(0));
+}
 
 inline bool BitVector::IndexIterator::operator==(const IndexIterator& other) const {
   DCHECK(bit_storage_ == other.bit_storage_);
@@ -86,7 +111,7 @@ inline BitVector::IndexIterator BitVector::IndexContainer::end() const {
 }
 
 inline void BitVector::ClearAllBits() {
-  memset(storage_, 0, storage_size_ * kWordBytes);
+  AsView().ClearAllBits();
 }
 
 inline bool BitVector::Equal(const BitVector* src) const {

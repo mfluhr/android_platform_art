@@ -289,7 +289,7 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
   void ComputeDominanceInformation();
   void ClearDominanceInformation();
   void ClearLoopInformation();
-  void FindBackEdges(ArenaBitVector* visited);
+  void FindBackEdges(/*out*/ BitVectorView<size_t> visited);
   GraphAnalysisResult BuildDominatorTree();
   GraphAnalysisResult RecomputeDominatorTree();
   void SimplifyCFG();
@@ -545,8 +545,8 @@ class HGraph : public ArenaObject<kArenaAllocGraph> {
   bool IsUsefulOptimizing() const { return useful_optimizing_; }
 
  private:
-  void RemoveDeadBlocksInstructionsAsUsersAndDisconnect(const ArenaBitVector& visited) const;
-  void RemoveDeadBlocks(const ArenaBitVector& visited);
+  void RemoveDeadBlocksInstructionsAsUsersAndDisconnect(BitVectorView<const size_t> visited) const;
+  void RemoveDeadBlocks(BitVectorView<const size_t> visited);
 
   template <class InstructionType, typename ValueType>
   InstructionType* CreateConstant(ValueType value,
@@ -1133,7 +1133,7 @@ class HBasicBlock : public ArenaObject<kArenaAllocBasicBlock> {
   // Disconnects `this` from all its successors and updates their phis, if the successors have them.
   // If `visited` is provided, it will use the information to know if a successor is reachable and
   // skip updating those phis.
-  void DisconnectFromSuccessors(const ArenaBitVector* visited = nullptr);
+  void DisconnectFromSuccessors(BitVectorView<const size_t> visited = {});
 
   // Removes the catch phi uses of the instructions in `this`, and then remove the instruction
   // itself. If `building_dominator_tree` is true, it will not remove the instruction as user, since

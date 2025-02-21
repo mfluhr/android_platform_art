@@ -409,8 +409,8 @@ void CodeSinking::SinkCodeToUncommonBranch(HBasicBlock* end_block) {
   HBasicBlock* common_dominator = finder.Get();
 
   // Step (2): iterate over the worklist to find sinking candidates.
-  ArenaBitVector instructions_that_can_move(
-      &allocator, number_of_instructions, /* expandable= */ false);
+  BitVectorView<size_t> instructions_that_can_move =
+      ArenaBitVector::CreateFixedSize(&allocator, number_of_instructions);
   ScopedArenaVector<ScopedArenaVector<HInstruction*>> instructions_to_move(
       graph_->GetBlocks().size(),
       ScopedArenaVector<HInstruction*>(allocator.Adapter(kArenaAllocMisc)),

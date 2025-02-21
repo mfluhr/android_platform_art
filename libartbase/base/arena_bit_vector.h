@@ -18,7 +18,6 @@
 #define ART_LIBARTBASE_BASE_ARENA_BIT_VECTOR_H_
 
 #include <algorithm>
-#include <cstring>
 
 #include "arena_object.h"
 #include "base/arena_allocator.h"
@@ -63,13 +62,13 @@ class ArenaBitVector : public BitVector, public ArenaObject<kArenaAllocGrowableB
                   std::is_same_v<Allocator, ScopedArenaAllocator>);
     size_t num_elements = BitVectorView<StorageType>::BitsToWords(bits);
     StorageType* storage = allocator->template AllocArray<StorageType>(num_elements, kind);
+    BitVectorView<StorageType> result(storage, bits);
     if (std::is_same_v<Allocator, ScopedArenaAllocator>) {
-      memset(storage, 0, num_elements * sizeof(StorageType));
+      result.ClearAllBits();
     } else {
-      DCHECK_EQ(std::count(storage, storage + num_elements, static_cast<StorageType>(0)),
-                num_elements);
+      DCHECK(!result.IsAnyBitSet());
     }
-    return {storage, bits};
+    return result;
   }
 };
 
