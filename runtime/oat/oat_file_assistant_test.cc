@@ -26,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include "android-base/scopeguard.h"
@@ -42,6 +43,7 @@
 #include "oat_file.h"
 #include "oat_file_assistant_context.h"
 #include "oat_file_manager.h"
+#include "obj_ptr.h"
 #include "scoped_thread_state_change.h"
 #include "thread.h"
 
@@ -2181,10 +2183,26 @@ TEST_P(OatFileAssistantTest, ShouldRecompileForImageFromSpeedProfile) {
             oat_file_assistant.GetDexOptNeeded(CompilerFilter::kVerify));
 }
 
-// Test that GetLocation of a dex file is the same whether the dex
-// filed is backed by an oat file or not.
+class CollectDexCacheVisitor : public DexCacheVisitor {
+ public:
+  explicit CollectDexCacheVisitor(
+      std::unordered_map<std::string, ObjPtr<mirror::DexCache>>& dex_caches)
+      : dex_caches_(dex_caches) {}
+
+  void Visit(ObjPtr<mirror::DexCache> dex_cache)
+      REQUIRES_SHARED(Locks::dex_lock_, Locks::mutator_lock_) override {
+    dex_caches_[dex_cache->GetDexFile()->GetLocation()] = dex_cache;
+  }
+
+ private:
+  std::unordered_map<std::string, ObjPtr<mirror::DexCache>>& dex_caches_;
+};
+
+// Test that, no matter the dex file is backed by an oat file or not, the location fields in
+// DexFile, OatDexFile, and DexCache are the same as the actual dex location.
 TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
   std::string dex_location = GetScratchDir() + "/TestDex.jar";
+  std::string dex_location_multidex = dex_location + "!classes2.dex";
   std::string oat_location = GetOdexDir() + "/TestDex.odex";
   std::string art_location = GetOdexDir() + "/TestDex.art";
 
@@ -2192,7 +2210,7 @@ TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
   Thread::Current()->TransitionFromSuspendedToRunnable();
   runtime_->Start();
 
-  Copy(GetDexSrc1(), dex_location);
+  Copy(GetMultiDexSrc1(), dex_location);
 
   std::vector<std::unique_ptr<const DexFile>> dex_files;
   std::vector<std::string> error_msgs;
@@ -2204,9 +2222,11 @@ TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
       /*dex_elements=*/nullptr,
       &oat_file,
       &error_msgs);
-  ASSERT_EQ(dex_files.size(), 1u) << android::base::Join(error_msgs, "\n");
+  ASSERT_EQ(dex_files.size(), 2u) << android::base::Join(error_msgs, "\n");
   EXPECT_EQ(oat_file, nullptr);
-  std::string stored_dex_location = dex_files[0]->GetLocation();
+  EXPECT_EQ(dex_files[0]->GetLocation(), dex_location);
+  EXPECT_EQ(dex_files[1]->GetLocation(), dex_location_multidex);
+
   {
     // Create the oat file.
     std::vector<std::string> args;
@@ -2223,10 +2243,24 @@ TEST_F(OatFileAssistantBaseTest, GetDexLocation) {
       /*dex_elements=*/nullptr,
       &oat_file,
       &error_msgs);
-  ASSERT_EQ(dex_files.size(), 1u) << android::base::Join(error_msgs, "\n");
+  ASSERT_EQ(dex_files.size(), 2u) << android::base::Join(error_msgs, "\n");
   ASSERT_NE(oat_file, nullptr);
-  std::string oat_stored_dex_location = dex_files[0]->GetLocation();
-  EXPECT_EQ(oat_stored_dex_location, stored_dex_location);
+  EXPECT_EQ(dex_files[0]->GetLocation(), dex_location);
+  EXPECT_EQ(dex_files[1]->GetLocation(), dex_location_multidex);
+  EXPECT_EQ(oat_file->GetOatDexFiles()[0]->GetLocation(), dex_location);
+  EXPECT_EQ(oat_file->GetOatDexFiles()[1]->GetLocation(), dex_location_multidex);
+
+  std::unordered_map<std::string, ObjPtr<mirror::DexCache>> dex_caches;
+  CollectDexCacheVisitor visitor(dex_caches);
+  ClassLinker* class_linker = Runtime::Current()->GetClassLinker();
+  {
+    ScopedObjectAccess soa(Thread::Current());
+    ReaderMutexLock mu(Thread::Current(), *Locks::dex_lock_);
+    class_linker->VisitDexCaches(&visitor);
+    EXPECT_EQ(dex_caches[dex_location]->GetLocation()->ToModifiedUtf8(), dex_location);
+    EXPECT_EQ(dex_caches[dex_location_multidex]->GetLocation()->ToModifiedUtf8(),
+              dex_location_multidex);
+  }
 }
 
 // Test that a dex file on the platform location gets the right hiddenapi domain,
