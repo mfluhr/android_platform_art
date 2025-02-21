@@ -4891,10 +4891,15 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
         // Only moving and non-moving spaces are relevant as the remaining
         // spaces are all immune-spaces which anyways use card-table.
         if (HasAddress(obj)) {
-          // Objects in young-gen referring to other young-gen objects doesn't
+          // Objects in young-gen that refer to other young-gen objects don't
           // need to be tracked.
-          if (reinterpret_cast<uint8_t*>(obj) < mid_gen_end_) {
-            card_table->MarkCard(PostCompactAddress(obj, black_dense_end_, moving_space_end_));
+          // The vector contains pre-compact object references whereas
+          // 'mid_gen_end_' is post-compact boundary. So compare against
+          // pist-compact object reference.
+          mirror::Object* compacted_obj =
+              PostCompactAddress(obj, black_dense_end_, moving_space_end_);
+          if (reinterpret_cast<uint8_t*>(compacted_obj) < mid_gen_end_) {
+            card_table->MarkCard(compacted_obj);
           }
         } else if (non_moving_space_->HasAddress(obj)) {
           card_table->MarkCard(obj);
