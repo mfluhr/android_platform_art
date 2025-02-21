@@ -116,11 +116,6 @@ OatFileAssistant::OatFileAssistant(const char* dex_location,
       isa_(isa),
       load_executable_(load_executable),
       only_load_trusted_executable_(only_load_trusted_executable),
-      odex_(this, /*is_oat_location=*/false),
-      oat_(this, /*is_oat_location=*/true),
-      vdex_for_odex_(this, /*is_oat_location=*/false),
-      vdex_for_oat_(this, /*is_oat_location=*/true),
-      dm_(this, /*is_oat_location=*/false),
       zip_fd_(zip_fd) {
   CHECK(dex_location != nullptr) << "OatFileAssistant: null dex location";
   CHECK_IMPLIES(load_executable, context != nullptr) << "Loading executable without a context";
@@ -167,40 +162,80 @@ OatFileAssistant::OatFileAssistant(const char* dex_location,
   // Get the odex filename.
   std::string error_msg;
   std::string odex_file_name;
-  if (DexLocationToOdexFilename(dex_location_, isa_, &odex_file_name, &error_msg)) {
-    odex_.Reset(odex_file_name, UseFdToReadFiles(), zip_fd, vdex_fd, oat_fd);
-    std::string vdex_file_name = GetVdexFilename(odex_file_name);
-    // We dup FDs as the odex_ will claim ownership.
-    vdex_for_odex_.Reset(vdex_file_name,
-                         UseFdToReadFiles(),
-                         DupCloexec(zip_fd),
-                         DupCloexec(vdex_fd),
-                         DupCloexec(oat_fd));
-  } else {
+  if (!DexLocationToOdexFilename(dex_location_, isa_, &odex_file_name, &error_msg)) {
     LOG(WARNING) << "Failed to determine odex file name: " << error_msg;
   }
 
+  // Get the oat filename.
+  std::string oat_file_name;
   if (!UseFdToReadFiles()) {
-    // Get the oat filename.
-    std::string oat_file_name;
-    if (DexLocationToOatFilename(dex_location_,
-                                 isa_,
-                                 GetRuntimeOptions().deny_art_apex_data_files,
-                                 &oat_file_name,
-                                 &error_msg)) {
-      oat_.Reset(oat_file_name, /*use_fd=*/false);
-      std::string vdex_file_name = GetVdexFilename(oat_file_name);
-      vdex_for_oat_.Reset(vdex_file_name, UseFdToReadFiles(), zip_fd, vdex_fd, oat_fd);
-      std::string dm_file_name = GetDmFilename(dex_location);
-      dm_.Reset(dm_file_name, UseFdToReadFiles(), zip_fd, vdex_fd, oat_fd);
-    } else if (kIsTargetAndroid) {
-      // No need to warn on host. We are probably in oatdump, where we only need OatFileAssistant to
-      // validate BCP checksums.
-      LOG(WARNING) << "Failed to determine oat file name for dex location " << dex_location_ << ": "
-                   << error_msg;
+    if (!DexLocationToOatFilename(dex_location_,
+                                  isa_,
+                                  GetRuntimeOptions().deny_art_apex_data_files,
+                                  &oat_file_name,
+                                  &error_msg)) {
+      if (kIsTargetAndroid) {
+        // No need to warn on host. We are probably in oatdump, where we only need OatFileAssistant
+        // to validate BCP checksums.
+        LOG(WARNING) << "Failed to determine oat file name for dex location " << dex_location_
+                     << ": " << error_msg;
+      }
     }
   }
+
+  if (!oat_file_name.empty() && !UseFdToReadFiles()) {
+    // The oat location. This is for apps on readonly filesystems (typically, system apps and
+    // incremental apps). This must be prioritized over the odex location, because the odex location
+    // probably has the dexpreopt artifacts for such apps.
+    info_list_.push_back(std::make_unique<OatFileInfoBackedByOat>(this,
+                                                                  oat_file_name,
+                                                                  /*is_oat_location=*/true,
+                                                                  /*use_fd=*/false));
+  }
+
+  if (!odex_file_name.empty()) {
+    // The odex location, which is the most common.
+    info_list_.push_back(std::make_unique<OatFileInfoBackedByOat>(this,
+                                                                  odex_file_name,
+                                                                  /*is_oat_location=*/false,
+                                                                  UseFdToReadFiles(),
+                                                                  zip_fd,
+                                                                  vdex_fd,
+                                                                  oat_fd));
+  }
+
+  // When there is no odex/oat available (e.g., they are both out of date), we look for a useable
+  // vdex file.
+
+  if (!oat_file_name.empty() && !UseFdToReadFiles()) {
+    // The vdex-only file next to 'oat_`.
+    info_list_.push_back(std::make_unique<OatFileInfoBackedByVdex>(this,
+                                                                   GetVdexFilename(oat_file_name),
+                                                                   /*is_oat_location=*/true,
+                                                                   /*use_fd=*/false));
+  }
+
+  if (!odex_file_name.empty()) {
+    // The vdex-only file next to `odex_`.
+    // We dup FDs as the odex_ will claim ownership.
+    info_list_.push_back(std::make_unique<OatFileInfoBackedByVdex>(this,
+                                                                   GetVdexFilename(odex_file_name),
+                                                                   /*is_oat_location=*/false,
+                                                                   UseFdToReadFiles(),
+                                                                   DupCloexec(zip_fd),
+                                                                   DupCloexec(vdex_fd)));
+  }
+
+  if (!UseFdToReadFiles()) {
+    // A .dm file may be available, look for it.
+    info_list_.push_back(
+        std::make_unique<OatFileInfoBackedByDm>(this, GetDmFilename(dex_location_)));
+  }
 }
+
+// Must be defined outside of the class, to prevent inlining, which causes callers to access hidden
+// symbols used by the destructor. `NOINLINE` doesn't work.
+OatFileAssistant::~OatFileAssistant() = default;
 
 std::unique_ptr<OatFileAssistant> OatFileAssistant::Create(
     const std::string& filename,
@@ -293,7 +328,7 @@ int OatFileAssistant::GetDexOptNeeded(CompilerFilter::Filter target_compiler_fil
   }
   DexOptNeeded dexopt_needed = info.GetDexOptNeeded(
       target_compiler_filter, GetDexOptTrigger(target_compiler_filter, profile_changed, downgrade));
-  if (dexopt_needed != kNoDexOptNeeded && (&info == &dm_)) {
+  if (dexopt_needed != kNoDexOptNeeded && info.GetType() == OatFileType::kDm) {
     // The usable vdex file is in the DM file. This information cannot be encoded in the integer.
     // Return kDex2OatFromScratch so that neither the vdex in the "oat" location nor the vdex in the
     // "odex" location will be picked by installd.
@@ -380,9 +415,23 @@ std::optional<bool> OatFileAssistant::HasDexFiles(std::string* error_msg) {
   return checksum.has_value();
 }
 
-OatFileAssistant::OatStatus OatFileAssistant::OdexFileStatus() { return odex_.Status(); }
+OatFileAssistant::OatStatus OatFileAssistant::OdexFileStatus() {
+  for (const std::unique_ptr<OatFileInfo>& info : info_list_) {
+    if (info->GetType() == OatFileType::kOat && !info->IsOatLocation()) {
+      return info->Status();
+    }
+  }
+  return kOatCannotOpen;
+}
 
-OatFileAssistant::OatStatus OatFileAssistant::OatFileStatus() { return oat_.Status(); }
+OatFileAssistant::OatStatus OatFileAssistant::OatFileStatus() {
+  for (const std::unique_ptr<OatFileInfo>& info : info_list_) {
+    if (info->GetType() == OatFileType::kOat && info->IsOatLocation()) {
+      return info->Status();
+    }
+  }
+  return kOatCannotOpen;
+}
 
 bool OatFileAssistant::DexChecksumUpToDate(const OatFile& file, std::string* error_msg) {
   if (!file.ContainsDexCode()) {
@@ -787,59 +836,39 @@ bool OatFileAssistant::IsPrimaryBootImageUsable() {
 OatFileAssistant::OatFileInfo& OatFileAssistant::GetBestInfo() {
   ScopedTrace trace("GetBestInfo");
 
-  auto log_status = [&](std::string_view location, OatFileInfo* info) {
-    if (!VLOG_IS_ON(oat) || !info->FileExists()) {
-      return;
+  for (const std::unique_ptr<OatFileInfo>& info : info_list_) {
+    if (VLOG_IS_ON(oat) && info->FileExists()) {
+      std::string error_msg;
+      OatStatus status = info->Status(&error_msg);
+      std::string message = ART_FORMAT("GetBestInfo: {} ({}) is {}",
+                                       info->GetLocationDebugString(),
+                                       info->DisplayFilename(),
+                                       fmt::streamed(status));
+      const OatFile* file = info->GetFile();
+      if (file != nullptr) {
+        message += ART_FORMAT(" with filter '{}' executable '{}'",
+                              fmt::streamed(file->GetCompilerFilter()),
+                              file->IsExecutable());
+      }
+      if (!info->IsUseable()) {
+        message += ": " + error_msg;
+      }
+      VLOG(oat) << message;
     }
-    std::string error_msg;
-    OatStatus status = info->Status(&error_msg);
-    std::string message = ART_FORMAT(
-        "GetBestInfo: {} ({}) is {}", location, info->DisplayFilename(), fmt::streamed(status));
-    const OatFile* file = info->GetFile();
-    if (file != nullptr) {
-      message += ART_FORMAT(" with filter '{}' executable '{}'",
-                            fmt::streamed(file->GetCompilerFilter()),
-                            file->IsExecutable());
+
+    if (info->IsUseable()) {
+      return *info;
     }
-    if (!info->IsUseable()) {
-      message += ": " + error_msg;
-    }
-    VLOG(oat) << message;
-  };
-
-  // If the oat location is useable, take it. This must be an app on a readonly filesystem
-  // (typically, a system app or an incremental app). This must be prioritized over the odex
-  // location, because the odex location probably has the dexpreopt artifacts.
-  log_status("odex in dalvik-cache", &oat_);
-  if (oat_.IsUseable()) {
-    return oat_;
   }
 
-  // The odex location, which is the most common.
-  log_status("odex next to the dex file", &odex_);
-  if (odex_.IsUseable()) {
-    return odex_;
-  }
-
-  // No odex/oat available, look for a useable vdex file.
-  log_status("vdex in dalvik-cache", &vdex_for_oat_);
-  if (vdex_for_oat_.IsUseable()) {
-    return vdex_for_oat_;
-  }
-  log_status("vdex next to the dex file", &vdex_for_odex_);
-  if (vdex_for_odex_.IsUseable()) {
-    return vdex_for_odex_;
-  }
-
-  // A .dm file may be available, look for it.
-  log_status("dm", &dm_);
-  if (dm_.IsUseable()) {
-    return dm_;
-  }
-
-  // No usable artifact. Pick the odex if it exists, or the oat if not.
+  // No usable artifact. Pick the oat or odex if they exist, or empty info if not.
   VLOG(oat) << ART_FORMAT("GetBestInfo: {} has no usable artifacts", dex_location_);
-  return (odex_.Status() == kOatCannotOpen) ? oat_ : odex_;
+  for (const std::unique_ptr<OatFileInfo>& info : info_list_) {
+    if (info->GetType() == OatFileType::kOat && info->Status() != kOatCannotOpen) {
+      return *info;
+    }
+  }
+  return empty_info_;
 }
 
 std::unique_ptr<gc::space::ImageSpace> OatFileAssistant::OpenImageSpace(const OatFile* oat_file) {
@@ -857,18 +886,12 @@ std::unique_ptr<gc::space::ImageSpace> OatFileAssistant::OpenImageSpace(const Oa
   return ret;
 }
 
-OatFileAssistant::OatFileInfo::OatFileInfo(OatFileAssistant* oat_file_assistant,
-                                           bool is_oat_location)
-    : oat_file_assistant_(oat_file_assistant), is_oat_location_(is_oat_location) {}
+bool OatFileAssistant::OatFileInfo::IsOatLocation() const { return is_oat_location_; }
 
-bool OatFileAssistant::OatFileInfo::IsOatLocation() { return is_oat_location_; }
+const std::string* OatFileAssistant::OatFileInfo::Filename() const { return &filename_; }
 
-const std::string* OatFileAssistant::OatFileInfo::Filename() {
-  return filename_provided_ ? &filename_ : nullptr;
-}
-
-const char* OatFileAssistant::OatFileInfo::DisplayFilename() {
-  return filename_provided_ ? filename_.c_str() : "unknown";
+const char* OatFileAssistant::OatFileInfo::DisplayFilename() const {
+  return !filename_.empty() ? filename_.c_str() : "unknown";
 }
 
 bool OatFileAssistant::OatFileInfo::IsUseable() {
@@ -937,14 +960,19 @@ OatFileAssistant::DexOptNeeded OatFileAssistant::OatFileInfo::GetDexOptNeeded(
 }
 
 bool OatFileAssistant::OatFileInfo::FileExists() const {
-  return use_fd_ || (!filename_.empty() && OS::FileExists(filename_.c_str()));
+  return !filename_.empty() && OS::FileExists(filename_.c_str());
+}
+
+bool OatFileAssistant::OatFileInfoBackedByOat::FileExists() const {
+  return use_fd_ || OatFileInfo::FileExists();
+}
+
+bool OatFileAssistant::OatFileInfoBackedByVdex::FileExists() const {
+  return use_fd_ || OatFileInfo::FileExists();
 }
 
 const OatFile* OatFileAssistant::OatFileInfo::GetFile(/*out*/ std::string* error_msg) {
   CHECK(!file_released_) << "GetFile called after oat file released.";
-  if (!filename_provided_) {
-    return nullptr;
-  }
 
   if (!file_.has_value()) {
     if (LocationIsOnArtApexData(filename_) &&
@@ -963,87 +991,92 @@ const OatFile* OatFileAssistant::OatFileInfo::GetFile(/*out*/ std::string* error
   return file_->first.get();
 }
 
-std::unique_ptr<OatFile> OatFileAssistant::OatFileInfo::LoadFile(std::string* error_msg) const {
-  if (filename_.ends_with(kVdexExtension)) {
-    // Check to see if there is a vdex file we can make use of.
-    std::unique_ptr<VdexFile> vdex;
-    if (use_fd_) {
-      if (vdex_fd_ < 0) {
-        *error_msg = "vdex_fd not provided";
-        return nullptr;
-      }
-      struct stat s;
-      if (fstat(vdex_fd_, &s) < 0) {
-        *error_msg = ART_FORMAT("Failed getting length of the vdex file: {}", strerror(errno));
-        return nullptr;
-      }
-      vdex = VdexFile::Open(vdex_fd_,
-                            s.st_size,
-                            filename_,
-                            /*low_4gb=*/false,
-                            error_msg);
-    } else {
-      vdex = VdexFile::Open(filename_,
-                            /*low_4gb=*/false,
-                            error_msg);
-    }
-    if (vdex == nullptr) {
-      *error_msg = ART_FORMAT("Unable to open vdex file: {}", *error_msg);
-      return nullptr;
-    }
-    return std::unique_ptr<OatFile>(OatFile::OpenFromVdex(zip_fd_,
-                                                          std::move(vdex),
-                                                          oat_file_assistant_->dex_location_,
-                                                          oat_file_assistant_->context_,
-                                                          error_msg));
-  } else if (filename_.ends_with(kDmExtension)) {
-    // Check to see if there is a vdex file we can make use of.
-    std::unique_ptr<ZipArchive> dm_file(ZipArchive::Open(filename_.c_str(), error_msg));
-    if (dm_file == nullptr) {
-      return nullptr;
-    }
-    std::unique_ptr<VdexFile> vdex(VdexFile::OpenFromDm(filename_, *dm_file, error_msg));
-    if (vdex == nullptr) {
-      return nullptr;
-    }
-    return std::unique_ptr<OatFile>(OatFile::OpenFromVdex(/*zip_fd=*/-1,
-                                                          std::move(vdex),
-                                                          oat_file_assistant_->dex_location_,
-                                                          oat_file_assistant_->context_,
-                                                          error_msg));
-  } else {
-    bool executable = oat_file_assistant_->load_executable_;
-    if (executable && oat_file_assistant_->only_load_trusted_executable_) {
-      executable = LocationIsTrusted(filename_, /*trust_art_apex_data_files=*/true);
-    }
-
-    if (use_fd_) {
-      if (oat_fd_ < 0 || vdex_fd_ < 0) {
-        *error_msg = "oat_fd or vdex_fd not provided";
-        return nullptr;
-      }
-      ArrayRef<const std::string> dex_locations(&oat_file_assistant_->dex_location_,
-                                                /*size=*/1u);
-      return std::unique_ptr<OatFile>(OatFile::Open(zip_fd_,
-                                                    vdex_fd_,
-                                                    oat_fd_,
-                                                    filename_,
-                                                    executable,
-                                                    /*low_4gb=*/false,
-                                                    dex_locations,
-                                                    /*dex_files=*/{},
-                                                    /*reservation=*/nullptr,
-                                                    error_msg));
-    } else {
-      return std::unique_ptr<OatFile>(OatFile::Open(/*zip_fd=*/-1,
-                                                    filename_,
-                                                    filename_,
-                                                    executable,
-                                                    /*low_4gb=*/false,
-                                                    oat_file_assistant_->dex_location_,
-                                                    error_msg));
-    }
+std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByOat::LoadFile(
+    std::string* error_msg) const {
+  bool executable = oat_file_assistant_->load_executable_;
+  if (executable && oat_file_assistant_->only_load_trusted_executable_) {
+    executable = LocationIsTrusted(filename_, /*trust_art_apex_data_files=*/true);
   }
+
+  if (use_fd_) {
+    if (oat_fd_ < 0 || vdex_fd_ < 0) {
+      *error_msg = "oat_fd or vdex_fd not provided";
+      return nullptr;
+    }
+    ArrayRef<const std::string> dex_locations(&oat_file_assistant_->dex_location_,
+                                              /*size=*/1u);
+    return std::unique_ptr<OatFile>(OatFile::Open(zip_fd_,
+                                                  vdex_fd_,
+                                                  oat_fd_,
+                                                  filename_,
+                                                  executable,
+                                                  /*low_4gb=*/false,
+                                                  dex_locations,
+                                                  /*dex_files=*/{},
+                                                  /*reservation=*/nullptr,
+                                                  error_msg));
+  } else {
+    return std::unique_ptr<OatFile>(OatFile::Open(/*zip_fd=*/-1,
+                                                  filename_,
+                                                  filename_,
+                                                  executable,
+                                                  /*low_4gb=*/false,
+                                                  oat_file_assistant_->dex_location_,
+                                                  error_msg));
+  }
+}
+
+std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByVdex::LoadFile(
+    std::string* error_msg) const {
+  // Check to see if there is a vdex file we can make use of.
+  std::unique_ptr<VdexFile> vdex;
+  if (use_fd_) {
+    if (vdex_fd_ < 0) {
+      *error_msg = "vdex_fd not provided";
+      return nullptr;
+    }
+    struct stat s;
+    if (fstat(vdex_fd_, &s) < 0) {
+      *error_msg = ART_FORMAT("Failed getting length of the vdex file: {}", strerror(errno));
+      return nullptr;
+    }
+    vdex = VdexFile::Open(vdex_fd_,
+                          s.st_size,
+                          filename_,
+                          /*low_4gb=*/false,
+                          error_msg);
+  } else {
+    vdex = VdexFile::Open(filename_,
+                          /*low_4gb=*/false,
+                          error_msg);
+  }
+  if (vdex == nullptr) {
+    *error_msg = ART_FORMAT("Unable to open vdex file: {}", *error_msg);
+    return nullptr;
+  }
+  return std::unique_ptr<OatFile>(OatFile::OpenFromVdex(zip_fd_,
+                                                        std::move(vdex),
+                                                        oat_file_assistant_->dex_location_,
+                                                        oat_file_assistant_->context_,
+                                                        error_msg));
+}
+
+std::unique_ptr<OatFile> OatFileAssistant::OatFileInfoBackedByDm::LoadFile(
+    std::string* error_msg) const {
+  // Check to see if there is a vdex file we can make use of.
+  std::unique_ptr<ZipArchive> dm_file(ZipArchive::Open(filename_.c_str(), error_msg));
+  if (dm_file == nullptr) {
+    return nullptr;
+  }
+  std::unique_ptr<VdexFile> vdex(VdexFile::OpenFromDm(filename_, *dm_file, error_msg));
+  if (vdex == nullptr) {
+    return nullptr;
+  }
+  return std::unique_ptr<OatFile>(OatFile::OpenFromVdex(/*zip_fd=*/-1,
+                                                        std::move(vdex),
+                                                        oat_file_assistant_->dex_location_,
+                                                        oat_file_assistant_->context_,
+                                                        error_msg));
 }
 
 bool OatFileAssistant::OatFileInfo::ShouldRecompileForFilter(CompilerFilter::Filter target,
@@ -1142,22 +1175,6 @@ bool OatFileAssistant::ClassLoaderContextIsOkay(const OatFile& oat_file,
 bool OatFileAssistant::OatFileInfo::IsExecutable() {
   const OatFile* file = GetFile();
   return (file != nullptr && file->IsExecutable());
-}
-
-void OatFileAssistant::OatFileInfo::Reset() {
-  file_ = std::nullopt;
-  status_ = std::nullopt;
-}
-
-void OatFileAssistant::OatFileInfo::Reset(
-    const std::string& filename, bool use_fd, int zip_fd, int vdex_fd, int oat_fd) {
-  filename_provided_ = true;
-  filename_ = filename;
-  use_fd_ = use_fd;
-  zip_fd_ = zip_fd;
-  vdex_fd_ = vdex_fd;
-  oat_fd_ = oat_fd;
-  Reset();
 }
 
 std::unique_ptr<OatFile> OatFileAssistant::OatFileInfo::ReleaseFile() {
@@ -1296,7 +1313,7 @@ bool OatFileAssistant::ZipFileOnlyContainsUncompressedDex() {
 
 OatFileAssistant::Location OatFileAssistant::GetLocation(OatFileInfo& info) {
   if (info.IsUseable()) {
-    if (&info == &dm_) {
+    if (info.GetType() == OatFileType::kDm) {
       return kLocationDm;
     } else if (info.IsOatLocation()) {
       return kLocationOat;
