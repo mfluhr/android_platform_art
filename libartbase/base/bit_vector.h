@@ -112,6 +112,13 @@ class BitVectorView {
     return std::any_of(storage_, storage_ + SizeInWords(), [](WordType w) { return w != 0u; });
   }
 
+  // Union with another bit vector view of the same size.
+  bool Union(BitVectorView<const StorageType> union_with);
+
+  // Union with the bits in `union_with` but not in `not_in`. All views must have the same size.
+  bool UnionIfNotIn(BitVectorView<const StorageType> union_with,
+                    BitVectorView<const StorageType> not_in);
+
   // `BitVectorView` wrapper class for iteration across indexes of set bits.
   class IndexContainerImpl;
   using IndexContainer = BitVectorView<const StorageType>::IndexContainerImpl;

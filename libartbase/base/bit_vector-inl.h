@@ -51,6 +51,39 @@ inline void BitVectorView<StorageType>::SetInitialBits(uint32_t num_bits) {
 }
 
 template <typename StorageType>
+inline bool BitVectorView<StorageType>::Union(BitVectorView<const StorageType> union_with) {
+  DCHECK_EQ(SizeInBits(), union_with.SizeInBits());
+  DCheckTrailingBitsClear();
+  union_with.DCheckTrailingBitsClear();
+  StorageType added_bits = 0u;
+  for (size_t i = 0, size = SizeInWords(); i != size; ++i) {
+    StorageType word = storage_[i];
+    StorageType union_with_word = union_with.storage_[i];
+    storage_[i] = union_with_word | word;
+    added_bits |= union_with_word & ~word;
+  }
+  return added_bits != 0u;
+}
+
+template <typename StorageType>
+inline bool BitVectorView<StorageType>::UnionIfNotIn(BitVectorView<const StorageType> union_with,
+                                                     BitVectorView<const StorageType> not_in) {
+  DCHECK_EQ(SizeInBits(), union_with.SizeInBits());
+  DCHECK_EQ(SizeInBits(), not_in.SizeInBits());
+  DCheckTrailingBitsClear();
+  union_with.DCheckTrailingBitsClear();
+  not_in.DCheckTrailingBitsClear();
+  StorageType added_bits = 0u;
+  for (size_t i = 0, size = SizeInWords(); i != size; ++i) {
+    StorageType word = storage_[i];
+    StorageType union_with_word = union_with.storage_[i] & ~not_in.storage_[i];
+    storage_[i] = union_with_word | word;
+    added_bits |= union_with_word & ~word;
+  }
+  return added_bits != 0u;
+}
+
+template <typename StorageType>
 inline bool BitVectorIndexIterator<StorageType>::operator==(
     const BitVectorIndexIterator<StorageType>& other) const {
   DCHECK_EQ(bit_vector_view_.storage_, other.bit_vector_view_.storage_);
