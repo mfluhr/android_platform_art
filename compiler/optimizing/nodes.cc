@@ -61,14 +61,14 @@ inline int32_t HGraph::AllocateInstructionId() {
   return current_instruction_id_++;
 }
 
-void HGraph::FindBackEdges(ArenaBitVector* visited) {
+void HGraph::FindBackEdges(/*out*/ BitVectorView<size_t> visited) {
   // "visited" must be empty on entry, it's an output argument for all visited (i.e. live) blocks.
-  DCHECK_EQ(visited->GetHighestBitSet(), -1);
+  DCHECK(!visited.IsAnyBitSet());
 
   // Allocate memory from local ScopedArenaAllocator.
   ScopedArenaAllocator allocator(GetArenaStack());
   // Nodes that we're currently visiting, indexed by block id.
-  BitVectorView visiting =
+  BitVectorView<size_t> visiting =
       ArenaBitVector::CreateFixedSize(&allocator, blocks_.size(), kArenaAllocGraphBuilder);
   // Number of successors visited from a given node, indexed by block id.
   ScopedArenaVector<size_t> successors_visited(blocks_.size(),
@@ -78,7 +78,7 @@ void HGraph::FindBackEdges(ArenaBitVector* visited) {
   ScopedArenaVector<HBasicBlock*> worklist(allocator.Adapter(kArenaAllocGraphBuilder));
   constexpr size_t kDefaultWorklistSize = 8;
   worklist.reserve(kDefaultWorklistSize);
-  visited->SetBit(entry_block_->GetBlockId());
+  visited.SetBit(entry_block_->GetBlockId());
   visiting.SetBit(entry_block_->GetBlockId());
   worklist.push_back(entry_block_);
 
@@ -94,8 +94,8 @@ void HGraph::FindBackEdges(ArenaBitVector* visited) {
       if (visiting.IsBitSet(successor_id)) {
         DCHECK(ContainsElement(worklist, successor));
         successor->AddBackEdge(current);
-      } else if (!visited->IsBitSet(successor_id)) {
-        visited->SetBit(successor_id);
+      } else if (!visited.IsBitSet(successor_id)) {
+        visited.SetBit(successor_id);
         visiting.SetBit(successor_id);
         worklist.push_back(successor);
       }
@@ -150,7 +150,8 @@ static void RemoveAsUser(HInstruction* instruction) {
   RemoveEnvironmentUses(instruction);
 }
 
-void HGraph::RemoveDeadBlocksInstructionsAsUsersAndDisconnect(const ArenaBitVector& visited) const {
+void HGraph::RemoveDeadBlocksInstructionsAsUsersAndDisconnect(
+    BitVectorView<const size_t> visited) const {
   for (size_t i = 0; i < blocks_.size(); ++i) {
     if (!visited.IsBitSet(i)) {
       HBasicBlock* block = blocks_[i];
@@ -165,7 +166,7 @@ void HGraph::RemoveDeadBlocksInstructionsAsUsersAndDisconnect(const ArenaBitVect
       }
 
       // Remove non-catch phi uses, and disconnect the block.
-      block->DisconnectFromSuccessors(&visited);
+      block->DisconnectFromSuccessors(visited);
     }
   }
 }
@@ -188,7 +189,7 @@ static void RemoveCatchPhiUsesOfDeadInstruction(HInstruction* insn) {
   }
 }
 
-void HGraph::RemoveDeadBlocks(const ArenaBitVector& visited) {
+void HGraph::RemoveDeadBlocks(BitVectorView<const size_t> visited) {
   DCHECK(reverse_post_order_.empty()) << "We shouldn't have dominance information.";
   for (size_t i = 0; i < blocks_.size(); ++i) {
     if (!visited.IsBitSet(i)) {
@@ -215,10 +216,11 @@ GraphAnalysisResult HGraph::BuildDominatorTree() {
   // Allocate memory from local ScopedArenaAllocator.
   ScopedArenaAllocator allocator(GetArenaStack());
 
-  ArenaBitVector visited(&allocator, blocks_.size(), false, kArenaAllocGraphBuilder);
+  BitVectorView<size_t> visited =
+      ArenaBitVector::CreateFixedSize(&allocator, blocks_.size(), kArenaAllocGraphBuilder);
 
   // (1) Find the back edges in the graph doing a DFS traversal.
-  FindBackEdges(&visited);
+  FindBackEdges(visited);
 
   // (2) Remove instructions and phis from blocks not visited during
   //     the initial DFS as users from other instructions, so that
@@ -2505,13 +2507,14 @@ void HBasicBlock::DisconnectAndDelete() {
   graph_->DeleteDeadEmptyBlock(this);
 }
 
-void HBasicBlock::DisconnectFromSuccessors(const ArenaBitVector* visited) {
+void HBasicBlock::DisconnectFromSuccessors(BitVectorView<const size_t> visited) {
+  DCHECK_IMPLIES(visited.SizeInBits() != 0u, visited.SizeInBits() == graph_->GetBlocks().size());
   for (HBasicBlock* successor : successors_) {
     // Delete this block from the list of predecessors.
     size_t this_index = successor->GetPredecessorIndexOf(this);
     successor->predecessors_.erase(successor->predecessors_.begin() + this_index);
 
-    if (visited != nullptr && !visited->IsBitSet(successor->GetBlockId())) {
+    if (visited.SizeInBits() != 0u && !visited.IsBitSet(successor->GetBlockId())) {
       // `successor` itself is dead. Therefore, there is no need to update its phis.
       continue;
     }

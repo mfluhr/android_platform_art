@@ -92,12 +92,14 @@
 #include "gc/space/image_space.h"
 #include "gc/space/space-inl.h"
 #include "gc_root-inl.h"
+#include "handle.h"
 #include "handle_scope-inl.h"
 #include "hidden_api.h"
 #include "imt_conflict_table.h"
 #include "imtable-inl.h"
 #include "instrumentation-inl.h"
 #include "intern_table-inl.h"
+#include "intern_table.h"
 #include "interpreter/interpreter.h"
 #include "interpreter/mterp/nterp.h"
 #include "jit/debugger_interface.h"
@@ -1697,16 +1699,50 @@ static void VerifyInternedStringReferences(gc::space::ImageSpace* space)
   CHECK_EQ(num_recorded_refs, num_found_refs);
 }
 
+static bool PatchDexCacheLocations(Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches,
+                                   InternTable* intern_table,
+                                   std::string* error_msg) REQUIRES_SHARED(Locks::mutator_lock_) {
+  // Replace the location in the dex cache in the app image (the `--dex-location` passed to
+  // dex2oat) with the actual location if needed.
+  // The actual location is computed by the logic in `OatFileBase::Setup`.
+  // This is needed when the location on device is unknown at compile-time, typically during
+  // Cloud Compilation because the compilation is done on the server and the apk is later
+  // installed on device into `/data/app/<random_string>`.
+  // This is not needed during dexpreopt because the location on device is known to be a certain
+  // location in /system, /product, etc.
+  Thread* self = Thread::Current();
+  StackHandleScope<1> hs(self);
+  MutableHandle<mirror::DexCache> dex_cache = hs.NewHandle<mirror::DexCache>(nullptr);
+  for (auto dex_cache_ptr : dex_caches.Iterate<mirror::DexCache>()) {
+    dex_cache.Assign(dex_cache_ptr);
+    std::string dex_file_location =
+        dex_cache->GetLocation(/*allow_location_mismatch=*/true)->ToModifiedUtf8();
+    const DexFile* dex_file = dex_cache->GetDexFile();
+    if (dex_file_location != dex_file->GetLocation()) {
+      ObjPtr<mirror::String> location = intern_table->InternWeak(dex_file->GetLocation().c_str());
+      if (location == nullptr) {
+        self->AssertPendingOOMException();
+        *error_msg = "Failed to intern string for dex cache location";
+        return false;
+      }
+      dex_cache->SetLocation(location);
+    }
+  }
+  return true;
+}
+
 // new_class_set is the set of classes that were read from the class table section in the image.
 // If there was no class table section, it is null.
 // Note: using a class here to avoid having to make ClassLinker internals public.
 class AppImageLoadingHelper {
  public:
-  static void Update(
+  static bool Update(
       ClassLinker* class_linker,
       gc::space::ImageSpace* space,
       Handle<mirror::ClassLoader> class_loader,
-      Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches)
+      Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches,
+      InternTable* intern_table,
+      std::string* error_msg)
       REQUIRES(!Locks::dex_lock_)
       REQUIRES_SHARED(Locks::mutator_lock_);
 
@@ -1714,11 +1750,13 @@ class AppImageLoadingHelper {
       REQUIRES_SHARED(Locks::mutator_lock_);
 };
 
-void AppImageLoadingHelper::Update(
+bool AppImageLoadingHelper::Update(
     ClassLinker* class_linker,
     gc::space::ImageSpace* space,
     Handle<mirror::ClassLoader> class_loader,
-    Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches)
+    Handle<mirror::ObjectArray<mirror::DexCache>> dex_caches,
+    InternTable* intern_table,
+    std::string* error_msg)
     REQUIRES(!Locks::dex_lock_)
     REQUIRES_SHARED(Locks::mutator_lock_) {
   ScopedTrace app_image_timing("AppImage:Updating");
@@ -1727,6 +1765,9 @@ void AppImageLoadingHelper::Update(
     // In debug build, verify the string references before applying
     // the Runtime::LoadAppImageStartupCache() option.
     VerifyInternedStringReferences(space);
+  }
+  if (!PatchDexCacheLocations(dex_caches, intern_table, error_msg)) {
+    return false;
   }
   DCHECK(class_loader.Get() != nullptr);
   Thread* const self = Thread::Current();
@@ -1778,6 +1819,8 @@ void AppImageLoadingHelper::Update(
       }
     }, space->Begin(), kRuntimePointerSize);
   }
+
+  return true;
 }
 
 void AppImageLoadingHelper::HandleAppImageStrings(gc::space::ImageSpace* space) {
@@ -1931,6 +1974,13 @@ bool ClassLinker::OpenAndInitImageDexFiles(
 
   for (auto dex_cache : dex_caches.Iterate<mirror::DexCache>()) {
     std::string dex_file_location = dex_cache->GetLocation()->ToModifiedUtf8();
+    // At this point, the location in the dex cache (from `--dex-location` passed to dex2oat) is not
+    // necessarily the actual dex location on device. `OpenOatDexFile` uses the table
+    // `OatFile::oat_dex_files_` to find the dex file. For each dex file, the table contains two
+    // keys corresponding to it, one from the oat header (from `--dex-location` passed to dex2oat)
+    // and the other being the actual dex location on device, unless they are the same. The lookup
+    // is based on the former key. Later, `PatchDexCacheLocations` will replace the location in the
+    // dex cache with the actual dex location, which is the latter key in the table.
     std::unique_ptr<const DexFile> dex_file =
         OpenOatDexFile(oat_file, dex_file_location.c_str(), error_msg);
     if (dex_file == nullptr) {
@@ -2338,7 +2388,10 @@ bool ClassLinker::AddImageSpace(gc::space::ImageSpace* space,
     VLOG(image) << "Adding class table classes took " << PrettyDuration(NanoTime() - start_time2);
   }
   if (app_image) {
-    AppImageLoadingHelper::Update(this, space, class_loader, dex_caches);
+    if (!AppImageLoadingHelper::Update(
+            this, space, class_loader, dex_caches, intern_table_, error_msg)) {
+      return false;
+    }
 
     {
       ScopedTrace trace("AppImage:UpdateClassLoaders");
