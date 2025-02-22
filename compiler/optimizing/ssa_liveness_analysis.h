@@ -19,6 +19,7 @@
 
 #include <iostream>
 
+#include "base/bit_vector-inl.h"
 #include "base/intrusive_forward_list.h"
 #include "base/iteration_range.h"
 #include "base/macros.h"

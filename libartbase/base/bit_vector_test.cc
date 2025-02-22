@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <random>
+#include <vector>
 
 #include "allocator.h"
 #include "base/stl_util.h"
@@ -177,6 +178,56 @@ TEST(BitVectorView, SetInitialBits) {
   ASSERT_EQ(1u, storage[2]);
 }
 
+template <typename StorageType, StorageType kWord0, StorageType kWord1>
+void TestBitVectorViewIndexes() {
+  StorageType storage[] = {kWord0, kWord1};
+  size_t size = 2u * BitSizeOf<StorageType>();
+  BitVectorView bvv(storage, size);
+
+  std::vector<size_t> indexes1;
+  for (size_t index = 0; index != size; ++index) {
+    if (bvv.IsBitSet(index)) {
+      indexes1.push_back(index);
+    }
+  }
+
+  std::vector<size_t> indexes2;
+  for (size_t index : bvv.Indexes()) {
+    indexes2.push_back(index);
+  }
+  ASSERT_EQ(indexes1, indexes2);
+
+  std::vector<size_t> indexes3;
+  for (auto it = bvv.Indexes().begin(); !it.Done(); ++it) {
+    indexes3.push_back(*it);
+  }
+  ASSERT_EQ(indexes1, indexes3);
+
+  StorageType empty_storage[] = {0u, 0u, 0u};
+  BitVectorView empty(empty_storage, 3 * BitSizeOf<StorageType>() - 1u);
+  for (size_t index : empty.Indexes()) {
+    FAIL();
+  }
+  ASSERT_TRUE(empty.Indexes().begin().Done());
+}
+
+TEST(BitVectorView, IndexesUint32T) {
+  TestBitVectorViewIndexes<uint32_t, 0x12345678u, 0x87654321u>();
+}
+
+TEST(BitVectorView, IndexesUint64T) {
+  TestBitVectorViewIndexes<uint64_t,
+                           UINT64_C(0x1234567890abcdef),
+                           UINT64_C(0xfedcba0987654321)>();
+}
+
+TEST(BitVectorView, IndexesSizeT) {
+  // Note: The constants below are truncated on 32-bit architectures.
+  TestBitVectorViewIndexes<size_t,
+                           static_cast<size_t>(UINT64_C(0xfedcba0987654321)),
+                           static_cast<size_t>(UINT64_C(0x1234567890abcdef))>();
+}
+
 TEST(BitVector, Test) {
   const size_t kBits = 32;
 
@@ -210,7 +261,7 @@ TEST(BitVector, Test) {
   EXPECT_EQ(0x80000001U, bv.GetRawStorageWord(0));
   EXPECT_EQ(0x80000001U, *bv.GetRawStorage());
 
-  BitVector::IndexIterator iterator = bv.Indexes().begin();
+  BitVectorIndexIterator<const uint32_t> iterator = bv.Indexes().begin();
   EXPECT_TRUE(iterator != bv.Indexes().end());
   EXPECT_EQ(0u, *iterator);
   ++iterator;
