@@ -607,6 +607,7 @@ uint32_t GetDexFlags(T* member) REQUIRES_SHARED(Locks::mutator_lock_) {
 
 template <typename T>
 bool HandleCorePlatformApiViolation(T* member,
+                                    ApiList api_list,
                                     uint32_t runtime_flags,
                                     const AccessContext& caller_context,
                                     const AccessContext& callee_context,
@@ -626,8 +627,8 @@ bool HandleCorePlatformApiViolation(T* member,
         << "hiddenapi: Core platform API violation: "
         << Dumpable<MemberSignature>(MemberSignature(member))
         << " (runtime_flags=" << FormatHiddenApiRuntimeFlags(runtime_flags)
-        << ", domain=" << callee_context.GetDomain() << ") from " << caller_context
-        << " (domain=" << caller_context.GetDomain() << ")"
+        << ", domain=" << callee_context.GetDomain() << ", api=" << api_list << ") from "
+        << caller_context << " (domain=" << caller_context.GetDomain() << ")"
         << " using " << access_method;
 
     // If policy is set to just warn, add kAccCorePlatformApi to access flags of
@@ -737,12 +738,14 @@ bool ShouldDenyAccessToMemberImpl(T* member,
 template uint32_t GetDexFlags<ArtField>(ArtField* member);
 template uint32_t GetDexFlags<ArtMethod>(ArtMethod* member);
 template bool HandleCorePlatformApiViolation(ArtField* member,
+                                             ApiList api_list,
                                              uint32_t runtime_flags,
                                              const AccessContext& caller_context,
                                              const AccessContext& callee_context,
                                              AccessMethod access_method,
                                              EnforcementPolicy policy);
 template bool HandleCorePlatformApiViolation(ArtMethod* member,
+                                             ApiList api_list,
                                              uint32_t runtime_flags,
                                              const AccessContext& caller_context,
                                              const AccessContext& callee_context,
@@ -854,6 +857,22 @@ bool ShouldDenyAccessToMember(T* member,
       // If this is a proxy method, look at the interface method instead.
       member = detail::GetInterfaceMemberIfProxy(member);
 
+      // Decode hidden API access flags from the dex file. This is a slow path,
+      // like in the kApplication case above.
+      ApiList api_list = ApiList::FromDexFlags(detail::GetDexFlags(member));
+      DCHECK(api_list.IsValid());
+
+      // Max target SDK versions don't matter for platform callers, but they may
+      // still depend on unsupported APIs. Let's compare against the "max" SDK
+      // version to only allow that (and also proper SDK APIs, but they are
+      // typically combined with kCorePlatformApi already).
+      if (api_list.GetMaxAllowedSdkVersion() == SdkVersion::kMax) {
+        // Allow access and attempt to update the access flags to avoid
+        // re-examining the dex flags next time.
+        detail::MaybeUpdateAccessFlags(Runtime::Current(), member, kAccCorePlatformApi);
+        return false;
+      }
+
       // Check for exemptions.
       // TODO(b/377676642): Fix API annotations and delete this.
       detail::MemberSignature member_signature(member);
@@ -867,7 +886,7 @@ bool ShouldDenyAccessToMember(T* member,
       // This may also add kAccCorePlatformApi to the access flags of `member`
       // so as to not warn again on next access.
       return detail::HandleCorePlatformApiViolation(
-          member, runtime_flags, caller_context, callee_context, access_method, policy);
+          member, api_list, runtime_flags, caller_context, callee_context, access_method, policy);
     }
 
     case Domain::kCorePlatform: {
