@@ -68,6 +68,26 @@ static const std::vector<std::string> kWarningExemptions = {
     "Lsun/misc/Unsafe;",
 };
 
+// Intra-core APIs that aren't also core platform APIs. These may be used by the
+// non-updatable ICU module and hence are effectively de-facto core platform
+// APIs.
+// TODO(b/377676642): Fix API annotations and delete this.
+static const std::vector<std::string> kCorePlatformApiExemptions = {
+    "Ldalvik/annotation/compat/VersionCodes;",
+    "Ldalvik/annotation/optimization/ReachabilitySensitive;",
+    "Ldalvik/system/BlockGuard/Policy;->onNetwork",
+    "Ljava/nio/charset/CharsetEncoder;-><init>(Ljava/nio/charset/Charset;FF[BZ)V",
+    "Ljava/security/spec/ECParameterSpec;->getCurveName",
+    "Ljava/security/spec/ECParameterSpec;->setCurveName",
+    "Llibcore/api/CorePlatformApi;",
+    "Llibcore/io/AsynchronousCloseMonitor;",
+    "Llibcore/util/NonNull;",
+    "Llibcore/util/Nullable;",
+    "Lsun/security/util/DerEncoder;",
+    "Lsun/security/x509/AlgorithmId;->derEncode",
+    "Lsun/security/x509/AlgorithmId;->get",
+};
+
 static inline std::ostream& operator<<(std::ostream& os, AccessMethod value) {
   switch (value) {
     case AccessMethod::kCheck:
@@ -134,8 +154,7 @@ static Domain DetermineDomainFromLocation(const std::string& dex_location,
   // These checks will be skipped on target buildbots where ANDROID_ART_ROOT
   // is set to "/system".
   if (ArtModuleRootDistinctFromAndroidRoot()) {
-    if (LocationIsOnArtModule(dex_location) || LocationIsOnConscryptModule(dex_location) ||
-        LocationIsOnI18nModule(dex_location)) {
+    if (LocationIsOnArtModule(dex_location) || LocationIsOnConscryptModule(dex_location)) {
       return Domain::kCorePlatform;
     }
 
@@ -834,6 +853,15 @@ bool ShouldDenyAccessToMember(T* member,
 
       // If this is a proxy method, look at the interface method instead.
       member = detail::GetInterfaceMemberIfProxy(member);
+
+      // Check for exemptions.
+      // TODO(b/377676642): Fix API annotations and delete this.
+      detail::MemberSignature member_signature(member);
+      if (member_signature.DoesPrefixMatchAny(kCorePlatformApiExemptions)) {
+        // Avoid re-examining the exemption list next time.
+        detail::MaybeUpdateAccessFlags(Runtime::Current(), member, kAccCorePlatformApi);
+        return false;
+      }
 
       // Access checks are not disabled, report the violation.
       // This may also add kAccCorePlatformApi to the access flags of `member`
