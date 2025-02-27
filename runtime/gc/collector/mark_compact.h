@@ -952,7 +952,7 @@ class MarkCompact final : public GarbageCollector {
   class ClassLoaderRootsUpdater;
   class LinearAllocPageUpdater;
   class ImmuneSpaceUpdateObjVisitor;
-  class DetectOldToMidRefVisitor;
+  class DetectRefToRangeVisitor;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(MarkCompact);
 };
