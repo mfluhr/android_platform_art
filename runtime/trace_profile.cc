@@ -59,6 +59,8 @@ static constexpr size_t kProfileMagicValue = 0x4C4F4D54;
 static constexpr size_t kBufSizeForEncodedData = kMinBufSizeForEncodedData * 10;
 
 static constexpr size_t kAlwaysOnTraceHeaderSize = 12;
+static constexpr size_t kAlwaysOnMethodInfoHeaderSize = 11;
+static constexpr size_t kAlwaysOnThreadInfoHeaderSize = 7;
 
 bool TraceProfiler::profile_in_progress_ = false;
 
@@ -206,19 +208,26 @@ void DumpThreadMethodInfo(const std::unordered_map<size_t, std::string>& traced_
                           const std::unordered_set<ArtMethod*>& traced_methods,
                           std::ostringstream& os) REQUIRES_SHARED(Locks::mutator_lock_) {
   // Dump data about thread information.
-  os << "\n*threads\n";
   for (const auto& it : traced_threads) {
-    os << it.first << "\t" << it.second << "\n";
+    uint8_t thread_header[kAlwaysOnThreadInfoHeaderSize];
+    thread_header[0] = kThreadInfoHeaderV2;
+    Append4LE(thread_header + 1, it.first);
+    Append2LE(thread_header + 5, it.second.length());
+    os.write(reinterpret_cast<char*>(thread_header), kAlwaysOnThreadInfoHeaderSize);
+    os.write(it.second.c_str(), it.second.length());
   }
 
   // Dump data about method information.
-  os << "*methods\n";
   for (ArtMethod* method : traced_methods) {
-    ArtMethod* method_ptr = reinterpret_cast<ArtMethod*>(method);
-    os << method_ptr << "\t" << GetMethodInfoLine(method);
+    std::string method_line = GetMethodInfoLine(method);
+    uint16_t method_line_length = static_cast<uint16_t>(method_line.length());
+    uint8_t method_header[kAlwaysOnMethodInfoHeaderSize];
+    method_header[0] = kMethodInfoHeaderV2;
+    Append8LE(method_header + 1, reinterpret_cast<uint64_t>(method));
+    Append2LE(method_header + 9, method_line_length);
+    os.write(reinterpret_cast<char*>(method_header), kAlwaysOnMethodInfoHeaderSize);
+    os.write(method_line.c_str(), method_line_length);
   }
-
-  os << "*end";
 }
 }  // namespace
 
