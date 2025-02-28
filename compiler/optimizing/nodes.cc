@@ -1457,18 +1457,17 @@ void HInstruction::ReplaceUsesDominatedBy(HInstruction* dominator,
                                           HInstruction* replacement,
                                           bool strictly_dominated) {
   HBasicBlock* dominator_block = dominator->GetBlock();
-  std::optional<ArenaBitVector> visited_blocks;
+  BitVectorView<size_t> visited_blocks;
 
   // Lazily compute the dominated blocks to faster calculation of domination afterwards.
   auto maybe_generate_visited_blocks = [&visited_blocks, this, dominator_block]() {
-    if (visited_blocks.has_value()) {
+    if (visited_blocks.SizeInBits() != 0u) {
+      DCHECK_EQ(visited_blocks.SizeInBits(), GetBlock()->GetGraph()->GetBlocks().size());
       return;
     }
     HGraph* graph = GetBlock()->GetGraph();
-    visited_blocks.emplace(graph->GetAllocator(),
-                           graph->GetBlocks().size(),
-                           /* expandable= */ false,
-                           kArenaAllocMisc);
+    visited_blocks = ArenaBitVector::CreateFixedSize(
+        graph->GetAllocator(), graph->GetBlocks().size(), kArenaAllocMisc);
     ScopedArenaAllocator allocator(graph->GetArenaStack());
     ScopedArenaQueue<const HBasicBlock*> worklist(allocator.Adapter(kArenaAllocMisc));
     worklist.push(dominator_block);
@@ -1476,9 +1475,9 @@ void HInstruction::ReplaceUsesDominatedBy(HInstruction* dominator,
     while (!worklist.empty()) {
       const HBasicBlock* current = worklist.front();
       worklist.pop();
-      visited_blocks->SetBit(current->GetBlockId());
+      visited_blocks.SetBit(current->GetBlockId());
       for (HBasicBlock* dominated : current->GetDominatedBlocks()) {
-        if (visited_blocks->IsBitSet(dominated->GetBlockId())) {
+        if (visited_blocks.IsBitSet(dominated->GetBlockId())) {
           continue;
         }
         worklist.push(dominated);
@@ -1501,7 +1500,7 @@ void HInstruction::ReplaceUsesDominatedBy(HInstruction* dominator,
     } else {
       // Block domination.
       maybe_generate_visited_blocks();
-      dominated = visited_blocks->IsBitSet(block->GetBlockId());
+      dominated = visited_blocks.IsBitSet(block->GetBlockId());
     }
 
     if (dominated) {
@@ -1512,7 +1511,7 @@ void HInstruction::ReplaceUsesDominatedBy(HInstruction* dominator,
       // for their inputs.
       HBasicBlock* predecessor = block->GetPredecessors()[index];
       maybe_generate_visited_blocks();
-      if (visited_blocks->IsBitSet(predecessor->GetBlockId())) {
+      if (visited_blocks.IsBitSet(predecessor->GetBlockId())) {
         user->ReplaceInput(replacement, index);
       }
     }
