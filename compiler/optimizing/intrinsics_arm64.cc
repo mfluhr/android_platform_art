@@ -2961,9 +2961,8 @@ void IntrinsicLocationsBuilderARM64::VisitSystemArrayCopyChar(HInvoke* invoke) {
     }
   }
 
-  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
   LocationSummary* locations =
-      new (allocator) LocationSummary(invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
+      new (allocator_) LocationSummary(invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   // arraycopy(char[] src, int src_pos, char[] dst, int dst_pos, int length).
   locations->SetInAt(0, Location::RequiresRegister());
   locations->SetInAt(1, LocationForSystemArrayCopyInput(invoke->InputAt(1)));
@@ -4925,7 +4924,7 @@ static LocationSummary* CreateVarHandleCommonLocations(HInvoke* invoke,
   size_t expected_coordinates_count = GetExpectedVarHandleCoordinatesCount(invoke);
   DataType::Type return_type = invoke->GetType();
 
-  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
+  ArenaAllocator* allocator = codegen->GetGraph()->GetAllocator();
   LocationSummary* locations =
       new (allocator) LocationSummary(invoke, LocationSummary::kCallOnSlowPath, kIntrinsified);
   locations->SetInAt(0, Location::RequiresRegister());
@@ -5976,8 +5975,7 @@ void VarHandleSlowPathARM64::EmitByteArrayViewCode(CodeGenerator* codegen_in) {
 }
 
 void IntrinsicLocationsBuilderARM64::VisitMethodHandleInvokeExact(HInvoke* invoke) {
-  ArenaAllocator* allocator = invoke->GetBlock()->GetGraph()->GetAllocator();
-  LocationSummary* locations = new (allocator)
+  LocationSummary* locations = new (allocator_)
       LocationSummary(invoke, LocationSummary::kCallOnMainAndSlowPath, kIntrinsified);
 
   InvokeDexCallingConventionVisitorARM64 calling_convention;

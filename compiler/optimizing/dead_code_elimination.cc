@@ -201,7 +201,7 @@ static bool RemoveNonNullControlDependences(HBasicBlock* block, HBasicBlock* thr
           user_block != throws &&
           block->Dominates(user_block)) {
         if (bound == nullptr) {
-          bound = new (obj->GetBlock()->GetGraph()->GetAllocator()) HBoundType(obj);
+          bound = new (block->GetGraph()->GetAllocator()) HBoundType(obj);
           bound->SetUpperBound(ti, /*can_be_null*/ false);
           bound->SetReferenceTypeInfo(ti);
           bound->SetCanBeNull(false);
