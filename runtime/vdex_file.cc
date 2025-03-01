@@ -204,6 +204,23 @@ std::unique_ptr<VdexFile> VdexFile::OpenFromDm(const std::string& filename,
   return vdex_file;
 }
 
+bool VdexFile::IsValid() const {
+  if (mmap_.Size() < sizeof(VdexFileHeader) || !GetVdexFileHeader().IsValid()) {
+    return false;
+  }
+
+  // Invalidate vdex files that contain dex files in the no longer supported
+  // compact dex format. Revert this whenever the vdex version is bumped.
+  size_t i = 0;
+  for (const uint8_t* dex_file_start = GetNextDexFileData(nullptr, i); dex_file_start != nullptr;
+       dex_file_start = GetNextDexFileData(dex_file_start, ++i)) {
+    if (!DexFileLoader::IsMagicValid(dex_file_start)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const uint8_t* VdexFile::GetNextDexFileData(const uint8_t* cursor, uint32_t dex_file_index) const {
   DCHECK(cursor == nullptr || (cursor > Begin() && cursor <= End()));
   if (cursor == nullptr) {

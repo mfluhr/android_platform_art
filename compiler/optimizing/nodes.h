@@ -2113,7 +2113,6 @@ class HInstruction : public ArenaObject<kArenaAllocInstruction> {
   HInstruction* GetPreviousDisregardingMoves() const;
 
   HBasicBlock* GetBlock() const { return block_; }
-  ArenaAllocator* GetAllocator() const { return block_->GetGraph()->GetAllocator(); }
   void SetBlock(HBasicBlock* block) { block_ = block; }
   bool IsInBlock() const { return block_ != nullptr; }
   bool IsInLoop() const { return block_->IsInLoop(); }

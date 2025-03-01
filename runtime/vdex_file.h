@@ -124,6 +124,7 @@ class VdexFile {
     static constexpr uint8_t kVdexMagic[] = { 'v', 'd', 'e', 'x' };
 
     // The format version of the verifier deps header and the verifier deps.
+    // TODO: Revert the dex header checks in VdexFile::IsValid when this is bumped.
     // Last update: Introduce vdex sections.
     static constexpr uint8_t kVdexVersion[] = { '0', '2', '7', '\0' };
 
@@ -251,9 +252,7 @@ class VdexFile {
         GetSectionHeader(VdexSection::kVerifierDepsSection).section_size);
   }
 
-  bool IsValid() const {
-    return mmap_.Size() >= sizeof(VdexFileHeader) && GetVdexFileHeader().IsValid();
-  }
+  EXPORT bool IsValid() const;
 
   // This method is for iterating over the dex files in the vdex. If `cursor` is null,
   // the first dex file is returned. If `cursor` is not null, it must point to a dex
