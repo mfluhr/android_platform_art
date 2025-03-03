@@ -398,8 +398,8 @@ static ArtField* FindFieldFast(ArtMethod* caller, uint16_t field_index)
     return nullptr;
   }
 
-  const dex::FieldId& field_id = caller->GetDexFile()->GetFieldId(field_index);
   ObjPtr<mirror::Class> cls = caller->GetDeclaringClass();
+  const dex::FieldId& field_id = cls->GetDexFile().GetFieldId(field_index);
   if (cls->GetDexTypeIndex() == field_id.class_idx_) {
     // Field is in the same class as the caller, no need to do access checks.
     return cls->FindDeclaredField(field_index);
