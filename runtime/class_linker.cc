@@ -5311,6 +5311,9 @@ verifier::FailureKind ClassLinker::VerifyClass(Thread* self,
     Runtime::Current()->GetCompilerCallbacks()->UpdateClassState(
         ClassReference(&klass->GetDexFile(), klass->GetDexClassDefIndex()), klass->GetStatus());
   } else {
+    if (verifier_failure == verifier::FailureKind::kTypeChecksFailure) {
+      klass->SetHasTypeChecksFailure();
+    }
     mirror::Class::SetStatus(klass, ClassStatus::kVerified, self);
   }
 
