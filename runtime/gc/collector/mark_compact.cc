@@ -4857,14 +4857,15 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
         // As 'mid_gen_end_' is where our old-gen will end now, compute
         // compacted addresses of <class, object> for comparisons and updating
         // in the map.
-        mirror::Object* compacted_klass = nullptr;
-        mirror::Object* compacted_obj = nullptr;
         mirror::Object* klass = iter->first.AsMirrorPtr();
         mirror::Object* obj = iter->second.AsMirrorPtr();
         DCHECK_GT(klass, obj);
-        if (reinterpret_cast<uint8_t*>(klass) < black_allocations_begin_) {
-          DCHECK(moving_space_bitmap_->Test(klass));
-          DCHECK(moving_space_bitmap_->Test(obj));
+        DCHECK(moving_space_bitmap_->Test(klass));
+        DCHECK(moving_space_bitmap_->Test(obj));
+        CHECK_LT(reinterpret_cast<uint8_t*>(klass), black_allocations_begin_);
+        mirror::Object* compacted_klass = klass;
+        mirror::Object* compacted_obj = obj;
+        if (performed_compaction) {
           compacted_klass = PostCompactAddress(klass, old_gen_end_, moving_space_end_);
           compacted_obj = PostCompactAddress(obj, old_gen_end_, moving_space_end_);
           DCHECK_GT(compacted_klass, compacted_obj);
@@ -4872,7 +4873,7 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
         // An object (and therefore its class as well) after mid-gen will be
         // considered again during marking in next GC. So remove all entries
         // from this point onwards.
-        if (compacted_obj == nullptr || reinterpret_cast<uint8_t*>(compacted_obj) >= mid_gen_end_) {
+        if (reinterpret_cast<uint8_t*>(compacted_obj) >= mid_gen_end_) {
           class_after_obj_map_.erase(iter, class_after_obj_map_.end());
           break;
         } else if (mid_to_old_promo_bit_vec_.get() != nullptr) {
