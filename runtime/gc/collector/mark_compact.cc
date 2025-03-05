@@ -5082,8 +5082,16 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
                                            obj_visitor);
   }
   if (kVerifyPostGCOldGen && use_generational_) {
-    auto obj_visitor = [&](mirror::Object* obj) REQUIRES_SHARED(Locks::mutator_lock_) {
+    mirror::Object* last_visited_obj = nullptr;
+    auto obj_visitor = [&](mirror::Object* obj,
+                           bool verify_bitmap = false) REQUIRES_SHARED(Locks::mutator_lock_) {
       bool found = false;
+      if (verify_bitmap && !moving_space_bitmap_->Test(obj)) {
+        LOG(FATAL) << "Obj " << obj << " (" << obj->PrettyTypeOf() << ") doesn't have mark-bit set"
+                   << "\n prev-black-dense-end = " << static_cast<void*>(prev_black_dense_end_)
+                   << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
+                   << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_);
+      }
       VisitReferencesVisitor visitor(
           [verification = heap_->GetVerification(), &found](mirror::Object* ref)
               REQUIRES_SHARED(Locks::mutator_lock_) {
@@ -5093,24 +5101,49 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
           });
       obj->VisitReferences</*kVisitNativeRoots=*/true>(visitor, visitor);
       if (found) {
-        std::ostringstream oss;
-        obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
+        // Calling PrettyTypeOf() on a stale reference mostly results in
+        // segfault. Therefore, calling DumpReferences() so that at least all
+        // the other data can be dumped.
         LOG(FATAL_WITHOUT_ABORT) << "Object " << obj << " (" << obj->PrettyTypeOf()
                                  << ") has invalid references:"
+                                 << "\n prev-black-dense-end = "
+                                 << static_cast<void*>(prev_black_dense_end_)
                                  << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
-                                 << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_)
-                                 << "\n references =\n"
-                                 << oss.str();
+                                 << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_);
         heap_->GetVerification()->LogHeapCorruption(
-            /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/true);
+            /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/false);
+        std::ostringstream oss;
+        obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
+        LOG(FATAL) << "\n references =\n" << oss.str();
       }
+      last_visited_obj = obj;
     };
-    WriterMutexLock mu(thread_running_gc_, *Locks::heap_bitmap_lock_);
-    // We should verify all objects that has survived, which means old and mid-gen
-    moving_space_bitmap_->VisitMarkedRange(reinterpret_cast<uintptr_t>(moving_space_begin_),
-                                           reinterpret_cast<uintptr_t>(mid_gen_end_),
-                                           obj_visitor);
+    ReaderMutexLock mu(thread_running_gc_, *Locks::mutator_lock_);
+    WriterMutexLock mu2(thread_running_gc_, *Locks::heap_bitmap_lock_);
     non_moving_space_bitmap_->VisitAllMarked(obj_visitor);
+    last_visited_obj = nullptr;
+    // We should verify all objects that have survived, which means old and mid-gen
+    // Objects that were promoted to old-gen and mid-gen in this GC cycle are tightly
+    // packed, except if compaction was not performed. So we use object size to walk
+    // the heap and also verify that the mark-bit is set in the tightly packed portion.
+    moving_space_bitmap_->VisitMarkedRange(
+        reinterpret_cast<uintptr_t>(moving_space_begin_),
+        reinterpret_cast<uintptr_t>(performed_compaction ? prev_black_dense_end_
+                                                         : mark_bitmap_clear_end),
+        obj_visitor);
+    if (performed_compaction) {
+      mirror::Object* obj = last_visited_obj;
+      if (obj == nullptr || AlignUp(reinterpret_cast<uint8_t*>(obj) + obj->SizeOf(), kAlignment) <
+                                prev_black_dense_end_) {
+        obj = reinterpret_cast<mirror::Object*>(prev_black_dense_end_);
+      }
+      while (reinterpret_cast<uint8_t*>(obj) < mid_gen_end_ && obj->GetClass() != nullptr) {
+        // Objects in mid-gen will not have their corresponding mark-bits set.
+        obj_visitor(obj, reinterpret_cast<void*>(obj) < black_dense_end_);
+        uintptr_t next = reinterpret_cast<uintptr_t>(obj) + obj->SizeOf();
+        obj = reinterpret_cast<mirror::Object*>(RoundUp(next, kAlignment));
+      }
+    }
   }
 }
 
