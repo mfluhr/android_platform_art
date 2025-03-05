@@ -716,7 +716,9 @@ void TraceData::DumpData(std::ostringstream& os) {
     }
 
     methods = traced_methods_;
-    threads = traced_threads_;
+    if (trace_type_ != LowOverheadTraceType::kLongRunningMethods) {
+      threads = traced_threads_;
+    }
   }
 
   // Dump the information about traced_methods and threads
