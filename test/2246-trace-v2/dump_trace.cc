@@ -68,7 +68,7 @@ bool ProcessThreadOrMethodInfo(std::unique_ptr<File>& file,
   uint64_t id = ReadNumber(num_bytes_for_id, header);
   int length = ReadNumber(2, header + num_bytes_for_id);
 
-  std::unique_ptr<char> name(new char[length]);
+  std::unique_ptr<char[]> name(new char[length]);
   if (!file->ReadFully(name.get(), length)) {
     return false;
   }
@@ -156,7 +156,7 @@ bool ProcessTraceEntries(std::unique_ptr<File>& file,
   int num_records = ReadNumber(3, header + offset);
   offset += 3;
   int total_size = ReadNumber(4, header + offset);
-  std::unique_ptr<uint8_t> buffer(new uint8_t[total_size]);
+  std::unique_ptr<uint8_t[]> buffer(new uint8_t[total_size]);
   if (!file->ReadFully(buffer.get(), total_size)) {
     return false;
   }
