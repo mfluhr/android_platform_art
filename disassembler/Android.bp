@@ -112,6 +112,15 @@ art_cc_library {
         "com.android.art",
         "com.android.art.debug",
     ],
+    // Mitigate Clang compile hang
+    // http://b/395613374
+    arch: {
+        arm: {
+            lto: {
+                never: true,
+            },
+        },
+    },
 }
 
 cc_defaults {
