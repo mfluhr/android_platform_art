@@ -473,6 +473,7 @@ YoungMarkCompact::YoungMarkCompact(Heap* heap, MarkCompact* main)
   gc_freed_bytes_delta_ = metrics->YoungGcFreedBytesDelta();
   gc_duration_ = metrics->YoungGcDuration();
   gc_duration_delta_ = metrics->YoungGcDurationDelta();
+  gc_app_slow_path_during_gc_duration_delta_ = metrics->AppSlowPathDuringYoungGcDurationDelta();
   are_metrics_initialized_ = true;
 }
 
@@ -587,6 +588,7 @@ MarkCompact::MarkCompact(Heap* heap)
   gc_freed_bytes_delta_ = metrics->FullGcFreedBytesDelta();
   gc_duration_ = metrics->FullGcDuration();
   gc_duration_delta_ = metrics->FullGcDurationDelta();
+  gc_app_slow_path_during_gc_duration_delta_ = metrics->AppSlowPathDuringFullGcDurationDelta();
   are_metrics_initialized_ = true;
 }
 
@@ -810,6 +812,7 @@ void MarkCompact::InitializePhase() {
   for (size_t i = 0; i < vector_length_; i++) {
     DCHECK_EQ(chunk_info_vec_[i], 0u);
   }
+  app_slow_path_start_time_ = 0;
 }
 
 class MarkCompact::ThreadFlipVisitor : public Closure {
@@ -3353,6 +3356,7 @@ void MarkCompact::CompactionPause() {
     // Release order wrt to mutator threads' SIGBUS handler load.
     sigbus_in_progress_count_[0].store(0, std::memory_order_relaxed);
     sigbus_in_progress_count_[1].store(0, std::memory_order_release);
+    app_slow_path_start_time_ = MilliTime();
     KernelPreparation();
   }
 
@@ -4084,6 +4088,7 @@ void MarkCompact::CompactionPhase() {
     DCHECK_EQ(data.end_ - data.begin_, static_cast<ssize_t>(data.shadow_.Size()));
     UnregisterUffd(data.begin_, data.shadow_.Size());
   }
+  GetCurrentIteration()->SetAppSlowPathDurationMs(MilliTime() - app_slow_path_start_time_);
 
   // Set compaction-done bit in the second counter to indicate that gc-thread
   // is done unregistering the spaces and therefore mutators, if in SIGBUS,

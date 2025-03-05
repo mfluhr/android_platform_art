@@ -937,6 +937,8 @@ class MarkCompact final : public GarbageCollector {
   void* prev_black_allocations_begin_;
   bool prev_gc_young_;
   bool prev_gc_performed_compaction_;
+  // Timestamp when the read-barrier is enabled
+  uint64_t app_slow_path_start_time_;
 
   class FlipCallback;
   class ThreadFlipVisitor;
