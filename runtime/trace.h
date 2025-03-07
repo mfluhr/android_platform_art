@@ -32,14 +32,11 @@
 #include "base/mutex.h"
 #include "base/os.h"
 #include "base/safe_map.h"
+#include "base/unix_file/fd_file.h"
 #include "class_linker.h"
 #include "instrumentation.h"
 #include "runtime_globals.h"
 #include "thread_pool.h"
-
-namespace unix_file {
-class FdFile;
-}  // namespace unix_file
 
 namespace art HIDDEN {
 
