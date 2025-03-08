@@ -317,8 +317,6 @@ def setup_test_env():
       # Use only part of the cores since fully loading the device tends to lead to timeouts.
       fraction = 1.0 if env.ART_TEST_ON_VM else 0.75
       n_thread = max(1, int(get_target_cpu_count() * fraction))
-      if device_name == 'fugu':
-        n_thread = 1
   else:
     device_name = "host"
     if n_thread == 0:
