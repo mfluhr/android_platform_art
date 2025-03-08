@@ -341,8 +341,8 @@ static constexpr bool kCheckLocks = kDebugLocking;
 static constexpr bool kVerifyRootsMarked = kIsDebugBuild;
 // Verify that there are no missing card marks.
 static constexpr bool kVerifyNoMissingCardMarks = true;
-// Verify that all references in old-gen objects are valid after GC.
-static constexpr bool kVerifyPostGCOldGen = true;
+// Verify that all references in post-GC objects are valid.
+static constexpr bool kVerifyPostGCObjects = true;
 // Number of compaction buffers reserved for mutator threads in SIGBUS feature
 // case. It's extremely unlikely that we will ever have more than these number
 // of mutator threads trying to access the moving-space during one compaction
@@ -4826,6 +4826,112 @@ class MarkCompact::VisitReferencesVisitor {
   Visitor visitor_;
 };
 
+void MarkCompact::VerifyNoMissingCardMarks() {
+  if (kVerifyNoMissingCardMarks) {
+    accounting::CardTable* card_table = heap_->GetCardTable();
+    auto obj_visitor = [&](mirror::Object* obj) REQUIRES_SHARED(Locks::mutator_lock_) {
+      bool found = false;
+      VisitReferencesVisitor visitor(
+          [begin = old_gen_end_, end = moving_space_end_, &found](mirror::Object* ref) {
+            found |= ref >= reinterpret_cast<mirror::Object*>(begin) &&
+                     ref < reinterpret_cast<mirror::Object*>(end);
+          });
+      obj->VisitReferences</*kVisitNativeRoots=*/true>(visitor, visitor);
+      if (found) {
+        size_t obj_size = RoundUp(obj->SizeOf<kDefaultVerifyFlags>(), kAlignment);
+        if (!card_table->IsDirty(obj) &&
+            reinterpret_cast<uint8_t*>(obj) + obj_size <= old_gen_end_) {
+          std::ostringstream oss;
+          obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
+          LOG(FATAL_WITHOUT_ABORT)
+              << "Object " << obj << " (" << obj->PrettyTypeOf()
+              << ") has references to mid-gen/young-gen:"
+              << "\n obj-size = " << obj_size
+              << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
+              << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_) << "\n references =\n"
+              << oss.str();
+          heap_->GetVerification()->LogHeapCorruption(
+              /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/true);
+        }
+      }
+    };
+    moving_space_bitmap_->VisitMarkedRange(reinterpret_cast<uintptr_t>(moving_space_begin_),
+                                           reinterpret_cast<uintptr_t>(old_gen_end_),
+                                           obj_visitor);
+  }
+}
+
+void MarkCompact::VerifyPostGCObjects(bool performed_compaction, uint8_t* mark_bitmap_clear_end) {
+  if (kVerifyPostGCObjects) {
+    mirror::Object* last_visited_obj = nullptr;
+    auto obj_visitor =
+        [&](mirror::Object* obj, bool verify_bitmap = false) REQUIRES_SHARED(Locks::mutator_lock_) {
+          std::vector<mirror::Object*> invalid_refs;
+          if (verify_bitmap && !moving_space_bitmap_->Test(obj)) {
+            LOG(FATAL) << "Obj " << obj << " (" << obj->PrettyTypeOf()
+                       << ") doesn't have mark-bit set"
+                       << "\n prev-black-dense-end = " << static_cast<void*>(prev_black_dense_end_)
+                       << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
+                       << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_);
+          }
+          VisitReferencesVisitor visitor(
+              [verification = heap_->GetVerification(), &invalid_refs](mirror::Object* ref)
+                  REQUIRES_SHARED(Locks::mutator_lock_) {
+                    if (ref != nullptr && !verification->IsValidObject(ref)) {
+                      invalid_refs.push_back(ref);
+                    }
+                  });
+          obj->VisitReferences</*kVisitNativeRoots=*/true>(visitor, visitor);
+          if (!invalid_refs.empty()) {
+            std::ostringstream oss;
+            for (mirror::Object* ref : invalid_refs) {
+              oss << ref << " ";
+            }
+            // Calling PrettyTypeOf() on a stale reference mostly results in
+            // segfault. Therefore, calling DumpReferences() in the end so that at
+            // least all the other data can be dumped.
+            LOG(FATAL_WITHOUT_ABORT)
+                << "Object " << obj << " (" << obj->PrettyTypeOf() << ") has invalid references:\n"
+                << oss.str() << "\ncard = " << heap_->GetCardTable()->GetCard(obj)
+                << "\n prev-black-dense-end = " << static_cast<void*>(prev_black_dense_end_)
+                << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
+                << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_)
+                << "\n black-allocations-begin = " << static_cast<void*>(black_allocations_begin_);
+            oss.str("");
+            heap_->GetVerification()->LogHeapCorruption(
+                /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/false);
+            obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
+            LOG(FATAL) << "\n references =\n" << oss.str();
+          }
+          last_visited_obj = obj;
+        };
+    non_moving_space_bitmap_->VisitAllMarked(obj_visitor);
+    last_visited_obj = nullptr;
+    // We should verify all objects that have survived, which means old and mid-gen
+    // Objects that were promoted to old-gen and mid-gen in this GC cycle are tightly
+    // packed, except if compaction was not performed. So we use object size to walk
+    // the heap and also verify that the mark-bit is set in the tightly packed portion.
+    moving_space_bitmap_->VisitMarkedRange(
+        reinterpret_cast<uintptr_t>(moving_space_begin_),
+        reinterpret_cast<uintptr_t>(performed_compaction ? prev_black_dense_end_
+                                                         : mark_bitmap_clear_end),
+        obj_visitor);
+    if (performed_compaction) {
+      mirror::Object* obj = last_visited_obj;
+      if (obj == nullptr || AlignUp(reinterpret_cast<uint8_t*>(obj) + obj->SizeOf(), kAlignment) <
+                                prev_black_dense_end_) {
+        obj = reinterpret_cast<mirror::Object*>(prev_black_dense_end_);
+      }
+      while (reinterpret_cast<uint8_t*>(obj) < mid_gen_end_ && obj->GetClass() != nullptr) {
+        // Objects in mid-gen will not have their corresponding mark-bits set.
+        obj_visitor(obj, reinterpret_cast<void*>(obj) < black_dense_end_);
+        uintptr_t next = reinterpret_cast<uintptr_t>(obj) + obj->SizeOf();
+        obj = reinterpret_cast<mirror::Object*>(RoundUp(next, kAlignment));
+      }
+    }
+  }
+}
+
 void MarkCompact::FinishPhase(bool performed_compaction) {
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
   GetCurrentIteration()->SetScannedBytes(bytes_scanned_);
@@ -5062,104 +5168,16 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
   arena_pool->DeleteUnusedArenas();
 
   if (kVerifyNoMissingCardMarks && use_generational_) {
-    accounting::CardTable* card_table = heap_->GetCardTable();
-    auto obj_visitor = [&](mirror::Object* obj) REQUIRES_SHARED(Locks::mutator_lock_) {
-      bool found = false;
-      VisitReferencesVisitor visitor(
-          [begin = old_gen_end_, end = moving_space_end_, &found](mirror::Object* ref) {
-            found |= ref >= reinterpret_cast<mirror::Object*>(begin) &&
-                     ref < reinterpret_cast<mirror::Object*>(end);
-          });
-      obj->VisitReferences</*kVisitNativeRoots=*/true>(visitor, visitor);
-      if (found) {
-        size_t obj_size = RoundUp(obj->SizeOf<kDefaultVerifyFlags>(), kAlignment);
-        if (!card_table->IsDirty(obj) &&
-            reinterpret_cast<uint8_t*>(obj) + obj_size <= old_gen_end_) {
-          std::ostringstream oss;
-          obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
-          LOG(FATAL_WITHOUT_ABORT)
-              << "Object " << obj << " (" << obj->PrettyTypeOf()
-              << ") has references to mid-gen/young-gen:"
-              << "\n obj-size = " << obj_size
-              << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
-              << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_) << "\n references =\n"
-              << oss.str();
-          heap_->GetVerification()->LogHeapCorruption(
-              /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/true);
-        }
-      }
-    };
     // This must be done in a pause as otherwise verification between mutation
     // and card-dirtying by a mutator will spuriosely fail.
     ScopedPause pause(this);
     WriterMutexLock mu(thread_running_gc_, *Locks::heap_bitmap_lock_);
-    moving_space_bitmap_->VisitMarkedRange(reinterpret_cast<uintptr_t>(moving_space_begin_),
-                                           reinterpret_cast<uintptr_t>(old_gen_end_),
-                                           obj_visitor);
+    VerifyNoMissingCardMarks();
   }
-  if (kVerifyPostGCOldGen && use_generational_) {
-    mirror::Object* last_visited_obj = nullptr;
-    auto obj_visitor = [&](mirror::Object* obj,
-                           bool verify_bitmap = false) REQUIRES_SHARED(Locks::mutator_lock_) {
-      bool found = false;
-      if (verify_bitmap && !moving_space_bitmap_->Test(obj)) {
-        LOG(FATAL) << "Obj " << obj << " (" << obj->PrettyTypeOf() << ") doesn't have mark-bit set"
-                   << "\n prev-black-dense-end = " << static_cast<void*>(prev_black_dense_end_)
-                   << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
-                   << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_);
-      }
-      VisitReferencesVisitor visitor(
-          [verification = heap_->GetVerification(), &found](mirror::Object* ref)
-              REQUIRES_SHARED(Locks::mutator_lock_) {
-            if (ref != nullptr) {
-              found |= !verification->IsValidObject(ref);
-            }
-          });
-      obj->VisitReferences</*kVisitNativeRoots=*/true>(visitor, visitor);
-      if (found) {
-        // Calling PrettyTypeOf() on a stale reference mostly results in
-        // segfault. Therefore, calling DumpReferences() so that at least all
-        // the other data can be dumped.
-        LOG(FATAL_WITHOUT_ABORT) << "Object " << obj << " (" << obj->PrettyTypeOf()
-                                 << ") has invalid references:"
-                                 << "\n prev-black-dense-end = "
-                                 << static_cast<void*>(prev_black_dense_end_)
-                                 << "\n old-gen-end = " << static_cast<void*>(old_gen_end_)
-                                 << "\n mid-gen-end = " << static_cast<void*>(mid_gen_end_);
-        heap_->GetVerification()->LogHeapCorruption(
-            /*holder=*/nullptr, MemberOffset(0), obj, /*fatal=*/false);
-        std::ostringstream oss;
-        obj->DumpReferences</*kDumpNativeRoots=*/true>(oss);
-        LOG(FATAL) << "\n references =\n" << oss.str();
-      }
-      last_visited_obj = obj;
-    };
+  if (kVerifyPostGCObjects && use_generational_) {
     ReaderMutexLock mu(thread_running_gc_, *Locks::mutator_lock_);
     WriterMutexLock mu2(thread_running_gc_, *Locks::heap_bitmap_lock_);
-    non_moving_space_bitmap_->VisitAllMarked(obj_visitor);
-    last_visited_obj = nullptr;
-    // We should verify all objects that have survived, which means old and mid-gen
-    // Objects that were promoted to old-gen and mid-gen in this GC cycle are tightly
-    // packed, except if compaction was not performed. So we use object size to walk
-    // the heap and also verify that the mark-bit is set in the tightly packed portion.
-    moving_space_bitmap_->VisitMarkedRange(
-        reinterpret_cast<uintptr_t>(moving_space_begin_),
-        reinterpret_cast<uintptr_t>(performed_compaction ? prev_black_dense_end_
-                                                         : mark_bitmap_clear_end),
-        obj_visitor);
-    if (performed_compaction) {
-      mirror::Object* obj = last_visited_obj;
-      if (obj == nullptr || AlignUp(reinterpret_cast<uint8_t*>(obj) + obj->SizeOf(), kAlignment) <
-                                prev_black_dense_end_) {
-        obj = reinterpret_cast<mirror::Object*>(prev_black_dense_end_);
-      }
-      while (reinterpret_cast<uint8_t*>(obj) < mid_gen_end_ && obj->GetClass() != nullptr) {
-        // Objects in mid-gen will not have their corresponding mark-bits set.
-        obj_visitor(obj, reinterpret_cast<void*>(obj) < black_dense_end_);
-        uintptr_t next = reinterpret_cast<uintptr_t>(obj) + obj->SizeOf();
-        obj = reinterpret_cast<mirror::Object*>(RoundUp(next, kAlignment));
-      }
-    }
+    VerifyPostGCObjects(performed_compaction, mark_bitmap_clear_end);
   }
 }
 
