@@ -682,6 +682,16 @@ class MarkCompact final : public GarbageCollector {
   // the card-table corresponding to moving and non-moving spaces.
   void ScanOldGenObjects() REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_);
 
+  // Verify that cards corresponding to objects containing references to
+  // young-gen are dirty.
+  void VerifyNoMissingCardMarks() REQUIRES(Locks::heap_bitmap_lock_, Locks::mutator_lock_);
+  // Verify that post-GC objects (all objects except the ones allocated after
+  // marking pause) are valid with valid references in them. Bitmap corresponding
+  // to [moving_space_begin_, mark_bitmap_clear_end) was retained. This is used in
+  // case compaction is skipped.
+  void VerifyPostGCObjects(bool performed_compaction, uint8_t* mark_bitmap_clear_end)
+      REQUIRES(Locks::heap_bitmap_lock_) REQUIRES_SHARED(Locks::mutator_lock_);
+
   // For checkpoints
   Barrier gc_barrier_;
   // Required only when mark-stack is accessed in shared mode, which happens
