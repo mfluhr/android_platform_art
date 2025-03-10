@@ -1247,12 +1247,14 @@ bool MarkCompact::PrepareForCompaction() {
           [&first_obj](mirror::Object* obj) { first_obj = obj; });
     }
     if (first_obj != nullptr) {
+      mirror::Object* compacted_obj;
       if (reinterpret_cast<uint8_t*>(first_obj) >= old_gen_end_) {
         // post-compact address of the first live object in young-gen.
-        first_obj = PostCompactOldObjAddr(first_obj);
-        DCHECK_LT(reinterpret_cast<uint8_t*>(first_obj), post_compact_end_);
+        compacted_obj = PostCompactOldObjAddr(first_obj);
+        DCHECK_LT(reinterpret_cast<uint8_t*>(compacted_obj), post_compact_end_);
       } else {
         DCHECK(!young_gen_);
+        compacted_obj = first_obj;
       }
       // It's important to page-align mid-gen boundary. However, that means
       // there could be an object overlapping that boundary. We will deal with
@@ -1260,7 +1262,32 @@ bool MarkCompact::PrepareForCompaction() {
       // to ensure that we don't de-promote an object from old-gen back to
       // young-gen. Otherwise, we may skip dirtying card for such an object if
       // it contains native-roots to young-gen.
-      mid_gen_end_ = AlignUp(reinterpret_cast<uint8_t*>(first_obj), gPageSize);
+      mid_gen_end_ = AlignUp(reinterpret_cast<uint8_t*>(compacted_obj), gPageSize);
+      // We need to ensure that for any object in old-gen, its class is also in
+      // there (for the same reason as mentioned above in the black-dense case).
+      // So adjust mid_gen_end_ accordingly, in the worst case all the way up
+      // to post_compact_end_.
+      auto iter = class_after_obj_map_.lower_bound(ObjReference::FromMirrorPtr(first_obj));
+      for (; iter != class_after_obj_map_.end(); iter++) {
+        // 'mid_gen_end_' is now post-compact, so need to compare with
+        // post-compact addresses.
+        compacted_obj =
+            PostCompactAddress(iter->second.AsMirrorPtr(), old_gen_end_, moving_space_end_);
+        // We cannot update the map with post-compact addresses yet as compaction-phase
+        // expects pre-compacted addresses. So we will update in FinishPhase().
+        if (reinterpret_cast<uint8_t*>(compacted_obj) < mid_gen_end_) {
+          mirror::Object* klass = iter->first.AsMirrorPtr();
+          DCHECK_LT(reinterpret_cast<uint8_t*>(klass), black_allocations_begin_);
+          klass = PostCompactAddress(klass, old_gen_end_, moving_space_end_);
+          // We only need to make sure that the class object doesn't move during
+          // compaction, which can be ensured by just making its first word be
+          // consumed in to the old-gen.
+          mid_gen_end_ =
+              std::max(mid_gen_end_, reinterpret_cast<uint8_t*>(klass) + kObjectAlignment);
+          mid_gen_end_ = AlignUp(mid_gen_end_, gPageSize);
+        }
+      }
+      CHECK_LE(mid_gen_end_, post_compact_end_);
     } else {
       // Young-gen is empty.
       mid_gen_end_ = post_compact_end_;
