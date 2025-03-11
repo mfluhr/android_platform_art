@@ -340,9 +340,9 @@ namespace collector {
 static constexpr bool kCheckLocks = kDebugLocking;
 static constexpr bool kVerifyRootsMarked = kIsDebugBuild;
 // Verify that there are no missing card marks.
-static constexpr bool kVerifyNoMissingCardMarks = true;
+static constexpr bool kVerifyNoMissingCardMarks = kIsDebugBuild;
 // Verify that all references in post-GC objects are valid.
-static constexpr bool kVerifyPostGCObjects = true;
+static constexpr bool kVerifyPostGCObjects = kIsDebugBuild;
 // Number of compaction buffers reserved for mutator threads in SIGBUS feature
 // case. It's extremely unlikely that we will ever have more than these number
 // of mutator threads trying to access the moving-space during one compaction
@@ -4966,11 +4966,11 @@ void MarkCompact::FinishPhase(bool performed_compaction) {
   compacting_ = false;
   marking_done_ = false;
   uint8_t* mark_bitmap_clear_end = black_dense_end_;
-  LOG(INFO) << "ART-GC black_dense_end:" << static_cast<void*>(black_dense_end_)
-            << " mid_gen_end:" << static_cast<void*>(mid_gen_end_)
-            << " post_compact_end:" << static_cast<void*>(post_compact_end_)
-            << " black_allocations_begin:" << static_cast<void*>(black_allocations_begin_)
-            << " young:" << young_gen_ << " performed_compaction:" << performed_compaction;
+  LOG(DEBUG) << "ART-GC black_dense_end:" << static_cast<void*>(black_dense_end_)
+             << " mid_gen_end:" << static_cast<void*>(mid_gen_end_)
+             << " post_compact_end:" << static_cast<void*>(post_compact_end_)
+             << " black_allocations_begin:" << static_cast<void*>(black_allocations_begin_)
+             << " young:" << young_gen_ << " performed_compaction:" << performed_compaction;
 
   // Retain values of some fields for logging in next GC cycle, in case there is
   // a memory corruption detected.
