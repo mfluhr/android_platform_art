@@ -290,29 +290,22 @@ LIBART_PROTECTED
 extern "C" uint32_t NterpGetInstanceFieldOffset(Thread* self,
                                                 ArtMethod* caller,
                                                 const uint16_t* dex_pc_ptr,
-                                                size_t resolve_field_type,
-                                                uint32_t* registers);
+                                                size_t resolve_field_type);
 
 static inline void GetFieldInfo(Thread* self,
-                                ShadowFrame& shadow_frame,
+                                ArtMethod* caller,
                                 const uint16_t* dex_pc_ptr,
                                 bool is_static,
                                 bool resolve_field_type,
                                 ArtField** field,
                                 bool* is_volatile,
-                                MemberOffset* offset)
-    REQUIRES_SHARED(Locks::mutator_lock_) {
+                                MemberOffset* offset) {
   size_t tls_value = 0u;
   if (!self->GetInterpreterCache()->Get(self, dex_pc_ptr, &tls_value)) {
     if (is_static) {
-      tls_value = NterpGetStaticField(
-          self, shadow_frame.GetMethod(), dex_pc_ptr, resolve_field_type);
+      tls_value = NterpGetStaticField(self, caller, dex_pc_ptr, resolve_field_type);
     } else {
-      tls_value = NterpGetInstanceFieldOffset(self,
-                                              shadow_frame.GetMethod(),
-                                              dex_pc_ptr,
-                                              resolve_field_type,
-                                              shadow_frame.GetVRegAddr(0));
+      tls_value = NterpGetInstanceFieldOffset(self, caller, dex_pc_ptr, resolve_field_type);
     }
 
     if (self->IsExceptionPending()) {
