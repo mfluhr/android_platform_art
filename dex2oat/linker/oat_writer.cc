@@ -121,8 +121,8 @@ bool OatKeyValueStore::PutNonDeterministic(const std::string& k,
     return true;
   }
   if (allow_truncation) {
-    LOG(WARNING) << "Key value store field " << k << "too long. Truncating";
-    map_.Put(k, v.substr(length));
+    LOG(WARNING) << "Key value store field " << k << " too long. Truncating";
+    map_.Put(k, v.substr(/*pos=*/0, length));
     return true;
   }
   return false;
