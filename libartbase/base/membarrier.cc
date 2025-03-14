@@ -53,19 +53,7 @@ static bool IsMemBarrierSupported() {
   // MEMBARRIER_CMD_PRIVATE_EXPEDITED is supported since Linux 4.14.
   // MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE is supported since Linux 4.16.
   // Lowest Linux version useful for ART is 4.14.
-  if (IsKernelVersionAtLeast(4, 14)) {
-    return false;
-  }
-#if defined(__BIONIC__)
-  // Avoid calling membarrier on older Android versions where membarrier may be barred by seccomp
-  // causing the current process to be killed. The probing here could be considered expensive so
-  // endeavour not to repeat too often.
-  int api_level = android_get_device_api_level();
-  if (api_level < __ANDROID_API_Q__) {
-    return false;
-  }
-#endif  // __BIONIC__
-  return true;
+  return IsKernelVersionAtLeast(4, 14);
 }
 
 int membarrier(MembarrierCommand command) {
