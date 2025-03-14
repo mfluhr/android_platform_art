@@ -1336,11 +1336,10 @@ void MarkCompact::ReMarkRoots(Runtime* runtime) {
   DCHECK_EQ(thread_running_gc_, Thread::Current());
   Locks::mutator_lock_->AssertExclusiveHeld(thread_running_gc_);
   MarkNonThreadRoots(runtime);
-  MarkConcurrentRoots(static_cast<VisitRootFlags>(kVisitRootFlagNewRoots
-                                                  | kVisitRootFlagStopLoggingNewRoots
-                                                  | kVisitRootFlagClearRootLog),
-                      runtime);
-  ProcessMarkStack();
+  MarkConcurrentRoots(
+      static_cast<VisitRootFlags>(kVisitRootFlagNewRoots | kVisitRootFlagStopLoggingNewRoots |
+                                  kVisitRootFlagClearRootLog),
+      runtime);
   if (kVerifyRootsMarked) {
     TimingLogger::ScopedTiming t2("(Paused)VerifyRoots", GetTimings());
     VerifyRootMarkedVisitor visitor(this);
@@ -1369,6 +1368,7 @@ void MarkCompact::MarkingPause() {
         bump_pointer_space_->RevokeThreadLocalBuffers(thread);
       }
     }
+    ProcessMarkStack();
     // Fetch only the accumulated objects-allocated count as it is guaranteed to
     // be up-to-date after the TLAB revocation above.
     freed_objects_ += bump_pointer_space_->GetAccumulatedObjectsAllocated();
@@ -4258,16 +4258,19 @@ void MarkCompact::MarkRootsCheckpoint(Thread* self, Runtime* runtime) {
   }
   Locks::mutator_lock_->SharedLock(self);
   Locks::heap_bitmap_lock_->ExclusiveLock(self);
+  ProcessMarkStack();
 }
 
 void MarkCompact::MarkNonThreadRoots(Runtime* runtime) {
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
   runtime->VisitNonThreadRoots(this);
+  ProcessMarkStack();
 }
 
 void MarkCompact::MarkConcurrentRoots(VisitRootFlags flags, Runtime* runtime) {
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
   runtime->VisitConcurrentRoots(this, flags);
+  ProcessMarkStack();
 }
 
 void MarkCompact::RevokeAllThreadLocalBuffers() {
@@ -4396,12 +4399,13 @@ void MarkCompact::ScanDirtyObjects(bool paused, uint8_t minimum_age) {
                                              ScanObjectVisitor(this),
                                              minimum_age);
     }
+    ProcessMarkStack();
   }
 }
 
 void MarkCompact::RecursiveMarkDirtyObjects(bool paused, uint8_t minimum_age) {
   ScanDirtyObjects(paused, minimum_age);
-  ProcessMarkStack();
+  CHECK(mark_stack_->IsEmpty());
 }
 
 void MarkCompact::MarkRoots(VisitRootFlags flags) {
@@ -4414,7 +4418,6 @@ void MarkCompact::MarkRoots(VisitRootFlags flags) {
   MarkRootsCheckpoint(thread_running_gc_, runtime);
   MarkNonThreadRoots(runtime);
   MarkConcurrentRoots(flags, runtime);
-  ProcessMarkStack();
 }
 
 void MarkCompact::PreCleanCards() {
@@ -4589,7 +4592,8 @@ void MarkCompact::ScanObject(mirror::Object* obj) {
                                << " prev_black_allocations_begin: " << prev_black_allocations_begin_
                                << " prev_black_dense_end: " << prev_black_dense_end_
                                << " prev_gc_young: " << prev_gc_young_
-                               << " prev_gc_performed_comaction: " << prev_gc_performed_compaction_;
+                               << " prev_gc_performed_compaction: "
+                               << prev_gc_performed_compaction_;
       heap_->GetVerification()->LogHeapCorruption(
           obj, mirror::Object::ClassOffset(), klass, /*fatal=*/true);
     }
@@ -4623,6 +4627,7 @@ void MarkCompact::ScanObject(mirror::Object* obj) {
 
 // Scan anything that's on the mark stack.
 void MarkCompact::ProcessMarkStack() {
+  // TODO: eventually get rid of this as we now call this function quite a few times.
   TimingLogger::ScopedTiming t(__FUNCTION__, GetTimings());
   // TODO: try prefetch like in CMS
   while (!mark_stack_->IsEmpty()) {
