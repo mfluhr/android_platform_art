@@ -52,7 +52,7 @@ We compute the total amount of native memory allocated as the sum of
 
 2. the number of bytes registered via `VMRuntime.registerNativeAllocation()` and not yet
    unregistered via `VMRuntime.registerNativeFree()`. This includes non-malloc-allocated objects
-   allocated via `NariveAllocationRegistry`.
+   allocated via `NativeAllocationRegistry`.
 
 Though we use mallinfo() to track native allocation, this call itself can be expensive, and thus
 we perform this check fairly rarely. More precisely, we do so only after the application has
