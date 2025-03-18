@@ -527,11 +527,11 @@ size_t TraceProfiler::DumpLongRunningMethodBuffer(uint32_t thread_id,
     uintptr_t method_ptr;
     if (is_method_exit) {
       // Method exit. We only have timestamp here.
-      event_time = TimestampCounter::GetMicroTime(event & ~0x1);
+      event_time = TimestampCounter::GetNanoTime(event & ~0x1);
     } else {
       // method entry
       method_ptr = event;
-      event_time = TimestampCounter::GetMicroTime(method_trace_entries[i--] & ~0x1);
+      event_time = TimestampCounter::GetNanoTime(method_trace_entries[i--] & ~0x1);
     }
 
     uint64_t time_action_encoding = event_time << 1;
