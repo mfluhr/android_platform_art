@@ -828,7 +828,7 @@ class MarkCompact::ThreadFlipVisitor : public Closure {
     // Interpreter cache is thread-local so it needs to be swept either in a
     // flip, or a stop-the-world pause.
     CHECK(collector_->compacting_);
-    thread->SweepInterpreterCache(collector_);
+    thread->GetInterpreterCache()->Clear(thread);
     thread->AdjustTlab(collector_->black_objs_slide_diff_);
   }
 
