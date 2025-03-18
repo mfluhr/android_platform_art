@@ -3328,8 +3328,7 @@ jobjectArray Thread::InternalStackTraceToStackTraceElementArray(
     return nullptr;
   }
 
-  dex::ProtoIndex proto_idx =
-      method->GetDexFile()->GetIndexForProtoId(interface_method->GetPrototype());
+  dex::ProtoIndex proto_idx = interface_method->GetProtoIndex();
   Handle<mirror::MethodType> method_type_object(hs.NewHandle<mirror::MethodType>(
       class_linker->ResolveMethodType(soa.Self(), proto_idx, interface_method)));
   if (method_type_object == nullptr) {
