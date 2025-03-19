@@ -65,12 +65,6 @@
 #include "com_android_art_flags.h"
 #endif
 
-#ifndef __BIONIC__
-#ifndef MREMAP_DONTUNMAP
-#define MREMAP_DONTUNMAP 4
-#endif
-#endif  // __BIONIC__
-
 // See aosp/2996596 for where these values came from.
 #ifndef UFFDIO_COPY_MODE_MMAP_TRYLOCK
 #define UFFDIO_COPY_MODE_MMAP_TRYLOCK (static_cast<uint64_t>(1) << 63)
