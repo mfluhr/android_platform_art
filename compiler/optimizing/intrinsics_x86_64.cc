@@ -4270,10 +4270,20 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
   CpuRegister call_site_type =
       locations->InAt(invoke->GetNumberOfArguments()).AsRegister<CpuRegister>();
 
+  CpuRegister temp = locations->GetTemp(0).AsRegister<CpuRegister>();
+
   // Call site should match with MethodHandle's type.
-  __ MaybePoisonHeapReference(call_site_type);
-  __ cmpl(call_site_type, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
-  __ j(kNotEqual, slow_path->GetEntryLabel());
+  if (kPoisonHeapReferences) {
+    // call_site_type should be left intact as it 1) might be in callee-saved register 2) is known
+    // for GC to contain a reference.
+    __ movl(temp, call_site_type);
+    __ PoisonHeapReference(temp);
+    __ cmpl(temp, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
+    __ j(kNotEqual, slow_path->GetEntryLabel());
+  } else {
+    __ cmpl(call_site_type, Address(method_handle, mirror::MethodHandle::MethodTypeOffset()));
+    __ j(kNotEqual, slow_path->GetEntryLabel());
+  }
 
   CpuRegister method = CpuRegister(kMethodRegisterArgument);
   __ movq(method, Address(method_handle, mirror::MethodHandle::ArtFieldOrMethodOffset()));
@@ -4301,8 +4311,6 @@ void IntrinsicCodeGeneratorX86_64::VisitMethodHandleInvokeExact(HInvoke* invoke)
     // Skip virtual dispatch if `method` is private.
     __ testl(Address(method, ArtMethod::AccessFlagsOffset()), Immediate(kAccPrivate));
     __ j(kNotZero, &execute_target_method);
-
-    CpuRegister temp = locations->GetTemp(0).AsRegister<CpuRegister>();
 
     __ movl(temp, Address(method, ArtMethod::DeclaringClassOffset()));
     __ cmpl(temp, Address(receiver, mirror::Object::ClassOffset()));
