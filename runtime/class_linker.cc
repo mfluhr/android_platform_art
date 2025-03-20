@@ -10569,7 +10569,7 @@ ObjPtr<mirror::MethodHandle> ClassLinker::ResolveMethodHandleForField(
     return nullptr;
   }
 
-  StackHandleScope<4> hs(self);
+  StackHandleScope<5> hs(self);
   ObjPtr<mirror::Class> array_of_class = GetClassRoot<mirror::ObjectArray<mirror::Class>>(this);
   Handle<mirror::ObjectArray<mirror::Class>> method_params(hs.NewHandle(
       mirror::ObjectArray<mirror::Class>::Alloc(self, array_of_class, num_params)));
@@ -10629,7 +10629,8 @@ ObjPtr<mirror::MethodHandle> ClassLinker::ResolveMethodHandleForField(
     return nullptr;
   }
 
-  uintptr_t target = reinterpret_cast<uintptr_t>(target_field);
+  Handle<mirror::Field> target(hs.NewHandle(
+      mirror::Field::CreateFromArtField(self, target_field, /*force_resolve=*/ true)));
   return mirror::MethodHandleImpl::Create(self, target, kind, method_type);
 }
 
