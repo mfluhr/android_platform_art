@@ -924,7 +924,7 @@ def default_run(ctx, args, **kwargs):
     args = []
     for arg in cmdline.split(" "):
       if arg == "--class-loader-context=&":
-        arg = "--class-loader-context=\&"
+        arg = r"--class-loader-context=\&"
       args.append(arg)
     return " ".join(args)
 
