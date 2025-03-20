@@ -52,7 +52,7 @@ namespace art HIDDEN {
 class OatFileAssistantBaseTest : public DexoptTest {};
 
 class OatFileAssistantTest : public OatFileAssistantBaseTest,
-                             public testing::WithParamInterface<bool> {
+                             public ::testing::WithParamInterface<bool> {
  public:
   void SetUp() override {
     DexoptTest::SetUp();
@@ -2593,6 +2593,8 @@ TEST_P(OatFileAssistantTest, ValidateBootClassPathChecksums) {
 //    - Oat file corrupted after status check, before reload unexecutable
 //    because it's unrelocated and no dex2oat
 
-INSTANTIATE_TEST_SUITE_P(WithOrWithoutRuntime, OatFileAssistantTest, testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(WithOrWithoutRuntime,
+                         OatFileAssistantTest,
+                         ::testing::Values(true, false));
 
 }  // namespace art

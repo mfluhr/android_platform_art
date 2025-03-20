@@ -58,7 +58,7 @@ bool PaletteDebugStoreIsSupported() {
 
 }  // namespace
 
-class PaletteClientTest : public testing::Test {};
+class PaletteClientTest : public ::testing::Test {};
 
 TEST_F(PaletteClientTest, SchedPriority) {
   int32_t tid = GetTid();
