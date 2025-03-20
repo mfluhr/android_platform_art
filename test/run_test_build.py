@@ -150,7 +150,7 @@ class BuildTestContext:
                        stderr=subprocess.STDOUT,
                        stdout=subprocess.PIPE)
     if REPORT_SLOW_COMMANDS:
-      m = re.search("([0-9\.]+)user", p.stdout)
+      m = re.search(r"([0-9\.]+)user", p.stdout)
       assert m, p.stdout
       t = float(m.group(1))
       if t > 1.0:
