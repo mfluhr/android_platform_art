@@ -238,6 +238,10 @@ ArtifactsLocation ArtifactsLocationToAidl(OatFileAssistant::Location location) {
       return ArtifactsLocation::NEXT_TO_DEX;
     case OatFileAssistant::Location::kLocationDm:
       return ArtifactsLocation::DM;
+    case OatFileAssistant::Location::kLocationSdmOat:
+      return ArtifactsLocation::SDM_DALVIK_CACHE;
+    case OatFileAssistant::Location::kLocationSdmOdex:
+      return ArtifactsLocation::SDM_NEXT_TO_DEX;
       // No default. All cases should be explicitly handled, or the compilation will fail.
   }
   // This should never happen. Just in case we get a non-enumerator value.
