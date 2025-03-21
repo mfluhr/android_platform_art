@@ -491,10 +491,7 @@ OatFileAssistant::OatStatus OatFileAssistant::GivenOatFileStatus(const OatFile& 
       return kOatBootImageOutOfDate;
     }
     if (!gc::space::ImageSpace::ValidateApexVersions(
-            file.GetOatHeader(),
-            GetOatFileAssistantContext()->GetApexVersions(),
-            file.GetLocation(),
-            error_msg)) {
+            file, GetOatFileAssistantContext()->GetApexVersions(), error_msg)) {
       return kOatBootImageOutOfDate;
     }
   }

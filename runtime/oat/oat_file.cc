@@ -2586,4 +2586,13 @@ bool OatFile::IsBackedByVdexOnly() const {
   return oat_dex_files_storage_.size() >= 1 && oat_dex_files_storage_[0]->IsBackedByVdexOnly();
 }
 
+std::optional<std::string_view> OatFile::GetApexVersions() const {
+  if (override_apex_versions_.has_value()) {
+    return override_apex_versions_;
+  }
+  const char* oat_apex_versions =
+      GetOatHeader().GetStoreValueByKeyUnsafe(OatHeader::kApexVersionsKey);
+  return oat_apex_versions != nullptr ? std::make_optional(oat_apex_versions) : std::nullopt;
+}
+
 }  // namespace art
