@@ -43,6 +43,20 @@ namespace art HIDDEN {
 //   key2=value2\n
 //   ...
 // Repeated keys are not allowed. This is an extensible format, so versioning is not needed.
+//
+// In principle, ART Service generates an SDC file for an SDM file during installation.
+// Specifically, during dexopt, which typically takes place during installation, if there is an SDM
+// file while the corresponding SDC file is missing (meaning the SDM file is newly installed) or
+// stale (meaning the SDM file is newly replaced), ART Service will generate a new SDC file. This
+// means an SDM file without a corresponding SDC file is a transient state and is valid from ART
+// Service's perspective.
+//
+// From the runtime's perspective, an SDM file without a corresponding SDC file is incomplete. That
+// means:
+// - At app execution time, the runtime ignores an SDM file without a corresponding SDC.
+// - ART Service's file GC, which uses the runtime's judgement, considers an SDM file without a
+//   corresponding SDC invalid and may clean it up. This may race with a package installation before
+//   the SDC is created, but it's rare and the effect is recoverable, so it's considered acceptable.
 class EXPORT SdcReader {
  public:
   static std::unique_ptr<SdcReader> Load(const std::string& filename, std::string* error_msg);
