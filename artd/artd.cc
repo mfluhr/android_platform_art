@@ -1336,12 +1336,14 @@ ScopedAStatus Artd::createCancellationSignal(
   return ScopedAStatus::ok();
 }
 
-ScopedAStatus Artd::cleanup(const std::vector<ProfilePath>& in_profilesToKeep,
-                            const std::vector<ArtifactsPath>& in_artifactsToKeep,
-                            const std::vector<VdexPath>& in_vdexFilesToKeep,
-                            const std::vector<RuntimeArtifactsPath>& in_runtimeArtifactsToKeep,
-                            bool in_keepPreRebootStagedFiles,
-                            int64_t* _aidl_return) {
+ScopedAStatus Artd::cleanup(
+    const std::vector<ProfilePath>& in_profilesToKeep,
+    const std::vector<ArtifactsPath>& in_artifactsToKeep,
+    const std::vector<VdexPath>& in_vdexFilesToKeep,
+    const std::vector<SecureDexMetadataWithCompanionPaths>& in_SdmSdcFilesToKeep,
+    const std::vector<RuntimeArtifactsPath>& in_runtimeArtifactsToKeep,
+    bool in_keepPreRebootStagedFiles,
+    int64_t* _aidl_return) {
   RETURN_FATAL_IF_PRE_REBOOT(options_);
   std::unordered_set<std::string> files_to_keep;
   for (const ProfilePath& profile : in_profilesToKeep) {
@@ -1358,6 +1360,10 @@ ScopedAStatus Artd::cleanup(const std::vector<ProfilePath>& in_profilesToKeep,
   for (const VdexPath& vdex : in_vdexFilesToKeep) {
     RETURN_FATAL_IF_ARG_IS_PRE_REBOOT(vdex, "vdexFilesToKeep");
     files_to_keep.insert(OR_RETURN_FATAL(BuildVdexPath(vdex)));
+  }
+  for (const SecureDexMetadataWithCompanionPaths& sdm_sdc : in_SdmSdcFilesToKeep) {
+    files_to_keep.insert(OR_RETURN_FATAL(BuildSdmPath(sdm_sdc)));
+    files_to_keep.insert(OR_RETURN_FATAL(BuildSdcPath(sdm_sdc)));
   }
   std::string android_data = OR_RETURN_NON_FATAL(GetAndroidDataOrError());
   std::string android_expand = OR_RETURN_NON_FATAL(GetAndroidExpandOrError());

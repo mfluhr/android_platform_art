@@ -209,6 +209,7 @@ interface IArtd {
     long cleanup(in List<com.android.server.art.ProfilePath> profilesToKeep,
             in List<com.android.server.art.ArtifactsPath> artifactsToKeep,
             in List<com.android.server.art.VdexPath> vdexFilesToKeep,
+            in List<com.android.server.art.SecureDexMetadataWithCompanionPaths> SdmSdcFilesToKeep,
             in List<com.android.server.art.RuntimeArtifactsPath> runtimeArtifactsToKeep,
             boolean keepPreRebootStagedFiles);
 

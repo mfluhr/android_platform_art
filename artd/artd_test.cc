@@ -2230,15 +2230,23 @@ TEST_F(ArtdTest, mergeProfilesWithOptionsDumpClassesAndMethods) {
   CheckContent(output_profile.profilePath.tmpPath, "dump");
 }
 
+static std::string EncodeLocationForDalvikCache(const std::string& location) {
+  std::string encoded = location.substr(/*pos=*/1);  // Remove the leading '/';
+  std::replace(encoded.begin(), encoded.end(), '/', '@');
+  return encoded;
+}
+
 class ArtdCleanupTest : public ArtdTest {
  protected:
   void SetUpForCleanup() {
     // Unmanaged files.
     CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/1.odex");
+    CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/1.arm64.sdm");
     CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/oat/1.odex");
     CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/oat/1.txt");
     CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/oat/arm64/1.txt");
     CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/oat/arm64/1.tmp");
+    CreateGcKeptFile(android_data_ + "/user_de/0/com.android.foo/oat/arm64/1.sdc");
 
     // Files to keep.
     CreateGcKeptFile(android_data_ + "/misc/profiles/cur/1/com.android.foo/primary.prof");
@@ -2266,6 +2274,15 @@ class ArtdCleanupTest : public ArtdTest {
                      "/123456-7890/user/1/com.android.foo/cache/oat_primary/arm64/base.art");
     CreateGcKeptFile(android_data_ +
                      "/user/0/com.android.foo/cache/not_oat_dir/oat_primary/arm64/base.art");
+    CreateGcKeptFile(android_data_ +
+                     "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/base.arm64.sdm");
+    CreateGcKeptFile(android_data_ +
+                     "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/oat/arm64/base.sdc");
+    CreateGcKeptFile(android_data_ +
+                     "/app/~~jhrwafasr==/com.android.qux-bredcweff==/base.arm64.sdm");
+    CreateGcKeptFile(android_data_ + "/dalvik-cache/arm64/" +
+                     EncodeLocationForDalvikCache(android_data_) +
+                     "@app@~~jhrwafasr==@com.android.qux-bredcweff==@base.apk@classes.sdc");
 
     // Files to remove.
     CreateGcRemovedFile(android_data_ + "/misc/profiles/ref/com.android.foo/primary.prof");
@@ -2307,6 +2324,26 @@ class ArtdCleanupTest : public ArtdTest {
                         "/user/0/com.android.foo/cache/oat_primary/arm64/different_dex.art");
     CreateGcRemovedFile(android_data_ +
                         "/user/0/com.android.foo/cache/oat_primary/different_isa/base.art");
+    CreateGcRemovedFile(android_data_ +
+                        "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/different_dex.arm64.sdm");
+    CreateGcRemovedFile(
+        android_data_ +
+        "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/oat/arm64/different_dex.sdc");
+    CreateGcRemovedFile(android_data_ +
+                        "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/base.different_isa.sdm");
+    CreateGcRemovedFile(
+        android_data_ +
+        "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/oat/different_isa/base.sdc");
+    CreateGcRemovedFile(android_data_ +
+                        "/app/~~jhrwafasr==/com.android.qux-bredcweff==/different_dex.arm64.sdm");
+    CreateGcRemovedFile(
+        android_data_ + "/dalvik-cache/arm64/" + EncodeLocationForDalvikCache(android_data_) +
+        "@app@~~jhrwafasr==@com.android.qux-bredcweff==@different_dex.apk@classes.sdc");
+    CreateGcRemovedFile(android_data_ +
+                        "/app/~~jhrwafasr==/com.android.qux-bredcweff==/base.different_isa.sdm");
+    CreateGcRemovedFile(android_data_ + "/dalvik-cache/different_isa/" +
+                        EncodeLocationForDalvikCache(android_data_) +
+                        "@app@~~jhrwafasr==@com.android.qux-bredcweff==@base.apk@classes.sdc");
   }
 
   void CreateGcRemovedFile(const std::string& path) {
@@ -2345,6 +2382,18 @@ class ArtdCleanupTest : public ArtdTest {
                 ArtifactsPath{.dexPath = android_data_ + "/user_de/0/com.android.foo/aaa/1.apk",
                               .isa = "arm64",
                               .isInDalvikCache = false}},
+        },
+        {
+            SecureDexMetadataWithCompanionPaths{
+                .dexPath =
+                    android_data_ + "/app/~~fadsfgadg==/com.android.baz-fadsfgadg==/base.apk",
+                .isa = "arm64",
+                .isInDalvikCache = false},
+            SecureDexMetadataWithCompanionPaths{
+                .dexPath =
+                    android_data_ + "/app/~~jhrwafasr==/com.android.qux-bredcweff==/base.apk",
+                .isa = "arm64",
+                .isInDalvikCache = true},
         },
         {
             RuntimeArtifactsPath{

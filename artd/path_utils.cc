@@ -108,6 +108,7 @@ std::vector<std::string> ListManagedFiles(const std::string& android_data,
   for (const std::string& data_root : {android_data, android_expand + "/*"}) {
     // Artifacts for primary dex files.
     patterns.push_back(data_root + "/app/*/*/oat/**");
+    patterns.push_back(data_root + "/app/*/*/*.sdm");
 
     for (const char* user_dir : {"/user", "/user_de"}) {
       std::string data_dir = data_root + user_dir + "/*/*";

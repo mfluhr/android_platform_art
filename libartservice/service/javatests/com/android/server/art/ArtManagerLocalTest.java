@@ -1268,11 +1268,66 @@ public class ArtManagerLocalTest {
                                 "arm64", true /* isInDalvikCache */)),
                 inAnyOrderDeepEquals(VdexPath.artifactsPath(AidlUtils.buildArtifactsPathAsInput(
                         "/somewhere/app/foo/split_0.apk", "arm", false /* isInDalvikCache */))),
+                inAnyOrderDeepEquals() /* sdmSdcFilesToKeep */,
                 inAnyOrderDeepEquals(AidlUtils.buildRuntimeArtifactsPath(
                                              PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm64"),
                         AidlUtils.buildRuntimeArtifactsPath(
                                 PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm")),
                 eq(keepPreRebootStagedFiles));
+    }
+
+    @Test
+    public void testCleanupDmAndSdm() throws Exception {
+        when(mPreRebootDexoptJob.hasStarted()).thenReturn(false);
+
+        // It should keep the SDM file, but not runtime images.
+        doReturn(createGetDexoptStatusResult(
+                         "speed-profile", "cloud", "location", ArtifactsLocation.SDM_NEXT_TO_DEX))
+                .when(mArtd)
+                .getDexoptStatus(eq("/somewhere/app/foo/base.apk"), eq("arm64"), any());
+
+        // It should keep the SDM file, but not runtime images.
+        doReturn(createGetDexoptStatusResult(
+                         "speed-profile", "cloud", "location", ArtifactsLocation.SDM_DALVIK_CACHE))
+                .when(mArtd)
+                .getDexoptStatus(eq("/somewhere/app/foo/base.apk"), eq("arm"), any());
+
+        // It should keep the SDM file and runtime images.
+        doReturn(createGetDexoptStatusResult(
+                         "verify", "cloud", "location", ArtifactsLocation.SDM_NEXT_TO_DEX))
+                .when(mArtd)
+                .getDexoptStatus(eq("/somewhere/app/foo/split_0.apk"), eq("arm64"), any());
+
+        // It should only keep runtime images.
+        doReturn(createGetDexoptStatusResult("verify", "vdex", "location", ArtifactsLocation.DM))
+                .when(mArtd)
+                .getDexoptStatus(eq("/somewhere/app/foo/split_0.apk"), eq("arm"), any());
+
+        // This file is uninteresting in this test.
+        doReturn(createGetDexoptStatusResult(
+                         "run-from-apk", "unknown", "unknown", ArtifactsLocation.NONE_OR_ERROR))
+                .when(mArtd)
+                .getDexoptStatus(eq("/data/user/0/foo/1.apk"), eq("arm64"), any());
+
+        when(mSnapshot.getPackageStates()).thenReturn(Map.of(PKG_NAME_1, mPkgState1));
+        mArtManagerLocal.cleanup(mSnapshot);
+
+        verify(mArtd).cleanup(any() /* profilesToKeep */,
+                inAnyOrderDeepEquals() /* artifactsToKeep */,
+                inAnyOrderDeepEquals() /* vdexFilesToKeep */,
+                inAnyOrderDeepEquals(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                                             "/somewhere/app/foo/base.apk", "arm64",
+                                             false /* isInDalvikCache */),
+                        AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                                "/somewhere/app/foo/base.apk", "arm", true /* isInDalvikCache */),
+                        AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                                "/somewhere/app/foo/split_0.apk", "arm64",
+                                false /* isInDalvikCache */)),
+                inAnyOrderDeepEquals(AidlUtils.buildRuntimeArtifactsPath(
+                                             PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm64"),
+                        AidlUtils.buildRuntimeArtifactsPath(
+                                PKG_NAME_1, "/somewhere/app/foo/split_0.apk", "arm")),
+                eq(false) /* keepPreRebootStagedFiles */);
     }
 
     @Test

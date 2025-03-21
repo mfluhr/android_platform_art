@@ -1123,6 +1123,7 @@ public final class ArtManagerLocal {
             // - The dexopt artifacts, if they are up-to-date and the app is not hibernating.
             // - Only the VDEX part of the dexopt artifacts, if the dexopt artifacts are outdated
             //   but the VDEX part is still usable and the app is not hibernating.
+            // - The SDM and SDC files, if they are up-to-date and the app is not hibernating.
             // - The runtime artifacts, if dexopt artifacts are fully or partially usable and the
             //   usable parts don't contain AOT-compiled code. (This logic must be aligned with the
             //   one that determines when runtime images can be loaded in
@@ -1130,6 +1131,7 @@ public final class ArtManagerLocal {
             List<ProfilePath> profilesToKeep = new ArrayList<>();
             List<ArtifactsPath> artifactsToKeep = new ArrayList<>();
             List<VdexPath> vdexFilesToKeep = new ArrayList<>();
+            List<SecureDexMetadataWithCompanionPaths> sdmSdcFilesToKeep = new ArrayList<>();
             List<RuntimeArtifactsPath> runtimeArtifactsToKeep = new ArrayList<>();
 
             for (PackageState pkgState : snapshot.getPackageStates().values()) {
@@ -1150,11 +1152,12 @@ public final class ArtManagerLocal {
                             mInjector.getArtFileManager().getUsableArtifacts(pkgState, pkg);
                     artifactsToKeep.addAll(artifactLists.artifacts());
                     vdexFilesToKeep.addAll(artifactLists.vdexFiles());
+                    sdmSdcFilesToKeep.addAll(artifactLists.sdmFiles());
                     runtimeArtifactsToKeep.addAll(artifactLists.runtimeArtifacts());
                 }
             }
             return mInjector.getArtd().cleanup(profilesToKeep, artifactsToKeep, vdexFilesToKeep,
-                    runtimeArtifactsToKeep,
+                    sdmSdcFilesToKeep, runtimeArtifactsToKeep,
                     SdkLevel.isAtLeastV() && mInjector.getPreRebootDexoptJob().hasStarted());
         } catch (RemoteException e) {
             Utils.logArtdException(e);

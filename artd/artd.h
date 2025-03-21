@@ -245,6 +245,8 @@ class Artd : public aidl::com::android::server::art::BnArtd {
       const std::vector<aidl::com::android::server::art::ProfilePath>& in_profilesToKeep,
       const std::vector<aidl::com::android::server::art::ArtifactsPath>& in_artifactsToKeep,
       const std::vector<aidl::com::android::server::art::VdexPath>& in_vdexFilesToKeep,
+      const std::vector<aidl::com::android::server::art::SecureDexMetadataWithCompanionPaths>&
+          in_SdmSdcFilesToKeep,
       const std::vector<aidl::com::android::server::art::RuntimeArtifactsPath>&
           in_runtimeArtifactsToKeep,
       bool in_keepPreRebootStagedFiles,
