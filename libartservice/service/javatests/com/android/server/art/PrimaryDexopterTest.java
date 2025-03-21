@@ -16,6 +16,7 @@
 
 package com.android.server.art;
 
+import static com.android.server.art.OutputArtifacts.PermissionSettings;
 import static com.android.server.art.model.DexoptResult.DexContainerFileDexoptResult;
 import static com.android.server.art.testing.TestingUtils.deepEq;
 
@@ -943,6 +944,52 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         for (DexContainerFileDexoptResult result : results) {
             assertThat(result.getStatus()).isEqualTo(DexoptResult.DEXOPT_PERFORMED);
         }
+    }
+
+    @Test
+    public void testMaybeCreateSdc() throws Exception {
+        mDexoptParams = new DexoptParams.Builder("install")
+                                .setCompilerFilter("speed-profile")
+                                .setFlags(ArtFlags.FLAG_FOR_PRIMARY_DEX)
+                                .build();
+        mPrimaryDexopter =
+                new PrimaryDexopter(mInjector, mPkgState, mPkg, mDexoptParams, mCancellationSignal);
+
+        mPrimaryDexopter.dexopt();
+
+        FsPermission dirFsPermission = AidlUtils.buildFsPermission(Process.SYSTEM_UID /* uid */,
+                Process.SYSTEM_UID /* gid */, false /* isOtherReadable */,
+                true /* isOtherExecutable */);
+        FsPermission fileFsPermission = AidlUtils.buildFsPermission(
+                Process.SYSTEM_UID /* uid */, SHARED_GID /* gid */, true /* isOtherReadable */);
+        PermissionSettings permissionSettings = AidlUtils.buildPermissionSettings(
+                dirFsPermission, fileFsPermission, null /* seContext */);
+
+        verify(mArtd).maybeCreateSdc(deepEq(AidlUtils.buildOutputSecureDexMetadataCompanion(
+                mDexPath, "arm64", false /* isInDalvikCache */, permissionSettings)));
+        verify(mArtd).maybeCreateSdc(deepEq(AidlUtils.buildOutputSecureDexMetadataCompanion(
+                mDexPath, "arm", false /* isInDalvikCache */, permissionSettings)));
+        verify(mArtd).maybeCreateSdc(deepEq(AidlUtils.buildOutputSecureDexMetadataCompanion(
+                mSplit0DexPath, "arm64", false /* isInDalvikCache */, permissionSettings)));
+        verify(mArtd).maybeCreateSdc(deepEq(AidlUtils.buildOutputSecureDexMetadataCompanion(
+                mSplit0DexPath, "arm", false /* isInDalvikCache */, permissionSettings)));
+    }
+
+    @Test
+    public void testMaybeCreateSdcCompilerFilterSkip() throws Exception {
+        mDexoptParams = new DexoptParams.Builder("install")
+                                .setCompilerFilter(DexoptParams.COMPILER_FILTER_NOOP)
+                                .setFlags(ArtFlags.FLAG_FOR_PRIMARY_DEX)
+                                .build();
+        mPrimaryDexopter =
+                new PrimaryDexopter(mInjector, mPkgState, mPkg, mDexoptParams, mCancellationSignal);
+
+        mPrimaryDexopter.dexopt();
+
+        verify(mArtd, times(4)).maybeCreateSdc(any());
+        verify(mArtd, never())
+                .dexopt(any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), any(),
+                        any());
     }
 
     private void checkDexoptWithProfile(IArtd artd, String dexPath, String isa, ProfilePath profile,

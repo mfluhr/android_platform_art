@@ -113,6 +113,8 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
                     continue;
                 }
 
+                onDexoptStart(dexInfo);
+
                 String compilerFilter = adjustCompilerFilter(mParams.getCompilerFilter(), dexInfo);
                 DexMetadataInfo dmInfo =
                         mInjector.getDexMetadataHelper().getDexMetadataInfo(buildDmPath(dexInfo));
@@ -733,6 +735,12 @@ public abstract class Dexopter<DexInfoType extends DetailedDexInfo> {
      * should be passed.
      */
     @Nullable protected abstract DexMetadataPath buildDmPath(@NonNull DexInfoType dexInfo);
+
+    /**
+     * Called at an early stage during dexopt of every dex file, even before dexopt is skipped by
+     * the noop compiler filter.
+     */
+    protected void onDexoptStart(@NonNull DexInfoType dexInfo) throws RemoteException {}
 
     @AutoValue
     abstract static class DexoptTarget<DexInfoType extends DetailedDexInfo> {

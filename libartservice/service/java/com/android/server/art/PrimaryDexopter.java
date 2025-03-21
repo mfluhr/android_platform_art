@@ -178,6 +178,32 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
         return AidlUtils.buildDexMetadataPath(dexInfo.dexPath());
     }
 
+    @Override
+    protected void onDexoptStart(@NonNull DetailedPrimaryDexInfo dexInfo) throws RemoteException {
+        if (!mInjector.isPreReboot() && android.content.pm.Flags.cloudCompilationPm()) {
+            boolean isInDalvikCache = isInDalvikCache();
+            for (Abi abi : getAllAbis(dexInfo)) {
+                maybeCreateSdc(dexInfo, abi.isa(), isInDalvikCache);
+            }
+        }
+    }
+
+    private void maybeCreateSdc(@NonNull DetailedPrimaryDexInfo dexInfo, @NonNull String isa,
+            boolean isInDalvikCache) throws RemoteException {
+        // SDC file doesn't contain sensitive data, so it can always to public.
+        PermissionSettings permissionSettings =
+                getPermissionSettings(dexInfo, true /* canBePublic */);
+        OutputSecureDexMetadataCompanion outputSdc =
+                AidlUtils.buildOutputSecureDexMetadataCompanion(
+                        dexInfo.dexPath(), isa, isInDalvikCache, permissionSettings);
+
+        try {
+            mInjector.getArtd().maybeCreateSdc(outputSdc);
+        } catch (ServiceSpecificException e) {
+            AsLog.e("Failed to create sdc for " + AidlUtils.toString(outputSdc.sdcPath), e);
+        }
+    }
+
     private boolean isSharedLibrary() {
         return PackageStateModulesUtils.isLoadableInOtherProcesses(mPkgState, true /* codeOnly */);
     }
