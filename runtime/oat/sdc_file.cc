@@ -36,7 +36,7 @@ using ::android::base::ParseInt;
 using ::android::base::ReadFileToString;
 using ::android::base::WriteStringToFd;
 
-std::unique_ptr<SdcReader> SdcReader::Load(const std::string filename, std::string* error_msg) {
+std::unique_ptr<SdcReader> SdcReader::Load(const std::string& filename, std::string* error_msg) {
   std::unique_ptr<SdcReader> reader(new SdcReader());
 
   // The sdc file is supposed to be small, so read fully into memory for simplicity.

@@ -45,7 +45,7 @@ namespace art HIDDEN {
 // Repeated keys are not allowed. This is an extensible format, so versioning is not needed.
 class EXPORT SdcReader {
  public:
-  static std::unique_ptr<SdcReader> Load(const std::string filename, std::string* error_msg);
+  static std::unique_ptr<SdcReader> Load(const std::string& filename, std::string* error_msg);
 
   // The mtime of the SDM file on device, in nanoseconds.
   // This is for detecting obsolete SDC files.
