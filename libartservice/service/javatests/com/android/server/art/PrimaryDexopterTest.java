@@ -63,6 +63,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.zip.ZipFile;
 
 @SmallTest
@@ -157,50 +158,52 @@ public class PrimaryDexopterTest extends PrimaryDexopterTestBase {
         mUsedEmbeddedProfiles = new ArrayList<>();
     }
 
-    @Test
-    public void testDexoptInputVdex() throws Exception {
-        // null.
-        doReturn(dexoptIsNeeded(ArtifactsLocation.NONE_OR_ERROR))
+    private void checkDexoptInputVdex(
+            @ArtifactsLocation int location, Supplier<VdexPath> inputVdexMatcher) throws Exception {
+        doReturn(dexoptIsNeeded(location))
                 .when(mArtd)
                 .getDexoptNeeded(eq(mDexPath), eq("arm64"), any(), any(), anyInt());
-        doReturn(mArtdDexoptResult)
-                .when(mArtd)
-                .dexopt(any(), eq(mDexPath), eq("arm64"), any(), any(), any(), isNull(), any(),
-                        anyInt(), any(), any());
-
-        // ArtifactsPath, isInDalvikCache=true.
-        doReturn(dexoptIsNeeded(ArtifactsLocation.DALVIK_CACHE))
-                .when(mArtd)
-                .getDexoptNeeded(eq(mDexPath), eq("arm"), any(), any(), anyInt());
-        doReturn(mArtdDexoptResult)
-                .when(mArtd)
-                .dexopt(any(), eq(mDexPath), eq("arm"), any(), any(), any(),
-                        deepEq(VdexPath.artifactsPath(AidlUtils.buildArtifactsPathAsInput(
-                                mDexPath, "arm", true /* isInDalvikCache */))),
-                        any(), anyInt(), any(), any());
-
-        // ArtifactsPath, isInDalvikCache=false.
-        doReturn(dexoptIsNeeded(ArtifactsLocation.NEXT_TO_DEX))
-                .when(mArtd)
-                .getDexoptNeeded(eq(mSplit0DexPath), eq("arm64"), any(), any(), anyInt());
-        doReturn(mArtdDexoptResult)
-                .when(mArtd)
-                .dexopt(any(), eq(mSplit0DexPath), eq("arm64"), any(), any(), any(),
-                        deepEq(VdexPath.artifactsPath(AidlUtils.buildArtifactsPathAsInput(
-                                mSplit0DexPath, "arm64", false /* isInDalvikCache */))),
-                        any(), anyInt(), any(), any());
-
-        // DexMetadataPath.
-        doReturn(dexoptIsNeeded(ArtifactsLocation.DM))
-                .when(mArtd)
-                .getDexoptNeeded(eq(mSplit0DexPath), eq("arm"), any(), any(), anyInt());
-        doReturn(mArtdDexoptResult)
-                .when(mArtd)
-                .dexopt(any(), eq(mSplit0DexPath), eq("arm"), any(), any(), any(), isNull(), any(),
-                        anyInt(), any(), any());
 
         List<DexContainerFileDexoptResult> results = mPrimaryDexopter.dexopt();
         verifyStatusAllOk(results);
+        verify(mArtd).dexopt(any(), eq(mDexPath), eq("arm64"), any(), any(), any(),
+                inputVdexMatcher.get(), any(), anyInt(), any(), any());
+    }
+
+    @Test
+    public void testDexoptInputVdexNoneOrError() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.NONE_OR_ERROR, () -> isNull());
+    }
+
+    @Test
+    public void testDexoptInputVdexDalvikCache() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.DALVIK_CACHE, () -> {
+            return deepEq(VdexPath.artifactsPath(AidlUtils.buildArtifactsPathAsInput(
+                    mDexPath, "arm64", true /* isInDalvikCache */)));
+        });
+    }
+
+    @Test
+    public void testDexoptInputVdexNextToDex() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.NEXT_TO_DEX, () -> {
+            return deepEq(VdexPath.artifactsPath(AidlUtils.buildArtifactsPathAsInput(
+                    mDexPath, "arm64", false /* isInDalvikCache */)));
+        });
+    }
+
+    @Test
+    public void testDexoptInputVdexDm() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.DM, () -> isNull());
+    }
+
+    @Test
+    public void testDexoptInputVdexSdmDalvikCache() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.SDM_DALVIK_CACHE, () -> isNull());
+    }
+
+    @Test
+    public void testDexoptInputVdexSdmNextToDex() throws Exception {
+        checkDexoptInputVdex(ArtifactsLocation.SDM_NEXT_TO_DEX, () -> isNull());
     }
 
     @Test
