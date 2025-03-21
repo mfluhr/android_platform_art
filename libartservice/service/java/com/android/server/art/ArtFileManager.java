@@ -101,6 +101,7 @@ public class ArtFileManager {
     public WritableArtifactLists getWritableArtifacts(@NonNull PackageState pkgState,
             @NonNull AndroidPackage pkg, @NonNull Options options) throws RemoteException {
         List<ArtifactsPath> artifacts = new ArrayList<>();
+        List<SecureDexMetadataWithCompanionPaths> sdmFiles = new ArrayList<>();
         List<RuntimeArtifactsPath> runtimeArtifacts = new ArrayList<>();
 
         if (options.forPrimaryDex()) {
@@ -108,6 +109,9 @@ public class ArtFileManager {
             for (PrimaryDexInfo dexInfo : PrimaryDexUtils.getDexInfo(pkg)) {
                 for (Abi abi : Utils.getAllAbis(pkgState)) {
                     artifacts.add(AidlUtils.buildArtifactsPathAsInput(
+                            dexInfo.dexPath(), abi.isa(), isInDalvikCache));
+                    // SDM files are only for primary dex files.
+                    sdmFiles.add(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
                             dexInfo.dexPath(), abi.isa(), isInDalvikCache));
                     // Runtime images are only generated for primary dex files.
                     runtimeArtifacts.add(AidlUtils.buildRuntimeArtifactsPath(
@@ -125,7 +129,7 @@ public class ArtFileManager {
             }
         }
 
-        return new WritableArtifactLists(artifacts, runtimeArtifacts);
+        return new WritableArtifactLists(artifacts, sdmFiles, runtimeArtifacts);
     }
 
     /** Returns artifacts that are usable, regardless of whether they are writable. */
@@ -243,6 +247,7 @@ public class ArtFileManager {
     }
 
     public record WritableArtifactLists(@NonNull List<ArtifactsPath> artifacts,
+            @NonNull List<SecureDexMetadataWithCompanionPaths> sdmFiles,
             @NonNull List<RuntimeArtifactsPath> runtimeArtifacts) {}
 
     public record UsableArtifactLists(@NonNull List<ArtifactsPath> artifacts,

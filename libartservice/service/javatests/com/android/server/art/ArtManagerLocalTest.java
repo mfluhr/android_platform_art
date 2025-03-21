@@ -333,6 +333,15 @@ public class ArtManagerLocalTest {
         verify(mArtd).deleteArtifacts(deepEq(AidlUtils.buildArtifactsPathAsInput(
                 "/data/user/0/foo/not_found.apk", "arm64", false /* isInDalvikCache */)));
 
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/base.apk", "arm64", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/base.apk", "arm", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/split_0.apk", "arm64", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/split_0.apk", "arm", mIsInDalvikCache)));
+
         verify(mArtd).deleteRuntimeArtifacts(deepEq(AidlUtils.buildRuntimeArtifactsPath(
                 PKG_NAME_1, "/somewhere/app/foo/base.apk", "arm64")));
         verify(mArtd).deleteRuntimeArtifacts(deepEq(AidlUtils.buildRuntimeArtifactsPath(
@@ -344,6 +353,7 @@ public class ArtManagerLocalTest {
 
         // Verify that there are no more calls than the ones above.
         verify(mArtd, times(6)).deleteArtifacts(any());
+        verify(mArtd, times(4)).deleteSdmSdcFiles(any());
         verify(mArtd, times(4)).deleteRuntimeArtifacts(any());
     }
 
@@ -570,6 +580,15 @@ public class ArtManagerLocalTest {
         verify(mArtd).deleteArtifacts(deepEq(AidlUtils.buildArtifactsPathAsInput(
                 "/somewhere/app/foo/split_0.apk", "arm64", mIsInDalvikCache)));
         verify(mArtd).deleteArtifacts(deepEq(AidlUtils.buildArtifactsPathAsInput(
+                "/somewhere/app/foo/split_0.apk", "arm", mIsInDalvikCache)));
+
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/base.apk", "arm64", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/base.apk", "arm", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                "/somewhere/app/foo/split_0.apk", "arm64", mIsInDalvikCache)));
+        verify(mArtd).deleteSdmSdcFiles(deepEq(AidlUtils.buildSecureDexMetadataWithCompanionPaths(
                 "/somewhere/app/foo/split_0.apk", "arm", mIsInDalvikCache)));
 
         verify(mArtd).deleteRuntimeArtifacts(deepEq(AidlUtils.buildRuntimeArtifactsPath(
