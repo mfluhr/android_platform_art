@@ -256,6 +256,10 @@ class Artd : public aidl::com::android::server::art::BnArtd {
 
   ndk::ScopedAStatus isInDalvikCache(const std::string& in_dexFile, bool* _aidl_return) override;
 
+  ndk::ScopedAStatus deleteSdmSdcFiles(
+      const aidl::com::android::server::art::SecureDexMetadataWithCompanionPaths& in_sdmSdcPaths,
+      int64_t* _aidl_return) override;
+
   ndk::ScopedAStatus deleteRuntimeArtifacts(
       const aidl::com::android::server::art::RuntimeArtifactsPath& in_runtimeArtifactsPath,
       int64_t* _aidl_return) override;

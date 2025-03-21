@@ -38,6 +38,7 @@ import com.android.modules.utils.pm.PackageStateModulesUtils;
 import com.android.server.art.model.ArtFlags;
 import com.android.server.art.model.Config;
 import com.android.server.art.model.DexoptParams;
+import com.android.server.art.model.DexoptResult;
 import com.android.server.pm.pkg.AndroidPackage;
 import com.android.server.pm.pkg.PackageState;
 
@@ -201,6 +202,18 @@ public class PrimaryDexopter extends Dexopter<DetailedPrimaryDexInfo> {
             mInjector.getArtd().maybeCreateSdc(outputSdc);
         } catch (ServiceSpecificException e) {
             AsLog.e("Failed to create sdc for " + AidlUtils.toString(outputSdc.sdcPath), e);
+        }
+    }
+
+    @Override
+    protected void onDexoptTargetResult(@NonNull DexoptTarget<DetailedPrimaryDexInfo> target,
+            @DexoptResult.DexoptResultStatus int status) throws RemoteException {
+        // An optimization to release disk space as soon as possible. The SDM and SDC files would be
+        // deleted by the file GC anyway if not deleted here.
+        if (status == DexoptResult.DEXOPT_PERFORMED && !mInjector.isPreReboot()) {
+            mInjector.getArtd().deleteSdmSdcFiles(
+                    AidlUtils.buildSecureDexMetadataWithCompanionPaths(
+                            target.dexInfo().dexPath(), target.isa(), target.isInDalvikCache()));
         }
     }
 

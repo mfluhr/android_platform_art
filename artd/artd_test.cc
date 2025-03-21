@@ -2484,6 +2484,19 @@ TEST_F(ArtdTest, isInDalvikCache) {
   EXPECT_THAT(is_in_dalvik_cache("/foo"), HasValue(true));
 }
 
+TEST_F(ArtdTest, deleteSdmSdcFiles) {
+  CreateFile(scratch_path_ + "/a/b.arm64.sdm", "**");     // 2 bytes.
+  CreateFile(scratch_path_ + "/a/oat/arm64/b.sdc", "*");  // 1 byte.
+
+  int64_t result = -1;
+  ASSERT_STATUS_OK(artd_->deleteSdmSdcFiles(
+      {.dexPath = scratch_path_ + "/a/b.apk", .isa = "arm64", .isInDalvikCache = false}, &result));
+  EXPECT_EQ(result, 2 + 1);
+
+  EXPECT_FALSE(std::filesystem::exists(scratch_path_ + "/a/b.arm64.sdm"));
+  EXPECT_FALSE(std::filesystem::exists(scratch_path_ + "/a/oat/arm64/b.sdc"));
+}
+
 TEST_F(ArtdTest, deleteRuntimeArtifacts) {
   std::vector<std::string> removed_files;
   std::vector<std::string> kept_files;

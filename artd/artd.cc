@@ -1432,6 +1432,17 @@ ScopedAStatus Artd::isInDalvikCache(const std::string& in_dexFile, bool* _aidl_r
   return NonFatal(ART_FORMAT("Fstab entries not found for '{}'", in_dexFile));
 }
 
+ScopedAStatus Artd::deleteSdmSdcFiles(const SecureDexMetadataWithCompanionPaths& in_SdmSdcPaths,
+                                      int64_t* _aidl_return) {
+  RETURN_FATAL_IF_PRE_REBOOT(options_);
+
+  std::string sdm_path = OR_RETURN_FATAL(BuildSdmPath(in_SdmSdcPaths));
+  std::string sdc_path = OR_RETURN_FATAL(BuildSdcPath(in_SdmSdcPaths));
+
+  *_aidl_return = GetSizeAndDeleteFile(sdm_path) + GetSizeAndDeleteFile(sdc_path);
+  return ScopedAStatus::ok();
+}
+
 ScopedAStatus Artd::deleteRuntimeArtifacts(const RuntimeArtifactsPath& in_runtimeArtifactsPath,
                                            int64_t* _aidl_return) {
   RETURN_FATAL_IF_PRE_REBOOT(options_);
