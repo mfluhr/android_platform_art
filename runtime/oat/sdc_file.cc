@@ -16,6 +16,7 @@
 
 #include "sdc_file.h"
 
+#include <cstdint>
 #include <memory>
 #include <regex>
 #include <string>
@@ -60,12 +61,12 @@ std::unique_ptr<SdcReader> SdcReader::Load(const std::string filename, std::stri
   }
 
   decltype(map)::iterator it;
-  if ((it = map.find("sdm-timestamp")) == map.end()) {
-    *error_msg = ART_FORMAT("Missing key 'sdm-timestamp' in sdc file '{}'", filename);
+  if ((it = map.find("sdm-timestamp-ns")) == map.end()) {
+    *error_msg = ART_FORMAT("Missing key 'sdm-timestamp-ns' in sdc file '{}'", filename);
     return nullptr;
   }
-  if (!ParseInt(std::string(it->second), &reader->sdm_timestamp_, /*min=*/1l)) {
-    *error_msg = ART_FORMAT("Invalid 'sdm-timestamp' {}", it->second);
+  if (!ParseInt(std::string(it->second), &reader->sdm_timestamp_ns_, /*min=*/INT64_C(1))) {
+    *error_msg = ART_FORMAT("Invalid 'sdm-timestamp-ns' {}", it->second);
     return nullptr;
   }
 
@@ -89,13 +90,13 @@ std::unique_ptr<SdcReader> SdcReader::Load(const std::string filename, std::stri
 
 bool SdcWriter::Save(std::string* error_msg) {
   auto cleanup = android::base::make_scope_guard([this] { (void)file_.FlushClose(); });
-  if (sdm_timestamp_ <= 0) {
-    *error_msg = ART_FORMAT("Invalid 'sdm-timestamp' {}", sdm_timestamp_);
+  if (sdm_timestamp_ns_ <= 0) {
+    *error_msg = ART_FORMAT("Invalid 'sdm-timestamp-ns' {}", sdm_timestamp_ns_);
     return false;
   }
   DCHECK_EQ(file_.GetLength(), 0);
   std::string content =
-      ART_FORMAT("sdm-timestamp={}\napex-versions={}\n", sdm_timestamp_, apex_versions_);
+      ART_FORMAT("sdm-timestamp-ns={}\napex-versions={}\n", sdm_timestamp_ns_, apex_versions_);
   if (!WriteStringToFd(content, file_.Fd())) {
     *error_msg = ART_FORMAT("Failed to write sdc file '{}': {}", file_.GetPath(), strerror(errno));
     return false;

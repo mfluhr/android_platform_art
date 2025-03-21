@@ -153,6 +153,15 @@ interface IArtd {
             int dexoptTrigger);
 
     /**
+     * Creates a secure dex metadata companion (SDC) file for the secure dex metadata (SDM) file, if
+     * the SDM file exists while the SDC file doesn't exist (meaning the SDM file is seen the first
+     * time).
+     *
+     * Throws fatal and non-fatal errors.
+     */
+    void maybeCreateSdc(in com.android.server.art.OutputSecureDexMetadataCompanion outputSdc);
+
+    /**
      * Dexopts a dex file for the given instruction set.
      *
      * Throws fatal and non-fatal errors. When dexopt fails, the non-fatal status includes an error

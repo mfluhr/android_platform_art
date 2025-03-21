@@ -17,7 +17,6 @@
 #ifndef ART_RUNTIME_OAT_SDC_FILE_H_
 #define ART_RUNTIME_OAT_SDC_FILE_H_
 
-#include <ctime>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -44,13 +43,13 @@ namespace art HIDDEN {
 //   key2=value2\n
 //   ...
 // Repeated keys are not allowed. This is an extensible format, so versioning is not needed.
-class SdcReader {
+class EXPORT SdcReader {
  public:
   static std::unique_ptr<SdcReader> Load(const std::string filename, std::string* error_msg);
 
-  // The mtime of the SDM file on device.
+  // The mtime of the SDM file on device, in nanoseconds.
   // This is for detecting obsolete SDC files.
-  time_t GetSdmTimestamp() const { return sdm_timestamp_; }
+  int64_t GetSdmTimestampNs() const { return sdm_timestamp_ns_; }
 
   // The value of `Runtime::GetApexVersions` at the time where the SDM file was first seen on
   // device. This is for detecting samegrade placebos.
@@ -60,7 +59,7 @@ class SdcReader {
   SdcReader() = default;
 
   std::string content_;
-  time_t sdm_timestamp_;
+  int64_t sdm_timestamp_ns_;
   std::string_view apex_versions_;
 };
 
@@ -70,8 +69,8 @@ class EXPORT SdcWriter {
   // Takes ownership of the file.
   explicit SdcWriter(File&& file) : file_(std::move(file)) {}
 
-  // See `SdcReader::GetSdmTimestamp`.
-  void SetSdmTimestamp(time_t value) { sdm_timestamp_ = value; }
+  // See `SdcReader::GetSdmTimestampNs`.
+  void SetSdmTimestampNs(int64_t value) { sdm_timestamp_ns_ = value; }
 
   // See `SdcReader::GetApexVersions`.
   void SetApexVersions(std::string_view value) { apex_versions_ = value; }
@@ -80,7 +79,7 @@ class EXPORT SdcWriter {
 
  private:
   File file_;
-  time_t sdm_timestamp_ = 0;
+  int64_t sdm_timestamp_ns_ = 0;
   std::string apex_versions_;
 };
 

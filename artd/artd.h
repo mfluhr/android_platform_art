@@ -217,6 +217,10 @@ class Artd : public aidl::com::android::server::art::BnArtd {
       int32_t in_dexoptTrigger,
       aidl::com::android::server::art::GetDexoptNeededResult* _aidl_return) override;
 
+  ndk::ScopedAStatus maybeCreateSdc(
+      const aidl::com::android::server::art::OutputSecureDexMetadataCompanion& in_outputSdc)
+      override;
+
   ndk::ScopedAStatus dexopt(
       const aidl::com::android::server::art::OutputArtifacts& in_outputArtifacts,
       const std::string& in_dexFile,

@@ -16,6 +16,7 @@
 
 #include "sdc_file.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -54,15 +55,15 @@ class SdcFileTestBase : public CommonArtTest {
 class SdcReaderTest : public SdcFileTestBase {};
 
 TEST_F(SdcReaderTest, Success) {
-  ASSERT_TRUE(
-      WriteStringToFile("sdm-timestamp=987654321\napex-versions=/12345678/12345679\n", test_file_));
+  ASSERT_TRUE(WriteStringToFile(
+      "sdm-timestamp-ns=987654321000000003\napex-versions=/12345678/12345679\n", test_file_));
 
   std::string error_msg;
   std::unique_ptr<SdcReader> reader = SdcReader::Load(test_file_, &error_msg);
   ASSERT_NE(reader, nullptr) << error_msg;
 
   EXPECT_EQ(reader->GetApexVersions(), "/12345678/12345679");
-  EXPECT_EQ(reader->GetSdmTimestamp(), 987654321l);
+  EXPECT_EQ(reader->GetSdmTimestampNs(), INT64_C(987654321000000003));
 }
 
 TEST_F(SdcReaderTest, NotFound) {
@@ -74,7 +75,7 @@ TEST_F(SdcReaderTest, NotFound) {
 }
 
 TEST_F(SdcReaderTest, MissingApexVersions) {
-  ASSERT_TRUE(WriteStringToFile("sdm-timestamp=987654321\n", test_file_));
+  ASSERT_TRUE(WriteStringToFile("sdm-timestamp-ns=987654321\n", test_file_));
 
   std::string error_msg;
   std::unique_ptr<SdcReader> reader = SdcReader::Load(test_file_, &error_msg);
@@ -84,17 +85,18 @@ TEST_F(SdcReaderTest, MissingApexVersions) {
 }
 
 TEST_F(SdcReaderTest, InvalidSdmTimestamp) {
-  ASSERT_TRUE(WriteStringToFile("sdm-timestamp=0\napex-versions=/12345678/12345679\n", test_file_));
+  ASSERT_TRUE(
+      WriteStringToFile("sdm-timestamp-ns=0\napex-versions=/12345678/12345679\n", test_file_));
 
   std::string error_msg;
   std::unique_ptr<SdcReader> reader = SdcReader::Load(test_file_, &error_msg);
   ASSERT_EQ(reader, nullptr);
 
-  EXPECT_THAT(error_msg, HasSubstr("Invalid 'sdm-timestamp'"));
+  EXPECT_THAT(error_msg, HasSubstr("Invalid 'sdm-timestamp-ns'"));
 }
 
 TEST_F(SdcReaderTest, InvalidApexVersions) {
-  ASSERT_TRUE(WriteStringToFile("sdm-timestamp=987654321\napex-versions=abc\n", test_file_));
+  ASSERT_TRUE(WriteStringToFile("sdm-timestamp-ns=987654321\napex-versions=abc\n", test_file_));
 
   std::string error_msg;
   std::unique_ptr<SdcReader> reader = SdcReader::Load(test_file_, &error_msg);
@@ -105,7 +107,7 @@ TEST_F(SdcReaderTest, InvalidApexVersions) {
 
 TEST_F(SdcReaderTest, UnrecognizedKey) {
   ASSERT_TRUE(WriteStringToFile(
-      "sdm-timestamp=987654321\napex-versions=/12345678/12345679\nwrong-key=12345678\n",
+      "sdm-timestamp-ns=987654321\napex-versions=/12345678/12345679\nwrong-key=12345678\n",
       test_file_));
 
   std::string error_msg;
@@ -123,7 +125,7 @@ TEST_F(SdcWriterTest, Success) {
   SdcWriter writer(std::move(*file));
 
   writer.SetApexVersions("/12345678/12345679");
-  writer.SetSdmTimestamp(987654321l);
+  writer.SetSdmTimestampNs(987654321l);
 
   std::string error_msg;
   ASSERT_TRUE(writer.Save(&error_msg)) << error_msg;
@@ -131,7 +133,7 @@ TEST_F(SdcWriterTest, Success) {
   std::string content;
   ASSERT_TRUE(ReadFileToString(test_file_, &content));
 
-  EXPECT_EQ(content, "sdm-timestamp=987654321\napex-versions=/12345678/12345679\n");
+  EXPECT_EQ(content, "sdm-timestamp-ns=987654321\napex-versions=/12345678/12345679\n");
 }
 
 TEST_F(SdcWriterTest, SaveFailed) {
@@ -143,7 +145,7 @@ TEST_F(SdcWriterTest, SaveFailed) {
       File(file->Release(), file->GetPath(), /*check_usage=*/false, /*read_only_mode=*/false));
 
   writer.SetApexVersions("/12345678/12345679");
-  writer.SetSdmTimestamp(987654321l);
+  writer.SetSdmTimestampNs(987654321l);
 
   std::string error_msg;
   EXPECT_FALSE(writer.Save(&error_msg));
@@ -161,7 +163,7 @@ TEST_F(SdcWriterTest, InvalidSdmTimestamp) {
   std::string error_msg;
   EXPECT_FALSE(writer.Save(&error_msg));
 
-  EXPECT_THAT(error_msg, StartsWith("Invalid 'sdm-timestamp'"));
+  EXPECT_THAT(error_msg, StartsWith("Invalid 'sdm-timestamp-ns'"));
 }
 
 }  // namespace art
