@@ -120,6 +120,7 @@ using ::aidl::com::android::server::art::OutputSecureDexMetadataCompanion;
 using ::aidl::com::android::server::art::PriorityClass;
 using ::aidl::com::android::server::art::ProfilePath;
 using ::aidl::com::android::server::art::RuntimeArtifactsPath;
+using ::aidl::com::android::server::art::SecureDexMetadataWithCompanionPaths;
 using ::aidl::com::android::server::art::VdexPath;
 using ::android::base::Basename;
 using ::android::base::Dirname;
@@ -1451,6 +1452,14 @@ ScopedAStatus Artd::getVdexFileSize(const VdexPath& in_vdexPath, int64_t* _aidl_
   RETURN_FATAL_IF_ARG_IS_PRE_REBOOT(in_vdexPath, "vdexPath");
   std::string vdex_path = OR_RETURN_FATAL(BuildVdexPath(in_vdexPath));
   *_aidl_return = GetSize(vdex_path).value_or(0);
+  return ScopedAStatus::ok();
+}
+
+ndk::ScopedAStatus Artd::getSdmFileSize(const SecureDexMetadataWithCompanionPaths& in_sdmPath,
+                                        int64_t* _aidl_return) {
+  RETURN_FATAL_IF_PRE_REBOOT(options_);
+  std::string sdm_path = OR_RETURN_FATAL(BuildSdmPath(in_sdmPath));
+  *_aidl_return = GetSize(sdm_path).value_or(0);
   return ScopedAStatus::ok();
 }
 

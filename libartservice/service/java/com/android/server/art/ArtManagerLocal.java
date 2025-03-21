@@ -1056,6 +1056,10 @@ public final class ArtManagerLocal {
             for (RuntimeArtifactsPath runtimeArtifacts : artifactLists.runtimeArtifacts()) {
                 artifactsSize += artd.getRuntimeArtifactsSize(runtimeArtifacts);
             }
+            for (SecureDexMetadataWithCompanionPaths sdmFile : artifactLists.sdmFiles()) {
+                // We don't count SDC files because they are presumed to be tiny.
+                artifactsSize += artd.getSdmFileSize(sdmFile);
+            }
 
             ProfileLists profileLists = mInjector.getArtFileManager().getProfiles(pkgState, pkg,
                     ArtFileManager.Options.builder()

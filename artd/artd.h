@@ -38,6 +38,7 @@
 #include "aidl/com/android/server/art/BnArtd.h"
 #include "aidl/com/android/server/art/BnArtdCancellationSignal.h"
 #include "aidl/com/android/server/art/BnArtdNotification.h"
+#include "aidl/com/android/server/art/SecureDexMetadataWithCompanionPaths.h"
 #include "android-base/result.h"
 #include "android-base/thread_annotations.h"
 #include "android-base/unique_fd.h"
@@ -263,6 +264,10 @@ class Artd : public aidl::com::android::server::art::BnArtd {
 
   ndk::ScopedAStatus getVdexFileSize(const aidl::com::android::server::art::VdexPath& in_vdexPath,
                                      int64_t* _aidl_return) override;
+
+  ndk::ScopedAStatus getSdmFileSize(
+      const aidl::com::android::server::art::SecureDexMetadataWithCompanionPaths& in_sdmPath,
+      int64_t* _aidl_return) override;
 
   ndk::ScopedAStatus getRuntimeArtifactsSize(
       const aidl::com::android::server::art::RuntimeArtifactsPath& in_runtimeArtifactsPath,

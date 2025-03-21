@@ -2579,6 +2579,19 @@ TEST_F(ArtdTest, getVdexFileSize) {
   EXPECT_EQ(aidl_return, 1);
 }
 
+TEST_F(ArtdTest, getSdmFileSize) {
+  CreateFile(scratch_path_ + "/a/b.arm64.sdm", std::string(1, '*'));
+
+  int64_t aidl_return = -1;
+  ASSERT_TRUE(
+      artd_
+          ->getSdmFileSize(
+              {.dexPath = scratch_path_ + "/a/b.apk", .isa = "arm64", .isInDalvikCache = false},
+              &aidl_return)
+          .isOk());
+  EXPECT_EQ(aidl_return, 1);
+}
+
 TEST_F(ArtdTest, getRuntimeArtifactsSize) {
   CreateFile(android_data_ + "/user_de/0/com.android.foo/cache/oat_primary/arm64/base.art",
              std::string(1, '*'));

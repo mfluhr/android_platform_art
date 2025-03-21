@@ -260,6 +260,16 @@ interface IArtd {
     long getVdexFileSize(in com.android.server.art.VdexPath vdexPath);
 
     /**
+     * Returns the size of the SDM file, in bytes, or 0 if it doesn't exist or a non-fatal error
+     * occurred.
+     *
+     * Not supported in Pre-reboot Dexopt mode.
+     *
+     * Throws fatal errors. Logs and ignores non-fatal errors.
+     */
+    long getSdmFileSize(in com.android.server.art.SecureDexMetadataWithCompanionPaths sdmPath);
+
+    /**
      * Returns the size of the runtime artifacts, in bytes, or 0 if they don't exist or a non-fatal
      * error occurred.
      *
