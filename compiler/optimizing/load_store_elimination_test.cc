@@ -1779,17 +1779,17 @@ TEST_P(TwoTypesConversionsTestGroup, MergingConvertedValueStorePhiDeduplication)
 }
 
 auto Int32AndSmallerTypesGenerator() {
-  return testing::Values(DataType::Type::kInt32,
-                         DataType::Type::kInt16,
-                         DataType::Type::kInt8,
-                         DataType::Type::kUint16,
-                         DataType::Type::kUint8);
+  return ::testing::Values(DataType::Type::kInt32,
+                           DataType::Type::kInt16,
+                           DataType::Type::kInt8,
+                           DataType::Type::kUint16,
+                           DataType::Type::kUint8);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    LoadStoreEliminationTest,
-    TwoTypesConversionsTestGroup,
-    testing::Combine(Int32AndSmallerTypesGenerator(), Int32AndSmallerTypesGenerator()));
+INSTANTIATE_TEST_SUITE_P(LoadStoreEliminationTest,
+                         TwoTypesConversionsTestGroup,
+                         ::testing::Combine(Int32AndSmallerTypesGenerator(),
+                                            Int32AndSmallerTypesGenerator()));
 
 // // ENTRY
 // obj = new Obj();
