@@ -6131,7 +6131,7 @@ void IntrinsicCodeGeneratorARM64::VisitMethodHandleInvokeExact(HInvoke* invoke) 
     __ Bind(&do_imt_dispatch);
     // Re-using `method` to store receiver class and ImTableEntry.
     __ Ldr(method.W(), HeapOperand(receiver.W(), mirror::Object::ClassOffset()));
-    codegen_->GetAssembler()->MaybePoisonHeapReference(method.W());
+    codegen_->GetAssembler()->MaybeUnpoisonHeapReference(method.W());
 
     __ Ldr(method, MemOperand(method, mirror::Class::ImtPtrOffset(PointerSize::k64).Int32Value()));
     __ Ldr(method, MemOperand(method, temp, Extend::UXTW, 3u));
