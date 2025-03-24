@@ -1034,6 +1034,7 @@ bool FastCompilerARM64::BuildNewInstance(uint32_t vreg,
     entrypoint = kQuickAllocObjectWithChecks;
   }
   InvokeRuntime(entrypoint, dex_pc);
+  __ Dmb(InnerShareable, BarrierWrites);
   if (!MoveLocation(CreateNewRegisterLocation(vreg, DataType::Type::kReference, next),
                     calling_convention.GetReturnLocation(DataType::Type::kReference),
                     DataType::Type::kReference)) {
@@ -1871,6 +1872,8 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
       return true;
 
     case Instruction::IGET_OBJECT:
+      is_object = true;
+      FALLTHROUGH_INTENDED;
     case Instruction::IGET:
     case Instruction::IGET_WIDE:
     case Instruction::IGET_BOOLEAN:
@@ -1896,8 +1899,9 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
         }
       }
 
-      if (can_receiver_be_null) {
-        // We need a frame in case the null check throws.
+      if (can_receiver_be_null || is_object) {
+        // We need a frame in case the null check throws or there is a read
+        // barrier.
         if (!EnsureHasFrame()) {
           return false;
         }
@@ -1910,11 +1914,7 @@ bool FastCompilerARM64::ProcessDexInstruction(const Instruction& instruction,
       if (HitUnimplemented()) {
         return false;
       }
-      if (instruction.Opcode() == Instruction::IGET_OBJECT) {
-        // Generate a frame because of the read barrier.
-        if (!EnsureHasFrame()) {
-          return false;
-        }
+      if (is_object) {
         Register dst = WRegisterFrom(
             CreateNewRegisterLocation(source_or_dest_reg, DataType::Type::kReference, next));
         if (HitUnimplemented()) {
